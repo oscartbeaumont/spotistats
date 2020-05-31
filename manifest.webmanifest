@@ -9,7 +9,7 @@
     "orientation": "portrait",
     "icons": [
         {
-            "src": "spotify-256.png",
+            "src": "/assets/spotify-256.png",
             "sizes": "709x709",
             "type": "image/png"
         }
