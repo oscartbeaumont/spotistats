@@ -4,7 +4,7 @@ const precacheResources = [
     '/',
     '/index.css',
     '/index.js',
-    '/jszip.min.js',
+    '/jszip/jszip.min.js',
     '/manifest.webmanifest',
     '/fonts/montserrat-v14-latin-700.woff2',
     '/fonts/montserrat-v14-latin-regular.woff2',
