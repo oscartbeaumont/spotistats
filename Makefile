@@ -21,7 +21,11 @@ install-build-tools:
 build: download-deps
 	mkdir dist/
 	cp -R assets dist/assets
-	cp -R public/{jszip,fonts,_headers,_redirects,manifest.webmanifest} dist
+	cp -R public/jszip dist/
+	cp -R public/jszip dist/
+	cp public/_headers dist/
+	cp public/_redirects dist/
+	cp public/manifest.webmanifest dist/
 	html-minifier --collapse-whitespace --remove-comments --remove-optional-tags --remove-redundant-attributes --remove-script-type-attributes --remove-tag-whitespace --use-short-doctype public/index.html -o dist/index.html
 	cssnano public/index.css dist/index.css --safe
 	minify public/*.js -d dist
