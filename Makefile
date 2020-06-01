@@ -21,7 +21,7 @@ install-build-tools:
 build: download-deps
 	mkdir dist/
 	cp -R assets dist/assets
-	cp -R public/jszip dist/
+	cp -R public/fonts dist/
 	cp -R public/jszip dist/
 	cp public/_headers dist/
 	cp public/_redirects dist/
