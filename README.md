@@ -16,7 +16,7 @@
 # npm install netlify-cli -g
 git clone https://github.com/oscartbeaumont/spotistats.git
 cd spotistats/
-./download-assets.sh
+make setup
 netlify dev
 ```
 

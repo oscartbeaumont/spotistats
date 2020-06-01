@@ -526,7 +526,7 @@ const exportPage = async () => {
 };
 
 // Taste Page
-const tastePageElem = document.getElementById("export-page");
+const tastePageElem = document.getElementById("taste-page");
 const tastePage = async () => {
     tastePageElem.style.display = "block";
 }

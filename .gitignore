@@ -1,3 +1,5 @@
 .DS_Store
-fonts/
-jszip/
+/public/fonts/
+/public/jszip/
+/public/assets/
+/dist
