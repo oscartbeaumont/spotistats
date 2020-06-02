@@ -129,10 +129,6 @@ nav a {
 
 /* Item */
 
-.items {
-    overflow-y: scroll;
-}
-
 .item {
     display: grid;
     grid-template-columns: min-content auto;
