@@ -20,6 +20,10 @@ make setup
 netlify dev
 ```
 
+# Analytics
+
+<a href="https://simpleanalytics.com/spotistats.js.org?utm_source=spotistats.js.org&utm_content=badge" referrerpolicy="origin" target="_blank"><img src="https://simpleanalyticsbadge.com/spotistats.js.org?radius=10" loading="lazy" referrerpolicy="no-referrer" crossorigin="anonymous" /></a>
+
 # Credits
 
 This project is a rewritten version of [amaraliou/spotistats](https://github.com/amaraliou/spotistats) with added features including the whole app running in the browser instead of relying on a Go Lang backend.
