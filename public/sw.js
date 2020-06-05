@@ -8,6 +8,9 @@ const precacheResources = [
     '/manifest.webmanifest',
     '/fonts/montserrat-v14-latin-700.woff2',
     '/fonts/montserrat-v14-latin-regular.woff2',
+    '/assets/placeholder.svg',
+    '/assets/people-icon.svg',
+    '/assets/lock-icon.svg',
 ];
 
 self.addEventListener('install', event => {
@@ -22,7 +25,7 @@ self.addEventListener('install', event => {
 
 self.addEventListener('fetch', event => {
     let url = new URL(event.request.url);
-    if (url.pathname == "/favourites" || url.pathname == "/taste" || url.pathname == "/export") {
+    if (url.pathname == "/favourites" || url.pathname == "/taste" || url.pathname == "/recommendations" || url.pathname == "/export" || url.pathname == "/reset") {
         url.pathname = "/";
         event.request.url = url;
     }

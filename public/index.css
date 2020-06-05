@@ -28,7 +28,6 @@ html, body {
     font-family: 'Montserrat', sans-serif;
     margin: 0;
     padding: 15px;
-    /* overflow: hidden; TEMP */
 }
 
 a {
@@ -43,6 +42,11 @@ a:hover {
 
 .page {
     display: none;
+}
+
+.svg {
+    object-fit: scale-down;
+    filter: invert(1);
 }
 
 /* Login Page */
@@ -109,6 +113,10 @@ nav a {
 
 /* Profile Page */
 
+#profile-icon-link:hover {
+    border-bottom: 0;
+}
+
 #profile-icon {
     width: 200px;
     height: 200px;
@@ -146,12 +154,6 @@ nav a {
     margin: 10px;
 }
 
-.item .default-icon svg {
-    height: inherit;
-    display: block;
-    margin: auto;
-}
-
 .item h3, .item h4 {
     font-size: 19px;
     margin: 10px 0px;
@@ -163,15 +165,13 @@ nav a {
     color: grey;
 }
 
-.item span {
-    vertical-align: middle;
-    margin-right: 7px;
-}
-
-.item .icon svg {
+.item .icon {
     height: 20px;
     width: auto;
-    fill: white;
+    margin: 0;
+    object-fit: inherit;
+    vertical-align: middle;
+    margin-right: 7px;
 }
 
 @keyframes itemFadeIn {
@@ -196,7 +196,6 @@ nav a {
     display: inline-block;
     margin: 0;
     padding: 0 0 10px 0;
-    /* vertical-align: middle; */
 }
 
 .item-criteria div {
@@ -209,7 +208,6 @@ nav a {
 
 .item-criteria a {
     padding: 0 10px;
-    /* vertical-align: middle; */
 }
 
 .item-criteria a.active {
@@ -240,13 +238,3 @@ nav a {
 .error-link {
     color: #1DB954;
 }
-
-#generic-playlist-icon, #people-icon, #lock-icon {
-    display: none;
-}
-
-/* .credits {
-    font-size: 18px;
-    text-align: center;
-    margin-bottom: 10px;
-} */

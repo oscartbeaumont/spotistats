@@ -2,166 +2,55 @@
 const spotify_api_client_id = "1107a25b98c041bb90c9063553e5f1a8";
 const spotify_api_scopes = ["user-library-read", "playlist-read-private", "playlist-read-collaborative", "user-top-read", "user-read-recently-played"];
 
-// Login Page
-const loginPageElem = document.getElementById("login-page");
-const loginBtn = document.getElementById("loginbtn");
-const loginPage = async () => {
-    loginBtn.onclick = () => {
-        localStorage.clear(); // Prevent leaking info between users
-        // Note: The state token is designed to provide CSRF protection
-        let stateToken = Math.random().toString(36).substr(2);
-        localStorage.setItem('auth_state_token', stateToken);
-        window.location.href = `https://accounts.spotify.com/authorize?client_id=${spotify_api_client_id}&response_type=token&redirect_uri=${window.location.origin}&state=${stateToken}&scope=${spotify_api_scopes.join("%20")}`;
-    };
-    loginPageElem.style.display = "block";
-};
+/*
+    Helpers
+*/
+const escapeHTMLPolicy = trustedTypes.createPolicy('myEscapePolicy', {
+    createScriptURL: string => string
+});
 
-// Profile Page
-const profilePageElem = document.getElementById("profile-page");
-const profileIcon = document.getElementById("profile-icon"); // TODO: add Elem to all their names
-const profileUsername = document.getElementById("profile-username");
-const profileFollowers = document.getElementById("profile-followers");
-const profilePage = async () => {
-    let user_icon = localStorage.getItem('user_icon');
-    let user_display_name = localStorage.getItem('user_display_name');
-    let user_followers = localStorage.getItem('user_followers');
-
-    let res = fetch('https://api.spotify.com/v1/me', {
-        headers: {
-            "Authorization": localStorage.getItem('auth_access_token')
-        }
-    }).then(async res => {
-        await reqErrorHandling(res)
-        let data = await res.json();
-
-        user_icon = data.images[0].url; // TODO: Get highest quality image
-        user_display_name = data.display_name
-        user_followers = data.followers.total
-        localStorage.setItem('user_icon', user_icon);
-        localStorage.setItem('user_display_name', user_display_name);
-        localStorage.setItem('user_followers', user_followers);
-    })
-    if (!user_icon || !user_display_name || !user_followers) {
-        await res;
-    }
-
-    if (profileIcon.src != user_icon) profileIcon.src = user_icon;
-    profileIcon.alt = user_display_name;
-    // TODO: profileIcon.onclick = () => window.location = data.external_urls.spotify; // TODO: Use data.uri if installed as PWA app
-    profileUsername.innerText = user_display_name;
-    profileFollowers.innerText = user_followers;
-    profilePageElem.style.display = "block";
-};
-
-// TODO: Deprecated
-// TODO: Minmise duplicate code
 const errorTitleElem = document.getElementById("error-title");
 const errorDescriptionElem = document.getElementById("error-description");
 const errorCodeElem = document.getElementById("error-code");
-async function reqErrorHandling(res) { // TODO: Rename
-    switch (res.status) {
-        case 200: break;
-        case 201: break;
-        case 202: break;
-        case 204: break;
-        // TODO: case 304: break;
-        case 400:
-            errorTitleElem.innerText = "400: Bad Request";
-            errorDescriptionElem.innerText = "This probally being caused by either a bug in the application or a recent change to the Spotify API.";
-            errorCodeElem.innerText = JSON.stringify(await res.json(), null, 2);
-            navigate("/error");
-            throw new Error(errorTitleElem.innerText + " Shown Error Page!");
-        case 401:
-            localStorage.removeItem('auth_access_token')
-            navigate("/login");
-            throw new Error("401: Unauthorised. Please login again!");
-        case 403:
-            errorTitleElem.innerText = "403: Forbidden";
-            errorDescriptionElem.innerText = "This probally being caused by a mismatch between the used endpoints and authorized scopes with the Spotify API.";
-            errorCodeElem.innerText = JSON.stringify(await res.json(), null, 2);
-            navigate("/error");
-            throw new Error(errorTitleElem.innerText + " Shown Error Page!");
-        case 404:
-            errorTitleElem.innerText = "404: Not Found";
-            errorDescriptionElem.innerText = "This probally being caused by an out of date cache or bug in the application which resulted in Spotify being unable to find a resource.";
-            errorCodeElem.innerText = JSON.stringify(await res.json(), null, 2);
-            navigate("/error");
-            throw new Error(errorTitleElem.innerText + " Shown Error Page!");
-        case 429:
-        // TODO
-        // console.log(res.headers.get('retry-after'))
-        // setTimeout(, res.headers.get('retry-after') + 1)
-        // errorTitleElem.innerText = "429: Rate Limited";
-        // errorDescriptionElem.innerText = "Too many request have been made by this application, please try again later.";
-        // errorCodeElem.innerText = JSON.stringify(await res.json(), null, 2);
-        // navigate("/error");
-        // throw new Error(errorTitleElem.innerText + " Shown Error Page!");
-        case 500:
-            errorTitleElem.innerText = "500: Internal Server Error";
-            errorDescriptionElem.innerText = "Spotify had an issue, please try again later.";
-            errorCodeElem.innerText = JSON.stringify(await res.json(), null, 2);
-            navigate("/error");
-            throw new Error(errorTitleElem.innerText + " Shown Error Page!");
-        case 502:
-            errorTitleElem.innerText = "502: Bad Gateway";
-            errorDescriptionElem.innerText = "Spotify had an issue, please try again later.";
-            errorCodeElem.innerText = JSON.stringify(await res.json(), null, 2);
-            navigate("/error");
-            throw new Error(errorTitleElem.innerText + " Shown Error Page!");
-        case 503:
-            errorTitleElem.innerText = "503: Service Unavailable";
-            errorDescriptionElem.innerText = "Spotify had an issue, please try again later.";
-            errorCodeElem.innerText = JSON.stringify(await res.json(), null, 2);
-            navigate("/error");
-            throw new Error(errorTitleElem.innerText + " Shown Error Page!");
-        default: console.error("Spotify returned unknown status:", res.status)
-    }
-}
-
-// TODO: Make show user output
-// window.onerror = function(error) {
-//     // do something clever here
-//     alert(error); // do NOT do this for real!
-//   };
-
-// TODO: Custom fetch with Authorization with all error handling including .catch() error handling
-
 async function fetchIt(url, options) {
     try {
         let res = await fetch(url, {
             headers: {
                 "Authorization": localStorage.getItem('auth_access_token')
-            }
+            },
+            cache: "no-store",
+            ...options
         })
 
+        // TODO: Minimise all duplicate code & messages here
         switch (res.status) {
             case 200: break;
             case 201: break;
             case 202: break;
             case 204: break;
-            // TODO: case 304: break;
+            case 304: break;
             case 400:
                 errorTitleElem.innerText = "400: Bad Request";
                 errorDescriptionElem.innerText = "This probally being caused by either a bug in the application or a recent change to the Spotify API.";
                 errorCodeElem.innerText = JSON.stringify(await res.json(), null, 2);
                 navigate("/error");
-                throw new Error(errorTitleElem.innerText + " Shown Error Page!");
+                throw new Error("Spotistats: " + errorTitleElem.innerText + " Shown Error Page!");
             case 401:
                 localStorage.removeItem('auth_access_token')
                 navigate("/login");
-                throw new Error("401: Unauthorised. Please login again!");
+                throw new Error("Spotistats: " + "401: Unauthorised. Please login again!");
             case 403:
                 errorTitleElem.innerText = "403: Forbidden";
                 errorDescriptionElem.innerText = "This probally being caused by a mismatch between the used endpoints and authorized scopes with the Spotify API.";
                 errorCodeElem.innerText = JSON.stringify(await res.json(), null, 2);
                 navigate("/error");
-                throw new Error(errorTitleElem.innerText + " Shown Error Page!");
+                throw new Error("Spotistats: " + errorTitleElem.innerText + " Shown Error Page!");
             case 404:
                 errorTitleElem.innerText = "404: Not Found";
                 errorDescriptionElem.innerText = "This probally being caused by an out of date cache or bug in the application which resulted in Spotify being unable to find a resource.";
                 errorCodeElem.innerText = JSON.stringify(await res.json(), null, 2);
                 navigate("/error");
-                throw new Error(errorTitleElem.innerText + " Shown Error Page!");
+                throw new Error("Spotistats: " + errorTitleElem.innerText + " Shown Error Page!");
             case 429:
                 return new Promise((resolve, reject) => {
                     setTimeout(() => fetchIt(url, options).then(resolve).catch(reject), (res.headers.get('retry-after') + 1) * 1000)
@@ -171,77 +60,61 @@ async function fetchIt(url, options) {
                 errorDescriptionElem.innerText = "Spotify had an issue, please try again later.";
                 errorCodeElem.innerText = JSON.stringify(await res.json(), null, 2);
                 navigate("/error");
-                throw new Error(errorTitleElem.innerText + " Shown Error Page!");
+                throw new Error("Spotistats: " + errorTitleElem.innerText + " Shown Error Page!");
             case 502:
                 errorTitleElem.innerText = "502: Bad Gateway";
                 errorDescriptionElem.innerText = "Spotify had an issue, please try again later.";
                 errorCodeElem.innerText = JSON.stringify(await res.json(), null, 2);
                 navigate("/error");
-                throw new Error(errorTitleElem.innerText + " Shown Error Page!");
+                throw new Error("Spotistats: " + errorTitleElem.innerText + " Shown Error Page!");
             case 503:
                 errorTitleElem.innerText = "503: Service Unavailable";
                 errorDescriptionElem.innerText = "Spotify had an issue, please try again later.";
                 errorCodeElem.innerText = JSON.stringify(await res.json(), null, 2);
                 navigate("/error");
-                throw new Error(errorTitleElem.innerText + " Shown Error Page!");
+                throw new Error("Spotistats: " + errorTitleElem.innerText + " Shown Error Page!");
             default: console.error("Spotify returned unknown status:", res.status)
         }
 
         return await res.json();
     } catch (e) {
-        throw e
+        if (e.toString().startsWith("Error: Spotistats: ")) {
+            throw e;
+        }
+
+        errorTitleElem.innerText = "Accessing Spotify API";
+        errorDescriptionElem.innerText = "The network request failed, please reload to try again.";
+        errorCodeElem.innerText = JSON.stringify(e.toString(), null, 2);
+        navigate("/error");
+        throw e;
     }
 }
 
-//TODO: Deprecated
-const getAll = async (url, progress) => {
-    let items = [];
-    while (true) {
-        let res = await fetch(url, {
-            headers: {
-                "Authorization": localStorage.getItem('auth_access_token')
-            }
-        })
-        await reqErrorHandling(res);
-
-        let data = await res.json();
-
-        items = items.concat(data.items)
-
-        if (progress) progress((data.offset + data.items.length) / data.total);
-        if (!data.next) {
-            break;
-        }
-        url = data.next;
-    }
-    return items
-};
-
-// TEMP
-function createItem(name, description, images, private_icon, collaborative_icon) {
+function createItem(name, description, images, url, private_icon, collaborative_icon) {
     let item = document.createElement('div');
     item.className = "item";
 
-    let img;
-    if (images.length >= 1) {
-        img = document.createElement('img')
-        img.src = images[0].url; // TODO: Get highest resolution
-        img.width = 140;
-        img.height = 140;
-        img.loading = "lazy";
-        img.alt = name;
-
-        img.onload = () => {
-            item.style.animation = "itemFadeIn 0.2s ease-in both";
+    if (url != undefined) {
+        if (url.startsWith("spotify:")) {
+            item.onclick = () => window.location = url;
+        } else {
+            item.onclick = () => window.open(url, '_blank');
         }
-    } else {
-        img = document.createElement('span');
-        img.className = "default-icon";
-        var icon = document.getElementById("generic-playlist-icon").cloneNode(true)
-        icon.id = "";
-        img.appendChild(icon);
-        item.style.animation = "itemFadeIn 0.2s ease-in both";
     }
+
+    let img = document.createElement('img');
+    if (images.length >= 1) {
+        img.src = images[0].url;
+    } else {
+        img.src = "/assets/placeholder.svg";
+        img.className = "svg";
+        img.style.filter = "invert(1)";
+    }
+    img.width = 140;
+    img.height = 140;
+    img.loading = "lazy";
+    img.alt = name;
+    img.onload = () => item.style.animation = "itemFadeIn 0.2s ease-in both";
     item.appendChild(img);
 
     let info = document.createElement('div');
@@ -256,18 +129,14 @@ function createItem(name, description, images, private_icon, collaborative_icon)
     }
 
     if (collaborative_icon) {
-        let peopleIcon = document.createElement('span');
-        peopleIcon.className = "icon";
-        var icon = document.getElementById("people-icon").cloneNode(true)
-        icon.id = "";
-        peopleIcon.appendChild(icon);
+        let peopleIcon = document.createElement('img');
+        peopleIcon.className = "icon svg";
+        peopleIcon.src = "/assets/people-icon.svg"
         subtitle.prepend(peopleIcon);
     } else if (private_icon) {
-        let lockIcon = document.createElement('span');
-        lockIcon.className = "icon";
-        var icon = document.getElementById("lock-icon").cloneNode(true)
-        icon.id = "";
-        lockIcon.appendChild(icon);
+        let lockIcon = document.createElement('img');
+        lockIcon.className = "icon svg";
+        lockIcon.src = "/assets/lock-icon.svg";
         subtitle.prepend(lockIcon);
     }
 
@@ -277,8 +146,105 @@ function createItem(name, description, images, private_icon, collaborative_icon)
     return item
 }
 
+function mountRoute(url, title, showMenu, handler) {
+    let elem = document.querySelector(".page[path='" + url + "']");
+    if (elem == undefined || handler == undefined) {
+        console.log("Error mounting route", url);
+        return;
+    }
+    elem.onload = () => {
+        if (title != undefined) document.title = title;
+        document.getElementById("menu").style.display = showMenu ? "block" : "none";
+        handler();
+    }
+}
+
+// TODO: Fix changing pages quickly causing both to appear
+function navigate(url) {
+    if (url != "/error") window.history.pushState(null, "Spotistats", url)
+
+    if (!navigator.onLine) {
+        menu(false);
+        document.getElementById("offline-page").style.display = "block";
+        return;
+    }
+
+    var pageFunc;
+    for (const child of document.getElementsByClassName('page')) {
+        if (child.id == "menu") continue;
+        if (child.getAttribute("path") == url) {
+            if (child.onload) pageFunc = child.onload;
+            continue;
+        };
+        if (child.style.display != "none") child.style.display = "none";
+    }
+
+    if (pageFunc == undefined) pageFunc = document.querySelector(".page[path='" + "/404" + "']").onload;
+    pageFunc();
+}
+
+/*
+    Login Page
+*/
+mountRoute("/login", "Spotistats | Login", false, () => {
+    document.getElementById("loginbtn").onclick = () => {
+        localStorage.clear();
+        let stateToken = Math.random().toString(36).substr(2); //  The state token is designed to provide CSRF protection
+        localStorage.setItem('auth_state_token', stateToken);
+        window.location.href = `https://accounts.spotify.com/authorize?client_id=${spotify_api_client_id}&response_type=token&redirect_uri=${window.location.origin}&state=${stateToken}&scope=${spotify_api_scopes.join("%20")}`;
+    };
+    document.getElementById("login-page").style.display = "block";
+});
+
+/*
+    Profile Page
+*/
+const profileIconElem = document.getElementById("profile-icon"); // TODO: add Elem to all their names
+mountRoute("/", "Spotistats | Profile", true, async () => {
+    let user_icon = localStorage.getItem('user_icon');
+    let user_url = localStorage.getItem('user_url');
+    let user_display_name = localStorage.getItem('user_display_name');
+    let user_followers = localStorage.getItem('user_followers');
+
+    var renderProfiePage = () => {
+        if (user_icon == undefined) {
+            profileIconElem.src = "/assets/placeholder.svg";
+            profileIconElem.className = "svg";
+        } else {
+            if (profileIconElem.src != user_icon) profileIconElem.src = user_icon;
+            profileIconElem.alt = user_display_name;
+        }
+        document.getElementById("profile-icon-link").href = user_url;
+        document.getElementById("profile-username").innerText = user_display_name;
+        document.getElementById("profile-followers").innerText = user_followers;
+        document.getElementById("profile-page").style.display = "block";
+    }
+
+    var getData = new Promise((resolve, reject) => {
+        fetchIt('https://api.spotify.com/v1/me').then(async data => {
+            user_icon = data.images[0]?.url;
+            user_url = localStorage.getItem('link_to_uri') ? data.uri : data.external_urls.spotify;
+            user_display_name = data.display_name
+            user_followers = data.followers.total
+            localStorage.setItem('user_icon', user_icon);
+            localStorage.setItem('user_url', user_url);
+            localStorage.setItem('user_display_name', user_display_name);
+            localStorage.setItem('user_followers', user_followers);
+
+            renderProfiePage();
+        }).then(resolve).catch(reject)
+    });
+
+    if (!user_display_name || !user_followers) {
+        await getData;
+    } else {
+        renderProfiePage();
+    }
+});
+
+//////// TODO: CLEANUP EVERYTHING BELOW
+
 // Favourites Page
-const favouritesPageElem = document.getElementById("favourites-page");
 const favouritesPageTypeTitle = document.getElementById("item-type-title");
 const favouritesPageTypeSelect = document.getElementById("item-type-select");
 const favouritesPageTimeSelect = document.getElementById("item-time-select");
@@ -290,7 +256,17 @@ async function loadAndCache(storageItem, url, datasaver) {
     let value = JSON.parse(localStorage.getItem(storageItem));
     if (value == undefined) {
         if (datasaver !== true) {
-            value = await getAll(url);
+            let playlists = [];
+            value = [];
+            while (true) {
+                let data = await fetchIt(url);
+                value = value.concat(data.items);
+                // TODO: Progress progress(data.offset + data.items.length) / data.total)
+                if (!data.next) break;
+                url = data.next;
+            }
+
+            // value = await getAll(url);
             localStorage.setItem(storageItem, JSON.stringify(value));
         } else {
             value = [];
@@ -299,7 +275,7 @@ async function loadAndCache(storageItem, url, datasaver) {
     return value
 }
 
-const favouritesPage = async () => {
+mountRoute("/favourites", "Spotistats | Favourites", true, async () => {
     let time_range = favouritesPageTimeSelect.querySelector(".active").getAttribute('time_range')
     if (time_range != active_time_selection) {
         active_time_selection = time_range;
@@ -314,12 +290,12 @@ const favouritesPage = async () => {
 
     let top_tracks_medium_term = await loadAndCache('top_tracks_' + time_range, `https://api.spotify.com/v1/me/top/tracks?limit=30&time_range=${time_range}`)
     for (const [i, item] of top_tracks_medium_term.entries()) {
-        favouritesTracksElem.appendChild(createItem((i + 1) + ". " + item.name, item.type == "track" ? item.artists.map(artist => artist.name).join(", ") : "", item.type == "track" ? item.album.images : item.images));
+        favouritesTracksElem.appendChild(createItem((i + 1) + ". " + item.name, item.type == "track" ? item.artists.map(artist => artist.name).join(", ") : "", item.type == "track" ? item.album.images : item.images, localStorage.getItem('link_to_uri') ? item.uri : item.external_urls.spotify));
     }
 
     loadAndCache('top_artists_' + time_range, `https://api.spotify.com/v1/me/top/artists?limit=30&time_range=${time_range}`, datasaver).then(data => {
         for (const [i, item] of data.entries()) {
-            favouritesArtistsElem.appendChild(createItem((i + 1) + ". " + item.name, item.type == "track" ? item.artists.map(artist => artist.name).join(", ") : "", item.type == "track" ? item.album.images : item.images));
+            favouritesArtistsElem.appendChild(createItem((i + 1) + ". " + item.name, item.type == "track" ? item.artists.map(artist => artist.name).join(", ") : "", item.type == "track" ? item.album.images : item.images, localStorage.getItem('link_to_uri') ? item.uri : item.external_urls.spotify));
         }
     });
 
@@ -344,7 +320,7 @@ const favouritesPage = async () => {
                 if (favouritesArtistsElem.children.length == 0) {
                     loadAndCache('top_artists_' + time_range, `https://api.spotify.com/v1/me/top/artists?limit=30&time_range=${time_range}`).then(data => {
                         for (const [i, item] of data.entries()) {
-                            favouritesArtistsElem.appendChild(createItem((i + 1) + ". " + item.name, item.type == "track" ? item.artists.map(artist => artist.name).join(", ") : "", item.type == "track" ? item.album.images : item.images));
+                            favouritesArtistsElem.appendChild(createItem((i + 1) + ". " + item.name, item.type == "track" ? item.artists.map(artist => artist.name).join(", ") : "", item.type == "track" ? item.album.images : item.images, localStorage.getItem('link_to_uri') ? item.uri : item.external_urls.spotify));
                         }
                     });
                 }
@@ -362,8 +338,95 @@ const favouritesPage = async () => {
         }
     }
 
-    favouritesPageElem.style.display = "block";
-};
+    document.getElementById("favourites-page").style.display = "block";
+});
+
+// Taste Page
+mountRoute("/taste", "Spotistats | Taste", true, async () => {
+    // TODO: More work needs to be done before being released
+
+    // let recentsTracks = await fetchIt('https://api.spotify.com/v1/me/player/recently-played?limit=50');
+    // let recentsTrackIDs = recentsTracks.items.map(song => song.track.id);
+    // let audioFeatures = await fetchIt("https://api.spotify.com/v1/audio-features?ids=" + recentsTrackIDs.join(","));
+
+    // console.log(recentsTracks);
+    // console.log(audioFeatures.audio_features);
+
+    // // TODO: Most popular genre, You "Normal" Audio features
+
+    // let avg_danceability = 0;
+    // let avg_energy = 0;
+    // let avg_instrumentalness = 0;
+    // let avg_speechiness = 0;
+    // let avg_tempo = 0;
+    // let avg_valence = 0;
+    // for (const [i, track] of audioFeatures.audio_features.entries()) {
+    //     avg_danceability += track.danceability;
+    //     avg_energy += track.energy;
+    //     avg_instrumentalness += track.instrumentalness;
+    //     avg_speechiness += track.speechiness;
+    //     avg_tempo += track.tempo;
+    //     avg_valence += track.valence;
+    // }
+    // avg_danceability = (avg_danceability / audioFeatures.audio_features.length).toFixed(2);
+    // avg_energy = (avg_energy / audioFeatures.audio_features.length).toFixed(2);
+    // avg_instrumentalness = (avg_instrumentalness / audioFeatures.audio_features.length).toFixed(2);
+    // avg_speechiness = (avg_speechiness / audioFeatures.audio_features.length).toFixed(2);
+    // avg_tempo = (avg_tempo / audioFeatures.audio_features.length).toFixed(0);
+    // avg_valence = (avg_valence / audioFeatures.audio_features.length).toFixed(2);
+
+    // console.log(avg_danceability, avg_energy, avg_instrumentalness, avg_speechiness, avg_tempo, avg_valence);
+
+    document.getElementById("taste-page").style.display = "block";
+});
+
+// Recommendations Page
+const recommendationsElem = document.getElementById("recommendations");
+mountRoute("/recommendations", "Spotistats | Recommendations", true, async () => {
+    // TODO: Not ready for production but will be added in future release
+    // // TODO: Criteria
+
+    // // seed_artists=4NHQUGzhtTLFvgF5SZesLK,45dkTj5sMRSjrmBSBeiHym&valence=0'); // ,2cFrymmkijnjDg9SS92EPM,41MozSoPIsD1dJM0CLPjZF
+    // let seed_tracks = ["4k3uABcX9iaGlt5pRJhumi" /* Stupid */];
+    // let seed_artists = ["45dkTj5sMRSjrmBSBeiHym" /* Tate McRae */]; // "4NHQUGzhtTLFvgF5SZesLK" /* Tove Lo */
+
+    // // let target_acousticness = 0.5;
+    // // let target_danceability = 0.5;
+    // // let target_energy = 0.5;
+    // // let target_instrumentalness = 0.5;
+    // // let target_popularity = 50;
+    // // let target_speechiness = 
+    // // let target_tempo = 
+    // // let target_valence = 
+
+    // if (seed_artists.length + seed_tracks.length > 5) {
+    //     alert("Error") // TODO
+    //     return;
+    // }
+
+    // let recommendations = await fetchIt("https://api.spotify.com/v1/recommendations?limit=50" + (seed_tracks.length > 0 ? "&seed_tracks=" + seed_tracks.join(",") : "") + (seed_artists.length > 0 ? "&seed_artists=" + seed_artists.join(",") : ""));
+
+    // let isRecommendationAlreadyKnown = await fetchIt("https://api.spotify.com/v1/me/tracks/contains?ids=" + recommendations.tracks.map(song => song.id))
+    // let i = 0;
+    // recommendationsElem.innerText = "";
+    // for (const [ii, track] of recommendations.tracks.entries()) {
+    //     // console.log(track.name, isRecommendationAlreadyKnown[ii])
+    //     if (isRecommendationAlreadyKnown[ii]) {
+    //         // console.log("Removing", i)
+    //         recommendations.tracks.splice(i, 1); // TODO: Fix this cause sometimes not working
+    //         i--;
+    //     } else {
+    //         recommendationsElem.appendChild(createItem(track.name, track.artists.map(artist => artist.name).join(", "), track.album.images, localStorage.getItem('link_to_uri') ? track.uri : track.external_urls.spotify));
+    //     }
+    //     i++;
+    // }
+
+    document.getElementById("recommendations-page").style.display = "block";
+
+    // https://developer.spotify.com/documentation/web-api/reference/browse/get-recommendations/
+    // TODO: Maybe try inifinite scrolling. Just keep asking API for more as you go down?
+    // - https://stackoverflow.com/questions/6456846/how-to-do-an-infinite-scroll-in-plain-javascript
+});
 
 // Export Page
 const exportPageElem = document.getElementById("export-page");
@@ -436,12 +499,19 @@ function download(name, body) {
     document.body.removeChild(e);
 }
 
-const exportPage = async () => {
-    try {
-        var playlists = await getAll('https://api.spotify.com/v1/me/playlists?limit=50');
-    } catch (err) {
-        console.error(err);
-        return
+mountRoute("/export", "Spotistats | Export", true, async () => {
+    let jszipScript = document.createElement('script');
+    jszipScript.src = escapeHTMLPolicy.createScriptURL("/jszip/jszip.min.js");
+    document.body.appendChild(jszipScript);
+
+    let playlists = [];
+    let url = "https://api.spotify.com/v1/me/playlists?limit=50";
+    while (true) {
+        let data = await fetchIt(url);
+        playlists = playlists.concat(data.items)
+        // TODO: Progress progress(data.offset + data.items.length) / data.total)
+        if (!data.next) break;
+        url = data.next;
     }
 
     playlists.unshift({
@@ -450,8 +520,9 @@ const exportPage = async () => {
         images: [],
     });
 
+    exportPlaylistsElem.innerText = "";
     playlists.forEach(playlist => {
-        let item = createItem(playlist.name, playlist.owner?.display_name, playlist.images, !playlist.public, playlist.collaborative);
+        let item = createItem(playlist.name, playlist.owner?.display_name, playlist.images, undefined, !playlist.public, playlist.collaborative);
         item.setAttribute("spotify_id", playlist.id);
 
         item.onclick = async () => {
@@ -523,68 +594,39 @@ const exportPage = async () => {
     };
 
     exportPageElem.style.display = "block";
-};
+});
 
-// Taste Page
-const tastePageElem = document.getElementById("taste-page");
-const tastePage = async () => {
-    tastePageElem.style.display = "block";
-}
-
-// Menu
-const menuElem = document.getElementById("menu");
-
-const menu = async (visible) => {
-    if (visible == false) {
-        menuElem.style.display = "none";
-        return
+// Reset
+mountRoute("/reset", "Spotistats | Reset", false, async () => {
+    let registrations = await navigator.serviceWorker.getRegistrations()
+    for (let registration of registrations) {
+        registration.unregister()
     }
 
-    for (const child of menuElem.children) {
-        let path = child.getAttribute('path')
-        if (path) {
-            child.onclick = () => {
-                navigate(path)
-            }
-        }
+    let caches = await window.caches.keys();
+    for (let cache of caches) {
+        window.caches.delete(cache);
     }
 
-    menuElem.style.display = "block";
+    localStorage.clear();
 
+    alert("Cache Reset!");
+    navigate("/login");
+});
 
+// Error
+mountRoute("/error", undefined, true, () => {
+    document.getElementById("error-page").style.display = "block";
+});
 
-    // TODO: Active Item
-};
+// Not Found
+mountRoute("/404", "Spotistats | Not Found", true, () => {
+    document.getElementById("not-found-page").style.display = "block";
+});
 
-let pageElems = document.getElementsByClassName('page');
-function navigate(url) {
-    if (url != "/error") {
-        window.history.pushState(null, "Spotistats", url)
-    }
-
-    for (const child of pageElems) {
-        if (child.id == "menu") continue;
-        child.style.display = "none";
-    }
-
-    if (!navigator.onLine) {
-        menu(false);
-        document.getElementById("offline-page").style.display = "block";
-        return;
-    }
-
-    switch (url) {
-        case '/login': menu(false); loginPage(); break;
-        case '/': menu(); profilePage(); break;
-        case '/favourites': menu(); favouritesPage(); break;
-        case '/taste': menu(); tastePage(); break;
-        case '/export': menu(); exportPage(); break;
-        case '/error': menu(); document.getElementById("error-page").style.display = "block"; break;
-        default: menu(); document.getElementById("not-found-page").style.display = "block";
-    }
-}
-
-// Startup app
+/*
+    App Startup & Registration
+*/
 document.addEventListener("DOMContentLoaded", async () => {
     var urlHash = new URLSearchParams(window.location.hash.substr(1));
     if (urlHash.has('access_token')) {
@@ -596,6 +638,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     if (!localStorage.getItem('auth_access_token')) navigate('/login');
+
+    for (const child of document.getElementById("menu").children) {
+        let path = child.getAttribute('path');
+        if (path) child.onclick = () => navigate(path);
+    }
 
     // TODO: Fullpage loader with nice fade out until data up ??
 
@@ -612,12 +659,10 @@ window.addEventListener('online', () => {
 });
 
 if ('serviceWorker' in navigator) {
-    const escapeHTMLPolicy = trustedTypes.createPolicy('myEscapePolicy', {
-        createScriptURL: string => string
-    });
-
     window.addEventListener('load', () => {
         navigator.serviceWorker.register(escapeHTMLPolicy.createScriptURL("/sw.js"))
             .catch(err => console.error('Error registering service worker', err));
     });
 }
+
+window.onbeforeunload = () => window.scrollTo(0, 0);
