@@ -334,7 +334,7 @@ mountRoute("/favourites", "Spotistats | Favourites", true, async () => {
                 child.className = "";
             }
             e.target.className = "active";
-            favouritesPage();
+            document.querySelector(".page[path='" + "/favourites" + "']").onload();
         }
     }
 
