@@ -27,7 +27,7 @@ html, body {
     color: white;
     font-family: 'Montserrat', sans-serif;
     margin: 0;
-    padding: 15px;
+    padding: 2.5px;
 }
 
 a {
@@ -53,6 +53,7 @@ a:hover {
 
 .login-container {
     width: 600px;
+    max-width: 100vw;
     height: 300px;
     margin: auto;
     position: absolute;
@@ -68,6 +69,8 @@ a:hover {
     text-align: center;
     margin-top: 20px;
     margin-bottom: 10px;
+    max-width: 100%;
+    word-wrap: normal;
 }
 
 .subtitle {
@@ -75,6 +78,7 @@ a:hover {
     text-align: center;
     margin: 0;
     margin-bottom: 20px;
+    word-wrap: normal;
 }
 
 #loginbtn {
@@ -149,15 +153,15 @@ nav a {
 }
 
 .item .default-icon, .item img {
-    width: 140px;
-    height: 140px;
+    width: 100px;
+    height: 100px;
     margin: 10px;
 }
 
 .item h3, .item h4 {
-    font-size: 19px;
+    font-size: 15px;
     margin: 10px 0px;
-    margin-left: 40px;
+    margin-left: 10px;
     font-weight: 400;
 }
 
@@ -193,16 +197,18 @@ nav a {
 }
 
 .item-criteria h1 {
-    display: inline-block;
+    display: block;
     margin: 0;
-    padding: 0 0 10px 0;
+    padding: 0 0 10px 20px;
 }
 
 .item-criteria div {
     display: inline-block;
+    padding: 0 0 7px 0;
 }
 
 .item-criteria .separator {
+    display: none;
     padding: 0 20px;
 }
 
@@ -237,4 +243,31 @@ nav a {
 
 .error-link {
     color: #1DB954;
+}
+
+/* Responsive Design */
+
+@media only screen and (min-width: 768px) {
+    html, body {
+        padding: 15px;
+    }
+
+    .item .default-icon, .item img {
+        width: 140px;
+        height: 140px;
+    }
+
+    .item h3, .item h4 {
+        font-size: 19px;
+        margin-left: 40px;
+    }
+
+    .item-criteria h1 {
+        display: inline-block;
+        padding: 0 0 10px 0;
+    }
+
+    .item-criteria .separator {
+        display: inline-block;
+    }
 }

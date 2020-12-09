@@ -3,3 +3,6 @@
 /public/jszip/
 /public/assets/
 /dist
+
+# Local Netlify folder
+.netlify
