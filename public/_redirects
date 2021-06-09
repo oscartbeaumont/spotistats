@@ -2,7 +2,7 @@
 /login /index.html 200
 /favourites /index.html 200
 /taste /index.html 200
-recommendations /index.html 200
+/recommendations /index.html 200
 /export /index.html 200
 /reset /index.html 200
 /* /index.html 404
