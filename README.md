@@ -22,7 +22,7 @@ netlify dev
 
 # Analytics
 
-<a href="https://simpleanalytics.com/spotistats.js.org?utm_source=spotistats.js.org&utm_content=badge" referrerpolicy="origin" target="_blank"><img src="https://simpleanalyticsbadge.com/spotistats.js.org?radius=10" loading="lazy" referrerpolicy="no-referrer" crossorigin="anonymous" /></a>
+[Analytics Dashboard](https://plausible.otbeaumont.me/spotistats.js.org)
 
 # Credits
 
