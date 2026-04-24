@@ -25,7 +25,7 @@
     "producers": [
       {
         "binding": "SPOTIFY_SYNC_QUEUE",
-        "queue": "spotistats,
+        "queue": "spotistats",
       },
     ],
     "consumers": [
