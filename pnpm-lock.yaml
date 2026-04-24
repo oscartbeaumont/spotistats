@@ -23,6 +23,9 @@ importers:
       '@tailwindcss/vite':
         specifier: ^4.2.4
         version: 4.2.4(vite@8.0.10(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(terser@5.46.0))
+      '@tanstack/solid-query':
+        specifier: ^5.100.1
+        version: 5.100.1(solid-js@1.9.12)
       jszip:
         specifier: ^3.10.1
         version: 3.10.1
@@ -1075,6 +1078,14 @@ packages:
     resolution: {integrity: sha512-pCvohwOCspk3ZFn6eJzrrX3g4n2JY73H6MmYC87XfGPyTty4YsCjYTMArRZm/zOI8dIt3+EcrLHAFPe5A4bgtw==}
     peerDependencies:
       vite: ^5.2.0 || ^6 || ^7 || ^8
+
+  '@tanstack/query-core@5.100.1':
+    resolution: {integrity: sha512-awvQhOO/2TrSCHE5LKKsXcvvj6WSBncwEcMFCB/ez0Qs0b17iyyivoGArNV3HFfXryZwCpnb/olsaBBKrIbtSw==}
+
+  '@tanstack/solid-query@5.100.1':
+    resolution: {integrity: sha512-vo4nYSasaCHGTTgXSa6rnxZUWM88VbDK2PFnHNMR9gi2BhVOmzWuUcOc+t9ODzUR9Emv/hGmMOSG6m3au4XlDg==}
+    peerDependencies:
+      solid-js: ^1.6.0
 
   '@tybys/wasm-util@0.10.1':
     resolution: {integrity: sha512-9tTaPJLSiejZKx+Bmog4uSubteqTvFrVrURwkmHixBo0G4seD0zUxp98E1DzUBJxLQ3NPwXrGKDiVjwx/DpPsg==}
@@ -2644,6 +2655,13 @@ snapshots:
       '@tailwindcss/oxide': 4.2.4
       tailwindcss: 4.2.4
       vite: 8.0.10(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(terser@5.46.0)
+
+  '@tanstack/query-core@5.100.1': {}
+
+  '@tanstack/solid-query@5.100.1(solid-js@1.9.12)':
+    dependencies:
+      '@tanstack/query-core': 5.100.1
+      solid-js: 1.9.12
 
   '@tybys/wasm-util@0.10.1':
     dependencies:

@@ -1,6 +1,7 @@
 import { Title } from "@solidjs/meta";
 import { useNavigate } from "@solidjs/router";
-import { createResource, createSignal, onMount, Show } from "solid-js";
+import { createQuery } from "@tanstack/solid-query";
+import { createSignal, onMount, Show } from "solid-js";
 import { isServer } from "solid-js/web";
 import { accessToken, linkToUri, profileCache, setProfileCache } from "~/lib/storage";
 import { hasSpotifyCallbackCode, useSpotifyFetch } from "~/lib/spotify";
@@ -23,9 +24,10 @@ export default function Home() {
     if (!accessToken() && !hasSpotifyCallbackCode()) navigate("/login", { replace: true });
   });
 
-  const [profile] = createResource(
-    () => (!isServer && mounted() && accessToken() ? accessToken() : null),
-    async () => {
+  const profile = createQuery(() => ({
+    queryKey: ["spotify", "profile", accessToken()],
+    enabled: !isServer && mounted() && !!accessToken(),
+    queryFn: async () => {
       const cached = profileCache();
       if (cached?.displayName && cached.followers !== undefined) return cached;
 
@@ -39,9 +41,9 @@ export default function Home() {
       setProfileCache(next);
       return next;
     },
-  );
+  }));
 
-  const current = () => mounted() ? profile() ?? profileCache() : null;
+  const current = () => mounted() ? profile.data ?? profileCache() : null;
 
   return (
     <main class="mx-auto grid min-h-[70vh] max-w-3xl place-items-center px-5 text-center">

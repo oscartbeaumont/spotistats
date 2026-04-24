@@ -1,7 +1,8 @@
 import { Title } from "@solidjs/meta";
 import { useNavigate } from "@solidjs/router";
+import { createQuery } from "@tanstack/solid-query";
 import JSZip from "jszip";
-import { createResource, createSignal, For, onMount, Show } from "solid-js";
+import { createSignal, For, onMount, Show } from "solid-js";
 import { isServer } from "solid-js/web";
 import { ItemCard } from "~/components/ItemCard";
 import { csvCell, downloadTextFile } from "~/lib/download";
@@ -45,9 +46,10 @@ export default function ExportPage() {
     if (!accessToken() && !hasSpotifyCallbackCode()) navigate("/login", { replace: true });
   });
 
-  const [playlists] = createResource(
-    () => (!isServer && accessToken() ? accessToken() : null),
-    async () => {
+  const playlists = createQuery(() => ({
+    queryKey: ["spotify", "playlists", accessToken()],
+    enabled: !isServer && !!accessToken(),
+    queryFn: async () => {
       let url: string | null = "https://api.spotify.com/v1/me/playlists?limit=50";
       let value: Playlist[] = [];
       while (url) {
@@ -57,7 +59,7 @@ export default function ExportPage() {
       }
       return [{ name: "Liked Songs", public: true, images: [] }, ...value];
     },
-  );
+  }));
 
   async function downloadUrl(baseUrl: string, totalProgress = 1) {
     let csv = csvHeader;
@@ -127,7 +129,7 @@ export default function ExportPage() {
   }
 
   async function backupAll() {
-    const all = playlists() ?? [];
+    const all = playlists.data ?? [];
     if (busy()) return alert("Please wait for current download to complete before starting another!");
     setBusy(true);
     setProgress(0);
@@ -163,9 +165,9 @@ export default function ExportPage() {
       <Show when={busy()}>
         <progress class="mx-auto mb-6 block h-2 w-2/5 accent-[#1DB954]" value={progress()} max="1" />
       </Show>
-      <Show when={!playlists.loading} fallback={<p class="px-2 text-zinc-400">Loading playlists...</p>}>
+      <Show when={!playlists.isLoading} fallback={<p class="px-2 text-zinc-400">Loading playlists...</p>}>
         <div class="space-y-1">
-          <For each={playlists()}>{playlist => <ItemCard name={playlist.name} description={playlist.owner?.display_name} images={playlist.images} privateIcon={!playlist.public} collaborativeIcon={playlist.collaborative} onClick={() => exportPlaylist(playlist)} />}</For>
+          <For each={playlists.data}>{playlist => <ItemCard name={playlist.name} description={playlist.owner?.display_name} images={playlist.images} privateIcon={!playlist.public} collaborativeIcon={playlist.collaborative} onClick={() => exportPlaylist(playlist)} />}</For>
         </div>
       </Show>
     </main>

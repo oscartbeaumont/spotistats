@@ -1,6 +1,7 @@
 import { Title } from "@solidjs/meta";
 import { useNavigate } from "@solidjs/router";
-import { createEffect, createSignal, For, onCleanup, onMount, Show, untrack } from "solid-js";
+import { createInfiniteQuery } from "@tanstack/solid-query";
+import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { isServer } from "solid-js/web";
 import { ItemCard } from "~/components/ItemCard";
 import { accessToken, linkToUri } from "~/lib/storage";
@@ -19,7 +20,7 @@ type SpotifyItem = {
   album?: { images: { url: string }[] };
 };
 
-async function hasSaveData() {
+function hasSaveData() {
   const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
   return connection?.saveData === true;
 }
@@ -29,17 +30,15 @@ export default function Favourites() {
   const spotifyFetch = useSpotifyFetch();
   const [type, setType] = createSignal<ItemType>("Tracks");
   const [timeRange, setTimeRange] = createSignal<TimeRange>("short_term");
-  const [itemsByKey, setItemsByKey] = createSignal<Record<string, SpotifyItem[]>>({});
-  const [nextByKey, setNextByKey] = createSignal<Record<string, string | null>>({});
-  const [loadingByKey, setLoadingByKey] = createSignal<Record<string, boolean>>({});
-  const [completeByKey, setCompleteByKey] = createSignal<Record<string, boolean>>({});
   const [atBottom, setAtBottom] = createSignal(false);
+  const [saveData, setSaveData] = createSignal(false);
   let sentinel: HTMLDivElement | undefined;
   let observer: IntersectionObserver | undefined;
 
   onMount(() => {
     if (!accessToken() && !hasSpotifyCallbackCode()) navigate("/login", { replace: true });
     localStorage.removeItem("top_items_cache");
+    setSaveData(hasSaveData());
 
     observer = new IntersectionObserver(entries => {
       setAtBottom(entries.some(entry => entry.isIntersecting));
@@ -51,54 +50,25 @@ export default function Favourites() {
   onCleanup(() => observer?.disconnect());
 
   const currentKind = () => type() === "Tracks" ? "tracks" as const : "artists" as const;
-  const currentKey = () => cacheKey(currentKind(), timeRange());
-
-  function cacheKey(kind: "tracks" | "artists", range: TimeRange) {
-    return `top_${kind}_${range}`;
-  }
 
   function firstPageUrl(kind: "tracks" | "artists", range: TimeRange) {
     return `https://api.spotify.com/v1/me/top/${kind}?limit=50&time_range=${range}`;
   }
 
-  async function loadRemainingPages(kind: "tracks" | "artists", range: TimeRange) {
-    if (isServer || !accessToken()) return;
-
-    const key = cacheKey(kind, range);
-    if (loadingByKey()[key] || completeByKey()[key]) return;
-
-    if (kind === "artists" && !itemsByKey()[key] && await hasSaveData()) {
-      setItemsByKey(value => ({ ...value, [key]: [] }));
-      setCompleteByKey(value => ({ ...value, [key]: true }));
-      return;
-    }
-
-    setLoadingByKey(value => ({ ...value, [key]: true }));
-    try {
-      let url: string | null = nextByKey()[key] ?? firstPageUrl(kind, range);
-      while (url) {
-        const data: SpotifyPage<SpotifyItem> = await spotifyFetch(url);
-        const nextItems = [...(untrack(itemsByKey)[key] ?? []), ...data.items];
-
-        setItemsByKey(value => ({ ...value, [key]: nextItems }));
-        setNextByKey(value => ({ ...value, [key]: data.next }));
-        url = data.next;
-      }
-      setCompleteByKey(value => ({ ...value, [key]: true }));
-    } finally {
-      setLoadingByKey(value => ({ ...value, [key]: false }));
-    }
-  }
+  const favourites = createInfiniteQuery(() => ({
+    queryKey: ["spotify", "top", currentKind(), timeRange(), accessToken()],
+    enabled: !isServer && !!accessToken() && !(currentKind() === "artists" && saveData()),
+    initialPageParam: firstPageUrl(currentKind(), timeRange()),
+    queryFn: ({ pageParam }) => spotifyFetch<SpotifyPage<SpotifyItem>>(pageParam),
+    getNextPageParam: lastPage => lastPage.next || undefined,
+  }));
 
   createEffect(() => {
-    if (!accessToken()) return;
-    const kind = currentKind();
-    const range = timeRange();
-    untrack(() => void loadRemainingPages(kind, range));
+    if (atBottom() && favourites.hasNextPage && !favourites.isFetchingNextPage) void favourites.fetchNextPage();
   });
 
-  const items = () => itemsByKey()[currentKey()] ?? [];
-  const showBottomPending = () => atBottom() && loadingByKey()[currentKey()] === true;
+  const items = () => favourites.data?.pages.flatMap(page => page.items) ?? [];
+  const showBottomPending = () => favourites.isLoading || (atBottom() && favourites.isFetchingNextPage);
 
   return (
     <main class="mx-auto max-w-5xl px-3 pb-12 sm:px-6">
