@@ -11,4 +11,10 @@
   "observability": {
     "enabled": true,
   },
+  "vars": {
+    "SPOTIFY_CLIENT_ID": "1107a25b98c041bb90c9063553e5f1a8",
+  },
+  "secrets": {
+    "required": ["SPOTIFY_CLIENT_SECRET"],
+  },
 }
