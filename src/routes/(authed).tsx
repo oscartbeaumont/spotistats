@@ -1,6 +1,6 @@
 import { createShortcut } from "@solid-primitives/keyboard";
 import { useLocation, useNavigate } from "@solidjs/router";
-import { children, createEffect, ErrorBoundary, onMount, Suspense } from "solid-js";
+import { createEffect, ErrorBoundary, onMount, Suspense } from "solid-js";
 import { isServer } from "solid-js/web";
 import { AppError } from "~/app";
 import { isEditableShortcutTarget } from "~/lib/keyboard";
@@ -10,7 +10,6 @@ import { hasSpotifyCallbackCode } from "~/lib/spotify";
 export default function AuthedLayout(props: { children?: import("solid-js").JSX.Element }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const resolvedChildren = children(() => props.children);
 
   const isActive = (href: string) =>
     href === "/"
@@ -94,7 +93,7 @@ export default function AuthedLayout(props: { children?: import("solid-js").JSX.
       </header>
       <ErrorBoundary fallback={(error) => <AppError error={error} />}>
         <Suspense fallback={<main class="app-main p-8 md:p-16 text-sm uppercase tracking-widest text-[#999]">LOADING_</main>}>
-          {resolvedChildren()}
+          {props.children}
         </Suspense>
       </ErrorBoundary>
     </>

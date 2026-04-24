@@ -1,9 +1,12 @@
 import { Title } from "@solidjs/meta";
-import { createQuery } from "@tanstack/solid-query";
+import { createMutation, createQuery } from "@tanstack/solid-query";
 import { Show, createSignal, onMount } from "solid-js";
 import { useLocation, useNavigate } from "@solidjs/router";
-import { authStore } from "~/lib/storage";
-import { SpotifyUnauthenticatedError, statsStatusQueryOptions } from "~/lib/spotify";
+import {
+  deleteListeningStatsMutationOptions,
+  disableListeningStatsMutationOptions,
+  statsStatusQueryOptions,
+} from "~/lib/spotify";
 
 function formatDate(value: number | string | null) {
   if (!value) return "Never";
@@ -13,54 +16,27 @@ function formatDate(value: number | string | null) {
 export default function AccountPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const [busy, setBusy] = createSignal(false);
-  const [deleteBusy, setDeleteBusy] = createSignal(false);
   const [statsReason] = createSignal(
     new URLSearchParams(location.search).get("reason"),
   );
   const status = createQuery(() => statsStatusQueryOptions);
+  const disableStatsMutation = createMutation(() => ({
+    ...disableListeningStatsMutationOptions,
+    onSuccess: () => status.refetch(),
+  }));
+  const deleteStatsMutation = createMutation(() => ({
+    ...deleteListeningStatsMutationOptions,
+    onSuccess: () => status.refetch(),
+  }));
 
   onMount(() => {
     if (location.search) navigate("/account", { replace: true });
   });
 
-  async function disableStats() {
-    if (busy()) return;
-    setBusy(true);
-    try {
-      const store = authStore();
-      const res = await fetch("/api/account/stats", {
-        method: "DELETE",
-        headers: {
-          Authorization: store.status === "authenticated" ? store.accessToken : "",
-        },
-      });
-      if (res.status === 401) throw new SpotifyUnauthenticatedError();
-      if (!res.ok) throw new Error(`Disable stats failed: ${res.status}`);
-      await status.refetch();
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function deleteAccountData() {
-    if (deleteBusy()) return;
+  function deleteAccountData() {
+    if (deleteStatsMutation.isPending) return;
     if (!confirm("Delete all Spotistats account data stored by this site? This also stops stats sync.")) return;
-    setDeleteBusy(true);
-    try {
-      const store = authStore();
-      const res = await fetch("/api/account/stats?all=1", {
-        method: "DELETE",
-        headers: {
-          Authorization: store.status === "authenticated" ? store.accessToken : "",
-        },
-      });
-      if (res.status === 401) throw new SpotifyUnauthenticatedError();
-      if (!res.ok) throw new Error(`Delete account data failed: ${res.status}`);
-      await status.refetch();
-    } finally {
-      setDeleteBusy(false);
-    }
+    deleteStatsMutation.mutate();
   }
 
   function enableStats() {
@@ -173,11 +149,11 @@ export default function AccountPage() {
                 <div class="flex flex-wrap gap-3">
                   <button
                     type="button"
-                    disabled={busy()}
-                    onClick={disableStats}
+                    disabled={disableStatsMutation.isPending}
+                    onClick={() => disableStatsMutation.mutate()}
                     class="font-black text-sm uppercase tracking-widest py-4 px-8 transition disabled:opacity-50 border-4 border-[#0a0a0a] hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
                   >
-                    {busy() ? "Disabling_" : "Disable Stats"}
+                    {disableStatsMutation.isPending ? "Disabling_" : "Disable Stats"}
                   </button>
                 </div>
               </Show>
@@ -191,11 +167,11 @@ export default function AccountPage() {
               </p>
               <button
                 type="button"
-                disabled={deleteBusy()}
+                disabled={deleteStatsMutation.isPending}
                 onClick={deleteAccountData}
                 class="font-black text-sm uppercase tracking-widest py-4 px-8 text-red-700 transition disabled:opacity-50 border-4 border-red-800 hover:bg-red-700 hover:text-[#f0ede8]"
               >
-                {deleteBusy() ? "Deleting_" : "Delete Site Data"}
+                {deleteStatsMutation.isPending ? "Deleting_" : "Delete Site Data"}
               </button>
             </div>
           </div>

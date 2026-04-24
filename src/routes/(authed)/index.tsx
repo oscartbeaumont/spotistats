@@ -1,12 +1,12 @@
 import { Title } from "@solidjs/meta";
 import { A } from "@solidjs/router";
-import { createQuery } from "@tanstack/solid-query";
+import { createMutation, createQuery } from "@tanstack/solid-query";
 import { createSignal, For, onMount, Show } from "solid-js";
 import { authStore } from "~/lib/storage";
 import {
   currentlyPlayingQueryOptions,
   profileQueryOptions,
-  SpotifyUnauthenticatedError,
+  refreshListeningStatsMutationOptions,
   statsStatusQueryOptions,
 } from "~/lib/spotify";
 
@@ -17,37 +17,21 @@ function formatDate(value: number | string | null) {
 
 export default function Page() {
   const [hydrated, setHydrated] = createSignal(false);
-  const [refreshing, setRefreshing] = createSignal(false);
 
   onMount(() => setHydrated(true));
 
   const profile = createQuery(() => profileQueryOptions);
   const stats = createQuery(() => statsStatusQueryOptions);
   const currentlyPlaying = createQuery(() => currentlyPlayingQueryOptions);
+  const refreshListening = createMutation(() => ({
+    ...refreshListeningStatsMutationOptions,
+    onSuccess: () => stats.refetch(),
+  }));
 
   const current = () => {
     const store = authStore();
     return profile.data ?? (hydrated() && store.status === "authenticated" ? store.profile : null);
   };
-
-  async function refreshListening() {
-    if (refreshing()) return;
-    setRefreshing(true);
-    try {
-      const store = authStore();
-      const res = await fetch("/api/account/stats", {
-        method: "POST",
-        headers: {
-          Authorization: store.status === "authenticated" ? store.accessToken : "",
-        },
-      });
-      if (res.status === 401) throw new SpotifyUnauthenticatedError();
-      if (!res.ok) throw new Error(`Refresh stats failed: ${res.status}`);
-      await stats.refetch();
-    } finally {
-      setRefreshing(false);
-    }
-  }
 
   return (
     <main class="app-main flex-1 p-8 md:p-16">
@@ -68,7 +52,7 @@ export default function Page() {
                   href={track().external_urls.spotify}
                   target="_blank"
                   rel="noopener"
-                  class="group flex items-center gap-4 border-4 border-[#0a0a0a] bg-[#1DB954] p-4 text-[#0a0a0a] shadow-[8px_8px_0_#0a0a0a] transition hover:-translate-y-0.5 hover:shadow-[10px_10px_0_#0a0a0a]"
+                  class="group flex animate-[itemFadeIn_220ms_ease-out] items-center gap-4 border-4 border-[#0a0a0a] bg-[#1DB954] p-4 text-[#0a0a0a] shadow-[8px_8px_0_#0a0a0a] transition hover:-translate-y-0.5 hover:shadow-[10px_10px_0_#0a0a0a]"
                 >
                   <img
                     src={track().album?.images[0]?.url ?? track().images?.[0]?.url ?? "/assets/placeholder.svg"}
@@ -141,11 +125,11 @@ export default function Page() {
                 </div>
                 <button
                   type="button"
-                  disabled={refreshing() || !stats.data?.enabled}
-                  onClick={refreshListening}
+                  disabled={refreshListening.isPending || !stats.data?.enabled}
+                  onClick={() => refreshListening.mutate()}
                   class="shrink-0 border-[3px] border-[#0a0a0a] px-3 py-2 text-[0.65rem] font-black uppercase tracking-widest transition disabled:opacity-40 hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
                 >
-                  {refreshing() ? "Queued_" : "Refresh"}
+                  {refreshListening.isPending ? "Queued_" : "Refresh"}
                 </button>
               </div>
               <Show

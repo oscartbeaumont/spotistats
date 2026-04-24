@@ -1,4 +1,4 @@
-import { type InfiniteData, queryOptions } from "@tanstack/solid-query";
+import { type InfiniteData, mutationOptions, queryOptions } from "@tanstack/solid-query";
 import posthog from "posthog-js";
 import { isServer } from "solid-js/web";
 import {
@@ -355,6 +355,47 @@ export const playlistsQueryOptions = queryOptions({
     },
 });
 
+async function accountStatsFetch<T>(path = "/api/account/stats", options?: RequestInit): Promise<T> {
+  const store = authStore();
+  if (store.status !== "authenticated") throw new SpotifyUnauthenticatedError();
+
+  const res = await fetch(path, {
+    ...options,
+    headers: {
+      Authorization: store.accessToken,
+      ...(options?.headers ?? {}),
+    },
+  });
+  if (res.status === 401) throw new SpotifyUnauthenticatedError();
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: `Stats request failed: ${res.status}` }));
+    throw new SpotifyApiError(res.status, body);
+  }
+  return (await res.json()) as T;
+}
+
+async function fetchTrackingStatus() {
+  try {
+    return await accountStatsFetch<TrackingStatus>();
+  } catch (error) {
+    if (error instanceof SpotifyUnauthenticatedError) throw error;
+    const message = error instanceof SpotifyApiError && typeof error.body === "object" && error.body && "error" in error.body
+      ? String(error.body.error)
+      : String(error);
+    return {
+      enabled: false,
+      consentedAt: null,
+      lastReadAt: null,
+      disabledAt: null,
+      lastPlayedAtMs: null,
+      lastSuccessAt: null,
+      lastError: message,
+      listenCount: 0,
+      recent: [],
+    } satisfies TrackingStatus;
+  }
+}
+
 export const statsStatusQueryOptions = queryOptions({
     queryKey: ["account", "stats"],
     enabled: !isServer && authStore().status === "authenticated",
@@ -363,37 +404,25 @@ export const statsStatusQueryOptions = queryOptions({
       if (data?.enabled && data.recent.length === 0) return 3000;
       return 20000;
     },
-    queryFn: async () => {
-      const store = authStore();
-      if (store.status !== "authenticated") throw new SpotifyUnauthenticatedError();
+    queryFn: fetchTrackingStatus,
+});
 
-      const res = await fetch("/api/account/stats", {
-        headers: { Authorization: store.accessToken },
-      });
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({
-          error: `Stats status failed: ${res.status}`,
-        }))) as { error?: string };
-        return {
-          enabled: false,
-          consentedAt: null,
-          lastReadAt: null,
-          disabledAt: null,
-          lastPlayedAtMs: null,
-          lastSuccessAt: null,
-          lastError: body.error ?? `Stats status failed: ${res.status}`,
-          listenCount: 0,
-          recent: [],
-        } satisfies TrackingStatus;
-      }
-      return (await res.json()) as TrackingStatus;
-    },
+export const refreshListeningStatsMutationOptions = mutationOptions({
+  mutationFn: () => accountStatsFetch<{ queued: boolean }>("/api/account/stats", { method: "POST" }),
+});
+
+export const disableListeningStatsMutationOptions = mutationOptions({
+  mutationFn: () => accountStatsFetch<TrackingStatus>("/api/account/stats", { method: "DELETE" }),
+});
+
+export const deleteListeningStatsMutationOptions = mutationOptions({
+  mutationFn: () => accountStatsFetch<TrackingStatus>("/api/account/stats?all=1", { method: "DELETE" }),
 });
 
 export const currentlyPlayingQueryOptions = queryOptions({
     queryKey: ["spotify", "currently-playing"],
     enabled: !isServer && authStore().status === "authenticated",
-    refetchInterval: 15000,
+    refetchInterval: 5000,
     queryFn: async () => {
       const data = await spotifyFetch<CurrentlyPlaying | undefined>(
         "https://api.spotify.com/v1/me/player/currently-playing",

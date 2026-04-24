@@ -236,20 +236,19 @@ export function FavouritesPage(props: { kind: FavouritesKind }) {
       { preventDefault: false, requireReset: true },
     );
 
-    createShortcut(
-      ["t"],
-      (event) => {
-        if (isEditableShortcutTarget(event)) return;
-        event?.preventDefault();
-        startTransition(() => {
-          navigate(
-            props.kind === "tracks" ? "/favourites/albums" : "/favourites/tracks",
-          );
-          setSelectedIndex(0);
-        });
-      },
-      { preventDefault: false, requireReset: true },
-    );
+    const toggleType = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() !== "t") return;
+      if (isEditableShortcutTarget(event)) return;
+      event.preventDefault();
+      startTransition(() => {
+        navigate(
+          props.kind === "tracks" ? "/favourites/albums" : "/favourites/tracks",
+        );
+        setSelectedIndex(0);
+      });
+    };
+    window.addEventListener("keydown", toggleType);
+    onCleanup(() => window.removeEventListener("keydown", toggleType));
 
     (["short", "medium", "long"] as Range[]).forEach((range, index) => {
       createShortcut(
