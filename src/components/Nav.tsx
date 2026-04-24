@@ -13,7 +13,7 @@ const links = [
 export function Nav() {
   const location = useLocation();
   const [mounted, setMounted] = createSignal(false);
-  const hidden = () => ["/login", "/reset"].includes(location.pathname);
+  const hidden = () => ["/login", "/reset"].includes(location.pathname) || location.pathname.startsWith("/attempt");
 
   onMount(() => setMounted(true));
 
