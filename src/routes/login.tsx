@@ -18,9 +18,9 @@ export default function Login() {
       <CenteredMessage title="Welcome to Spotistats" subtitle="Spotistats is a tool designed to analyse and backup your music on Spotify!">
         <button
           type="button"
-          onClick={() => {
+          onClick={async () => {
             localStorage.clear();
-            window.location.href = createLoginUrl(window.location.origin);
+            window.location.href = await createLoginUrl(window.location.origin);
           }}
           class="rounded-full bg-[#1DB954] px-8 py-4 text-lg font-black text-[#191414] transition hover:bg-[#108d3b]"
         >
