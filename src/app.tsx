@@ -24,14 +24,15 @@ function AppError() {
   const error = () => spotifyError() ?? { title: "Unknown Error", description: "Something went wrong.", code: "No error details were captured." };
 
   return (
-    <main class="mx-auto max-w-5xl px-5 py-8">
+    <main class="p-8 md:p-16 max-w-3xl">
       <Title>Spotistats | Error</Title>
-      <h1 class="text-4xl font-black">Error <span class="text-[#1DB954]">{error().title}</span></h1>
-      <h2 class="mt-4 text-2xl text-zinc-200">{error().description}</h2>
-      <p class="mt-5 text-lg text-zinc-300">
-        Try <a class="text-[#1DB954] hover:underline" href="/login">logging in again</a> and if that does not fix your issue you can <a class="text-[#1DB954] hover:underline" target="_blank" rel="noopener" href="https://github.com/oscartbeaumont/spotistats/issues/new">report it</a>. Please include the text below to help debug your issue.
+      <div class="text-xs uppercase tracking-[0.2em] mb-3" style="color: #999">System Error</div>
+      <h1 class="text-4xl md:text-6xl font-black uppercase tracking-tighter leading-none mb-4">{error().title}</h1>
+      <p class="text-sm mb-6 max-w-md" style="color: #555; line-height: 1.7">{error().description}</p>
+      <p class="text-sm mb-6" style="color: #555">
+        Try <a class="font-bold hover:underline" href="/login">logging in again</a> or <a class="font-bold hover:underline" target="_blank" rel="noopener" href="https://github.com/oscartbeaumont/spotistats/issues/new">report this issue</a>. Include the details below.
       </p>
-      <pre class="mt-6 overflow-auto rounded-2xl border border-white/10 bg-black/40 p-4 text-sm text-zinc-200"><samp>{error().code}</samp></pre>
+      <pre class="overflow-auto p-4 text-xs" style="border: 4px solid #0a0a0a; background: #0a0a0a; color: #f0ede8"><samp>{error().code}</samp></pre>
     </main>
   );
 }

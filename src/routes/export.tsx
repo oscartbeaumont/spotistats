@@ -4,7 +4,6 @@ import { createQuery } from "@tanstack/solid-query";
 import JSZip from "jszip";
 import { createSignal, For, onMount, Show } from "solid-js";
 import { isServer } from "solid-js/web";
-import { ItemCard } from "~/components/ItemCard";
 import { csvCell, downloadTextFile } from "~/lib/download";
 import { accessToken, profileCache } from "~/lib/storage";
 import { hasSpotifyCallbackCode, useSpotifyFetch } from "~/lib/spotify";
@@ -89,29 +88,12 @@ export default function ExportPage() {
         const audio = page.audioFeatures[index];
         const artist = page.artists[index];
         csv += [
-          track.id,
-          track.artists.map(artist => artist.id).join(","),
-          track.name,
-          track.album.name,
-          track.artists.map(artist => artist.name).join(","),
-          track.album.release_date,
-          track.duration_ms,
-          track.popularity,
-          item.added_by?.id ?? "",
-          item.added_at,
-          artist?.genres.join(",") ?? "",
-          audio?.danceability,
-          audio?.energy,
-          audio?.key,
-          audio?.loudness,
-          audio?.mode,
-          audio?.speechiness,
-          audio?.acousticness,
-          audio?.instrumentalness,
-          audio?.liveness,
-          audio?.valence,
-          audio?.tempo,
-          audio?.time_signature,
+          track.id, track.artists.map(a => a.id).join(","), track.name, track.album.name,
+          track.artists.map(a => a.name).join(","), track.album.release_date, track.duration_ms,
+          track.popularity, item.added_by?.id ?? "", item.added_at, artist?.genres.join(",") ?? "",
+          audio?.danceability, audio?.energy, audio?.key, audio?.loudness, audio?.mode,
+          audio?.speechiness, audio?.acousticness, audio?.instrumentalness, audio?.liveness,
+          audio?.valence, audio?.tempo, audio?.time_signature,
         ].map(csvCell).join(",") + "\n";
       }
     }
@@ -119,10 +101,12 @@ export default function ExportPage() {
   }
 
   async function exportPlaylist(playlist: Playlist) {
-    if (busy()) return alert("Please wait for current download to complete before starting another!");
+    if (busy()) return alert("Please wait for the current download to complete.");
     setBusy(true);
     setProgress(0);
-    const baseUrl = playlist.name === "Liked Songs" ? "https://api.spotify.com/v1/me/tracks?limit=50" : `https://api.spotify.com/v1/playlists/${playlist.id}/tracks?limit=100`;
+    const baseUrl = playlist.name === "Liked Songs"
+      ? "https://api.spotify.com/v1/me/tracks?limit=50"
+      : `https://api.spotify.com/v1/playlists/${playlist.id}/tracks?limit=100`;
     downloadTextFile(`${playlist.name}.csv`, await downloadUrl(baseUrl));
     setBusy(false);
     setProgress(0);
@@ -130,7 +114,7 @@ export default function ExportPage() {
 
   async function backupAll() {
     const all = playlists.data ?? [];
-    if (busy()) return alert("Please wait for current download to complete before starting another!");
+    if (busy()) return alert("Please wait for the current download to complete.");
     setBusy(true);
     setProgress(0);
     const zip = new JSZip();
@@ -156,18 +140,58 @@ export default function ExportPage() {
   }
 
   return (
-    <main class="mx-auto max-w-5xl px-3 pb-12 sm:px-6">
+    <main class="p-8 md:p-12">
       <Title>Spotistats | Export</Title>
-      <header class="mb-4 border-b border-[#1DB954] pb-3 sm:flex sm:items-end sm:gap-6">
-        <h1 class="text-3xl font-black">Export Data</h1>
-        <button class="mt-3 text-zinc-300 transition hover:text-[#1DB954] sm:mt-0" onClick={backupAll}>Backup All</button>
-      </header>
+      <div class="flex flex-wrap items-baseline gap-6 mb-8" style="border-bottom: 4px solid #0a0a0a; padding-bottom: 1rem">
+        <h1 class="text-2xl font-black uppercase tracking-tight">Export Data</h1>
+        <button
+          onClick={backupAll}
+          class="font-black text-xs uppercase px-4 py-2 tracking-wide transition ml-auto"
+          style="border: 3px solid #0a0a0a"
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "#0a0a0a"; (e.currentTarget as HTMLElement).style.color = "#f0ede8"; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = ""; (e.currentTarget as HTMLElement).style.color = ""; }}
+        >
+          Backup All →
+        </button>
+      </div>
       <Show when={busy()}>
-        <progress class="mx-auto mb-6 block h-2 w-2/5 accent-[#1DB954]" value={progress()} max="1" />
+        <div class="mb-6 h-4" style="border: 3px solid #0a0a0a">
+          <div style={`background: #1DB954; height: 100%; width: ${progress() * 100}%; transition: width 0.3s`} />
+        </div>
       </Show>
-      <Show when={!playlists.isLoading} fallback={<p class="px-2 text-zinc-400">Loading playlists...</p>}>
-        <div class="space-y-1">
-          <For each={playlists.data}>{playlist => <ItemCard name={playlist.name} description={playlist.owner?.display_name} images={playlist.images} privateIcon={!playlist.public} collaborativeIcon={playlist.collaborative} onClick={() => exportPlaylist(playlist)} />}</For>
+      <Show when={!playlists.isLoading} fallback={<p class="text-sm uppercase tracking-widest" style="color: #999">LOADING_</p>}>
+        <div>
+          <For each={playlists.data}>
+            {playlist => {
+              const img = () => playlist.images?.[0]?.url;
+              return (
+                <button
+                  type="button"
+                  onClick={() => exportPlaylist(playlist)}
+                  class="w-full flex items-center gap-4 py-3 text-left transition"
+                  style="border-bottom: 3px solid #0a0a0a"
+                  onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.background = "#0a0a0a"; el.style.color = "#f0ede8"; el.style.paddingLeft = "0.5rem"; }}
+                  onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.background = ""; el.style.color = ""; el.style.paddingLeft = ""; }}
+                >
+                  <img
+                    src={img() ?? "/assets/placeholder.svg"}
+                    alt={playlist.name}
+                    class="h-10 w-10 object-cover shrink-0"
+                    style="border: 2px solid #0a0a0a"
+                  />
+                  <div class="min-w-0 flex-1">
+                    <p class="text-sm font-black uppercase tracking-tight truncate">{playlist.name}</p>
+                    <p class="text-xs truncate mt-0.5" style="color: #888">{playlist.owner?.display_name}</p>
+                  </div>
+                  <div class="flex gap-2 shrink-0">
+                    {playlist.collaborative && <span class="text-xs uppercase tracking-widest font-bold" style="color: #aaa">Collab</span>}
+                    {!playlist.public && !playlist.collaborative && <span class="text-xs uppercase tracking-widest font-bold" style="color: #aaa">Private</span>}
+                    <span class="text-xs uppercase tracking-widest font-bold" style="color: #1DB954">↓ CSV</span>
+                  </div>
+                </button>
+              );
+            }}
+          </For>
         </div>
       </Show>
     </main>
