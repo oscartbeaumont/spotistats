@@ -12,7 +12,11 @@ export default function AuthedLayout(props: { children?: import("solid-js").JSX.
   const navigate = useNavigate();
 
   const isActive = (href: string) =>
-    href === "/" ? location.pathname === "/" : location.pathname === href;
+    href === "/"
+      ? location.pathname === "/"
+      : href === "/favourites/tracks"
+        ? location.pathname.startsWith("/favourites/")
+        : location.pathname === href;
   const linkClass = (href: string) => `font-black text-xs sm:text-sm uppercase px-3 sm:px-4 py-2 tracking-wide transition ${isActive(href) ? "bg-[#0a0a0a] text-[#f0ede8]" : "border-4 border-[#0a0a0a] hover:bg-[#0a0a0a] hover:text-[#f0ede8]"}`;
   const mod = platformShortcutModifier();
 

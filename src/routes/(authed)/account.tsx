@@ -1,7 +1,7 @@
 import { Title } from "@solidjs/meta";
 import { createQuery } from "@tanstack/solid-query";
-import { For, Show, createSignal } from "solid-js";
-import { useLocation } from "@solidjs/router";
+import { Show, createSignal, onMount } from "solid-js";
+import { useLocation, useNavigate } from "@solidjs/router";
 import { authStore } from "~/lib/storage";
 import { SpotifyUnauthenticatedError, statsStatusQueryOptions } from "~/lib/spotify";
 
@@ -12,11 +12,17 @@ function formatDate(value: number | string | null) {
 
 export default function AccountPage() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [busy, setBusy] = createSignal(false);
   const [deleteBusy, setDeleteBusy] = createSignal(false);
-  const statsReason = () =>
-    new URLSearchParams(location.search).get("reason");
+  const [statsReason] = createSignal(
+    new URLSearchParams(location.search).get("reason"),
+  );
   const status = createQuery(() => statsStatusQueryOptions);
+
+  onMount(() => {
+    if (location.search) navigate("/account", { replace: true });
+  });
 
   async function disableStats() {
     if (busy()) return;
@@ -106,22 +112,43 @@ export default function AccountPage() {
                 When enabled, Spotistats securely stores your recently played Spotify
                 tracks so your listening stats can build over time.
               </p>
-              <div
-                class="grid gap-3 text-xs uppercase tracking-widest mb-6 text-[#666]"
+              <Show
+                when={status.data?.enabled}
+                fallback={
+                  <div class="mb-6 border-[3px] border-[#0a0a0a] bg-[#fff7c2] p-4 text-sm leading-7 text-[#3b3200]">
+                    <p class="mb-1 font-black uppercase tracking-tight">
+                      Listening stats are disabled
+                    </p>
+                    <p>
+                      Connect Spotify stats to sync recent listens and build your dashboard over time.
+                    </p>
+                  </div>
+                }
               >
-                <p>
-                  <span class="font-black text-[#0a0a0a]">Consented:</span>{" "}
-                  {formatDate(status.data?.consentedAt ?? null)}
+                <div
+                  class="grid gap-3 text-xs uppercase tracking-widest mb-4 text-[#666]"
+                >
+                  <p>
+                    <span class="font-black text-[#0a0a0a]">Consented:</span>{" "}
+                    {formatDate(status.data?.consentedAt ?? null)}
+                  </p>
+                  <p>
+                    <span class="font-black text-[#0a0a0a]">Last Sync:</span>{" "}
+                    {formatDate(status.data?.lastSuccessAt ?? null)}
+                  </p>
+                  <p>
+                    <span class="font-black text-[#0a0a0a]">Newest Listen:</span>{" "}
+                    {formatDate(status.data?.lastPlayedAtMs ?? null)}
+                  </p>
+                  <p>
+                    <span class="font-black text-[#0a0a0a]">Listens Tracked:</span>{" "}
+                    {(status.data?.listenCount ?? 0).toLocaleString()}
+                  </p>
+                </div>
+                <p class="mb-6 text-xs leading-6 text-[#777]">
+                  Stats sync pauses automatically after 6 months without opening the dashboard.
                 </p>
-                <p>
-                  <span class="font-black text-[#0a0a0a]">Last Sync:</span>{" "}
-                  {formatDate(status.data?.lastSuccessAt ?? null)}
-                </p>
-                <p>
-                  <span class="font-black text-[#0a0a0a]">Newest Listen:</span>{" "}
-                  {formatDate(status.data?.lastPlayedAtMs ?? null)}
-                </p>
-              </div>
+              </Show>
               <Show when={status.data?.lastError}>
                 {(error) => (
                   <pre
@@ -172,56 +199,6 @@ export default function AccountPage() {
               </button>
             </div>
           </div>
-
-          <aside>
-            <div
-              class="text-xs uppercase tracking-[0.2em] mb-3 text-[#999]"
-            >
-              Recent Synced Songs
-            </div>
-            <Show
-              when={(status.data?.recent.length ?? 0) > 0}
-              fallback={
-                <p
-                  class="text-sm uppercase tracking-widest text-[#999]"
-                >
-                  {status.data?.enabled ? "SYNCING STATS_" : "NO DATA YET_"}
-                </p>
-              }
-            >
-              <div>
-                <For each={status.data?.recent ?? []}>
-                  {(item) => (
-                    <a
-                      href={item.external_url ?? "#"}
-                      target="_blank"
-                      rel="noopener"
-                      class="flex items-center gap-4 py-3 text-left transition border-b-[3px] border-[#0a0a0a] hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
-                    >
-                      <img
-                        src={item.image_url ?? "/assets/placeholder.svg"}
-                        alt={item.name}
-                        class="h-10 w-10 object-cover shrink-0 border-2 border-[#0a0a0a]"
-                      />
-                      <div class="min-w-0 flex-1">
-                        <p class="text-sm font-black uppercase tracking-tight truncate">
-                          {item.name}
-                        </p>
-                        <p class="text-xs truncate mt-0.5 text-[#888]">
-                          {item.artist_names}
-                        </p>
-                        <p
-                          class="text-[0.65rem] uppercase tracking-widest mt-1 text-[#999]"
-                        >
-                          {formatDate(item.played_at)}
-                        </p>
-                      </div>
-                    </a>
-                  )}
-                </For>
-              </div>
-            </Show>
-          </aside>
         </section>
       </Show>
     </main>

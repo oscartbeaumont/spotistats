@@ -76,10 +76,12 @@ export type Playlist = {
 export type TrackingStatus = {
   enabled: boolean;
   consentedAt: number | null;
+  lastReadAt: number | null;
   disabledAt: number | null;
   lastPlayedAtMs: number | null;
   lastSuccessAt: number | null;
   lastError: string | null;
+  listenCount: number;
   recent: {
     played_at: string;
     played_at_ms: number;
@@ -367,10 +369,12 @@ export const statsStatusQueryOptions = queryOptions({
         return {
           enabled: false,
           consentedAt: null,
+          lastReadAt: null,
           disabledAt: null,
           lastPlayedAtMs: null,
           lastSuccessAt: null,
           lastError: body.error ?? `Stats status failed: ${res.status}`,
+          listenCount: 0,
           recent: [],
         } satisfies TrackingStatus;
       }

@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { and, desc, eq, lte } from "drizzle-orm";
+import { and, count, desc, eq, lt, lte } from "drizzle-orm";
 
 import { db, schema } from "./db";
 
@@ -202,6 +202,7 @@ export async function enableTracking(token: SpotifyToken) {
         email: profile.email ?? null,
         enabled: 1,
         consentedAt: now,
+        lastReadAt: now,
         disabledAt: null,
         createdAt: now,
         updatedAt: now,
@@ -213,6 +214,7 @@ export async function enableTracking(token: SpotifyToken) {
           email: profile.email ?? null,
           enabled: 1,
           consentedAt: now,
+          lastReadAt: now,
           disabledAt: null,
           updatedAt: now,
         },
@@ -250,10 +252,43 @@ export async function disableTracking(spotifyUserId: string) {
     .where(eq(schema.spotifyTrackingUsers.spotifyUserId, spotifyUserId));
 }
 
+export async function disableInactiveTrackingUsers() {
+  const now = Date.now();
+  const sixMonthsMs = 1000 * 60 * 60 * 24 * 183;
+  await db(env.DB)
+    .update(schema.spotifyTrackingUsers)
+    .set({ enabled: 0, disabledAt: now, updatedAt: now })
+    .where(
+      and(
+        eq(schema.spotifyTrackingUsers.enabled, 1),
+        lt(schema.spotifyTrackingUsers.lastReadAt, now - sixMonthsMs),
+      ),
+    );
+}
+
+export async function markStatsRead(spotifyUserId: string) {
+  const now = Date.now();
+  await db(env.DB)
+    .update(schema.spotifyTrackingUsers)
+    .set({ lastReadAt: now, updatedAt: now })
+    .where(eq(schema.spotifyTrackingUsers.spotifyUserId, spotifyUserId));
+}
+
 export async function deleteAccountData(spotifyUserId: string) {
   await db(env.DB)
     .delete(schema.spotifyTrackingUsers)
     .where(eq(schema.spotifyTrackingUsers.spotifyUserId, spotifyUserId));
+}
+
+export async function enqueueSpotifyUserStatsRefresh(spotifyUserId: string) {
+  const row = await db(env.DB).query.spotifyTrackingUsers.findFirst({
+    columns: { enabled: true },
+    where: eq(schema.spotifyTrackingUsers.spotifyUserId, spotifyUserId),
+  });
+  if (!row?.enabled) return false;
+
+  await env.SPOTIFY_SYNC_QUEUE.send({ spotifyUserId });
+  return true;
 }
 
 export async function enqueueDueTrackingUsers(limit = 100) {
@@ -399,6 +434,7 @@ export async function trackingStatus(spotifyUserId: string) {
     .select({
       enabled: schema.spotifyTrackingUsers.enabled,
       consentedAt: schema.spotifyTrackingUsers.consentedAt,
+      lastReadAt: schema.spotifyTrackingUsers.lastReadAt,
       disabledAt: schema.spotifyTrackingUsers.disabledAt,
       lastPlayedAtMs: schema.spotifySyncState.lastPlayedAtMs,
       lastSuccessAt: schema.spotifySyncState.lastSuccessAt,
@@ -431,13 +467,20 @@ export async function trackingStatus(spotifyUserId: string) {
     .orderBy(desc(schema.spotifyListens.playedAtMs))
     .limit(5);
 
+  const [listenStats] = await database
+    .select({ count: count() })
+    .from(schema.spotifyListens)
+    .where(eq(schema.spotifyListens.spotifyUserId, spotifyUserId));
+
   return {
     enabled: !!status?.enabled,
     consentedAt: status?.consentedAt ?? null,
+    lastReadAt: status?.lastReadAt ?? null,
     disabledAt: status?.disabledAt ?? null,
     lastPlayedAtMs: status?.lastPlayedAtMs ?? null,
     lastSuccessAt: status?.lastSuccessAt ?? null,
     lastError: status?.lastError ?? null,
+    listenCount: listenStats?.count ?? 0,
     recent,
   };
 }

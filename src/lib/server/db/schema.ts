@@ -8,6 +8,7 @@ export const spotifyTrackingUsers = sqliteTable(
     email: text("email"),
     enabled: integer("enabled").notNull().default(1),
     consentedAt: integer("consented_at").notNull(),
+    lastReadAt: integer("last_read_at").notNull().default(0),
     disabledAt: integer("disabled_at"),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),

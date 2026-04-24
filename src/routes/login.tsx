@@ -14,7 +14,7 @@ export default function Page() {
 
   return (
     <div class="min-h-screen flex flex-col">
-      <Title>Spotistats | Login</Title>
+      <Title>Spotistats</Title>
       <header class="p-5 flex items-center justify-between border-b-4 border-[#0a0a0a]">
         <span class="font-black text-xl tracking-tighter uppercase">
           SPOTISTATS
@@ -34,10 +34,10 @@ export default function Page() {
       <main class="flex-1 flex items-center p-8 md:p-16">
         <div class="max-w-lg">
           <div class="text-xs uppercase tracking-[0.2em] mb-4 text-[#999]">
-            Access Required
+            Your Spotify, decoded
           </div>
           <h1 class="text-5xl md:text-7xl font-black uppercase tracking-tighter leading-none mb-6">
-            LOGIN
+            Spotistats
           </h1>
           <p class="text-sm mb-10 max-w-xs leading-[1.7] text-[#555]">
             Spotistats analyses your Spotify listening history. By default your

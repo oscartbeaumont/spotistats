@@ -1,6 +1,7 @@
 import { createShortcut } from "@solid-primitives/keyboard";
 import { Title } from "@solidjs/meta";
-import { createInfiniteQuery } from "@tanstack/solid-query";
+import { useNavigate } from "@solidjs/router";
+import { createInfiniteQuery, useQueryClient } from "@tanstack/solid-query";
 import {
   createEffect,
   createMemo,
@@ -9,6 +10,7 @@ import {
   onCleanup,
   onMount,
   Show,
+  startTransition,
 } from "solid-js";
 import { isEditableShortcutTarget } from "~/lib/keyboard";
 import * as v from "valibot";
@@ -89,6 +91,8 @@ export default function Page() {
 }
 
 export function FavouritesPage(props: { kind: FavouritesKind }) {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [searchParams, setSearchParams] =
     useValidatedSearchParams(filtersSchema);
   const [selectedIndex, setSelectedIndex] = createSignal(0);
@@ -114,15 +118,26 @@ export function FavouritesPage(props: { kind: FavouritesKind }) {
   const title = () => (props.kind === "tracks" ? "Top Tracks" : "Saved Albums");
 
   function setRange(range: Range) {
-    setSearchParams({ range: range === "short" ? undefined : range });
+    startTransition(() => {
+      setSearchParams({ range: range === "short" ? undefined : range });
+    });
   }
 
-  const favourites = createInfiniteQuery(() =>
-    favouritesQueryOptions(
-      props.kind,
-      range(),
-      !(props.kind === "albums" && saveData()),
-    ),
+  const favourites = createInfiniteQuery(() => ({
+      ...favouritesQueryOptions(
+        props.kind,
+        range(),
+        !(props.kind === "albums" && saveData()),
+      ),
+      placeholderData: (previous) =>
+        previous ??
+        queryClient.getQueryData([
+          "spotify",
+          "favourites",
+          props.kind === "tracks" ? "albums" : "tracks",
+          range(),
+        ]),
+    })
   );
 
   createEffect(() => {
@@ -226,9 +241,12 @@ export function FavouritesPage(props: { kind: FavouritesKind }) {
       (event) => {
         if (isEditableShortcutTarget(event)) return;
         event?.preventDefault();
-        window.location.href =
-          props.kind === "tracks" ? "/favourites/albums" : "/favourites/tracks";
-        setSelectedIndex(0);
+        startTransition(() => {
+          navigate(
+            props.kind === "tracks" ? "/favourites/albums" : "/favourites/tracks",
+          );
+          setSelectedIndex(0);
+        });
       },
       { preventDefault: false, requireReset: true },
     );
@@ -256,12 +274,24 @@ export function FavouritesPage(props: { kind: FavouritesKind }) {
         </h1>
         <a
           href="/favourites/tracks"
+          onClick={(event) => {
+            event.preventDefault();
+            startTransition(() => {
+              navigate("/favourites/tracks");
+            });
+          }}
           class={`font-black text-xs uppercase px-4 py-2 tracking-wide transition border-[3px] border-[#0a0a0a] ${props.kind === "tracks" ? "bg-[#0a0a0a] text-[#f0ede8]" : "text-[#0a0a0a]"}`}
         >
           Tracks
         </a>
         <a
           href="/favourites/albums"
+          onClick={(event) => {
+            event.preventDefault();
+            startTransition(() => {
+              navigate("/favourites/albums");
+            });
+          }}
           class={`font-black text-xs uppercase px-4 py-2 tracking-wide transition border-[3px] border-[#0a0a0a] ${props.kind === "albums" ? "bg-[#0a0a0a] text-[#f0ede8]" : "text-[#0a0a0a]"}`}
         >
           Albums
@@ -295,7 +325,16 @@ export function FavouritesPage(props: { kind: FavouritesKind }) {
         <span>1/2/3 Range</span>
       </div>
       <div>
-        <For each={items()}>
+        <For
+          each={items()}
+          fallback={
+            <Show when={!favourites.isLoading && !favourites.isFetching}>
+              <p class="py-8 text-sm font-bold uppercase tracking-widest text-[#999]">
+                NO FAVOURITES FOUND_
+              </p>
+            </Show>
+          }
+        >
           {(item, index) => (
             <FavouriteRow
               item={item}

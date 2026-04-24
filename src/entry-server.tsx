@@ -1,6 +1,7 @@
 // @refresh reload
 import { createHandler, StartServer } from "@solidjs/start/server";
 import {
+  disableInactiveTrackingUsers,
   enqueueDueTrackingUsers,
   SpotifySyncMessage,
   syncSpotifyUser,
@@ -34,12 +35,13 @@ const handler = createHandler(() => (
 
 const cloudflare = {
   async scheduled() {
+    await disableInactiveTrackingUsers();
     await enqueueDueTrackingUsers(100);
   },
   async queue(batch) {
-    for (const message of batch.messages) {
-      await syncSpotifyUser(message.body.spotifyUserId);
-    }
+    await Promise.all(
+      batch.messages.map((message) => syncSpotifyUser(message.body.spotifyUserId)),
+    );
   },
 } satisfies ExportedHandler<Env, SpotifySyncMessage>;
 
