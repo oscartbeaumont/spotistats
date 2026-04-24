@@ -3,7 +3,12 @@ import { A } from "@solidjs/router";
 import { createQuery } from "@tanstack/solid-query";
 import { createSignal, For, onMount, Show } from "solid-js";
 import { authStore } from "~/lib/storage";
-import { profileQueryOptions, SpotifyUnauthenticatedError, statsStatusQueryOptions } from "~/lib/spotify";
+import {
+  currentlyPlayingQueryOptions,
+  profileQueryOptions,
+  SpotifyUnauthenticatedError,
+  statsStatusQueryOptions,
+} from "~/lib/spotify";
 
 function formatDate(value: number | string | null) {
   if (!value) return "Never";
@@ -18,6 +23,7 @@ export default function Page() {
 
   const profile = createQuery(() => profileQueryOptions);
   const stats = createQuery(() => statsStatusQueryOptions);
+  const currentlyPlaying = createQuery(() => currentlyPlayingQueryOptions);
 
   const current = () => {
     const store = authStore();
@@ -55,6 +61,37 @@ export default function Page() {
         }
       >
         {(user) => (
+          <div class="space-y-8">
+            <Show when={currentlyPlaying.data?.is_playing && currentlyPlaying.data.item}>
+              {(track) => (
+                <a
+                  href={track().external_urls.spotify}
+                  target="_blank"
+                  rel="noopener"
+                  class="group flex items-center gap-4 border-4 border-[#0a0a0a] bg-[#1DB954] p-4 text-[#0a0a0a] shadow-[8px_8px_0_#0a0a0a] transition hover:-translate-y-0.5 hover:shadow-[10px_10px_0_#0a0a0a]"
+                >
+                  <img
+                    src={track().album?.images[0]?.url ?? track().images?.[0]?.url ?? "/assets/placeholder.svg"}
+                    alt={track().name}
+                    class="h-16 w-16 shrink-0 border-[3px] border-[#0a0a0a] object-cover"
+                  />
+                  <div class="min-w-0 flex-1">
+                    <div class="mb-1 text-[0.65rem] font-black uppercase tracking-[0.25em]">
+                      Playing Now
+                    </div>
+                    <p class="truncate text-xl font-black uppercase tracking-tight md:text-2xl">
+                      {track().name}
+                    </p>
+                    <p class="truncate text-xs font-bold uppercase tracking-widest opacity-75">
+                      {track().artists?.map((artist) => artist.name).join(", ") ?? "Spotify"}
+                    </p>
+                  </div>
+                  <span class="hidden shrink-0 border-[3px] border-[#0a0a0a] px-3 py-2 text-xs font-black uppercase tracking-widest transition group-hover:bg-[#0a0a0a] group-hover:text-[#1DB954] md:inline-block">
+                    Open Spotify →
+                  </span>
+                </a>
+              )}
+            </Show>
           <div class={`grid gap-10 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,30rem)] transition-opacity ${profile.isFetching ? "opacity-45" : "opacity-100"}`}>
             <section class="flex flex-col md:flex-row gap-10 items-start">
             <a href={user().url} target="_blank" rel="noopener">
@@ -172,6 +209,7 @@ export default function Page() {
                 </Show>
               </Show>
             </aside>
+          </div>
           </div>
         )}
       </Show>

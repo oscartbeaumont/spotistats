@@ -16,6 +16,7 @@ export const spotifyScopes = [
   "user-top-read",
   "user-read-email",
   "user-read-recently-played",
+  "user-read-currently-playing",
 ];
 
 export class SpotifyUnauthenticatedError extends Error {
@@ -60,6 +61,13 @@ export type SpotifyItem = {
   images?: { url: string }[];
   artists?: { name: string }[];
   album?: { images: { url: string }[] };
+};
+
+export type CurrentlyPlaying = {
+  is_playing: boolean;
+  currently_playing_type: "track" | "episode" | "ad" | "unknown";
+  item: SpotifyItem | null;
+  progress_ms: number | null;
 };
 
 type SavedAlbumItem = { album: SpotifyItem };
@@ -379,6 +387,19 @@ export const statsStatusQueryOptions = queryOptions({
         } satisfies TrackingStatus;
       }
       return (await res.json()) as TrackingStatus;
+    },
+});
+
+export const currentlyPlayingQueryOptions = queryOptions({
+    queryKey: ["spotify", "currently-playing"],
+    enabled: !isServer && authStore().status === "authenticated",
+    refetchInterval: 15000,
+    queryFn: async () => {
+      const data = await spotifyFetch<CurrentlyPlaying | undefined>(
+        "https://api.spotify.com/v1/me/player/currently-playing",
+      );
+      if (!data || data.currently_playing_type !== "track") return null;
+      return data;
     },
 });
 

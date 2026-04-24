@@ -299,21 +299,23 @@ export function FavouritesPage(props: { kind: FavouritesKind }) {
         <span class="mx-4 font-black text-[#ccc]">
           /
         </span>
-        {(
-          [
+        <For
+          each={[
             ["short", "Month"],
             ["medium", "6 Months"],
             ["long", "All Time"],
-          ] as [Range, string][]
-        ).map(([optionRange, label], index) => (
-          <button
-            onClick={() => setRange(optionRange)}
-            class={`text-xs uppercase tracking-wide px-3 py-2 font-bold transition border-[3px] ${range() === optionRange ? "border-[#1DB954] bg-[#1DB954] text-black" : "border-transparent text-[#999]"}`}
-          >
-            {label}{" "}
-            <span class="ml-1 text-[0.6rem] opacity-50">{index + 1}</span>
-          </button>
-        ))}
+          ] as [Range, string][]}
+        >
+          {([optionRange, label], index) => (
+            <button
+              onClick={() => setRange(optionRange)}
+              class={`text-xs uppercase tracking-wide px-3 py-2 font-bold transition border-[3px] ${range() === optionRange ? "border-[#1DB954] bg-[#1DB954] text-black" : "border-transparent text-[#999]"}`}
+            >
+              {label}{" "}
+              <span class="ml-1 text-[0.6rem] opacity-50">{index() + 1}</span>
+            </button>
+          )}
+        </For>
       </div>
       <div
         class="mb-6 flex flex-wrap gap-2 text-[0.65rem] font-bold uppercase tracking-widest text-[#777]"

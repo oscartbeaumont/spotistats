@@ -1,6 +1,6 @@
 import { createShortcut } from "@solid-primitives/keyboard";
 import { useLocation, useNavigate } from "@solidjs/router";
-import { createEffect, ErrorBoundary, onMount, Suspense } from "solid-js";
+import { children, createEffect, createSignal, ErrorBoundary, onMount, Suspense } from "solid-js";
 import { isServer } from "solid-js/web";
 import { AppError } from "~/app";
 import { isEditableShortcutTarget, platformShortcutModifier } from "~/lib/keyboard";
@@ -10,6 +10,8 @@ import { hasSpotifyCallbackCode } from "~/lib/spotify";
 export default function AuthedLayout(props: { children?: import("solid-js").JSX.Element }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const resolvedChildren = children(() => props.children);
+  const [mod, setMod] = createSignal("Ctrl");
 
   const isActive = (href: string) =>
     href === "/"
@@ -18,8 +20,6 @@ export default function AuthedLayout(props: { children?: import("solid-js").JSX.
         ? location.pathname.startsWith("/favourites/")
         : location.pathname === href;
   const linkClass = (href: string) => `font-black text-xs sm:text-sm uppercase px-3 sm:px-4 py-2 tracking-wide transition ${isActive(href) ? "bg-[#0a0a0a] text-[#f0ede8]" : "border-4 border-[#0a0a0a] hover:bg-[#0a0a0a] hover:text-[#f0ede8]"}`;
-  const mod = platformShortcutModifier();
-
   const logout = () => {
     clearStoredState();
     navigate("/login");
@@ -31,6 +31,8 @@ export default function AuthedLayout(props: { children?: import("solid-js").JSX.
   });
 
   onMount(() => {
+    setMod(platformShortcutModifier());
+
     const openProfile = (event: KeyboardEvent | null) => {
       if (isEditableShortcutTarget(event)) return;
       event?.preventDefault();
@@ -81,10 +83,10 @@ export default function AuthedLayout(props: { children?: import("solid-js").JSX.
           SPOTISTATS
         </span>
         <nav class="flex flex-wrap gap-0">
-          <a href="/" class={linkClass("/")}>Profile <span class="ml-2 text-[0.6rem] opacity-50">{mod}+1</span></a>
-          <a href="/favourites/tracks" class={linkClass("/favourites/tracks")}>Favourites <span class="ml-2 text-[0.6rem] opacity-50">{mod}+2</span></a>
-          <a href="/export" class={linkClass("/export")}>Export Data <span class="ml-2 text-[0.6rem] opacity-50">{mod}+3</span></a>
-          <a href="/account" class={linkClass("/account")}>Account <span class="ml-2 text-[0.6rem] opacity-50">{mod}+4</span></a>
+          <a href="/" class={linkClass("/")}>Profile <span class="ml-2 text-[0.6rem] opacity-50">{mod()}+1</span></a>
+          <a href="/favourites/tracks" class={linkClass("/favourites/tracks")}>Favourites <span class="ml-2 text-[0.6rem] opacity-50">{mod()}+2</span></a>
+          <a href="/export" class={linkClass("/export")}>Export Data <span class="ml-2 text-[0.6rem] opacity-50">{mod()}+3</span></a>
+          <a href="/account" class={linkClass("/account")}>Account <span class="ml-2 text-[0.6rem] opacity-50">{mod()}+4</span></a>
         </nav>
         <button
           onClick={logout}
@@ -95,7 +97,7 @@ export default function AuthedLayout(props: { children?: import("solid-js").JSX.
       </header>
       <ErrorBoundary fallback={(error) => <AppError error={error} />}>
         <Suspense fallback={<main class="app-main p-8 md:p-16 text-sm uppercase tracking-widest text-[#999]">LOADING_</main>}>
-          {props.children}
+          {resolvedChildren()}
         </Suspense>
       </ErrorBoundary>
     </>
