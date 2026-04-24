@@ -1,8 +1,8 @@
 import { Title } from "@solidjs/meta";
-import { A, useNavigate } from "@solidjs/router";
+import { A } from "@solidjs/router";
 import { createQuery } from "@tanstack/solid-query";
 import posthog from "posthog-js";
-import { createSignal, onMount, Show } from "solid-js";
+import { Show } from "solid-js";
 import { isServer } from "solid-js/web";
 import {
   accessToken,
@@ -10,7 +10,7 @@ import {
   profileCache,
   setProfileCache,
 } from "~/lib/storage";
-import { hasSpotifyCallbackCode, useSpotifyFetch } from "~/lib/spotify";
+import { useSpotifyFetch } from "~/lib/spotify";
 
 type SpotifyProfile = {
   id: string;
@@ -23,19 +23,12 @@ type SpotifyProfile = {
 };
 
 export default function Page() {
-  const navigate = useNavigate();
   const spotifyFetch = useSpotifyFetch();
-  const [mounted, setMounted] = createSignal(false);
-
-  onMount(() => {
-    setMounted(true);
-    if (!accessToken() && !hasSpotifyCallbackCode())
-      navigate("/login", { replace: true });
-  });
 
   const profile = createQuery(() => ({
     queryKey: ["spotify", "profile", accessToken()],
-    enabled: !isServer && mounted() && !!accessToken(),
+    enabled: !isServer && !!accessToken(),
+    initialData: profileCache() ?? undefined,
     queryFn: async () => {
       const cached = profileCache();
       if (cached?.displayName && cached.followers !== undefined) return cached;
@@ -50,6 +43,7 @@ export default function Page() {
         icon: data.images[0]?.url,
         url: linkToUri() ? data.uri : data.external_urls.spotify,
         displayName: data.display_name,
+        email: data.email,
         followers: data.followers.total,
       };
       setProfileCache(next);
@@ -57,10 +51,10 @@ export default function Page() {
     },
   }));
 
-  const current = () => (mounted() ? (profile.data ?? profileCache()) : null);
+  const current = () => profile.data ?? profileCache();
 
   return (
-    <main class="flex-1 p-8 md:p-16">
+    <main class="app-main flex-1 p-8 md:p-16">
       <Title>Spotistats | Profile</Title>
       <Show
         when={current()}
@@ -71,7 +65,7 @@ export default function Page() {
         }
       >
         {(user) => (
-          <div class="flex flex-col md:flex-row gap-10 items-start">
+          <div class={`flex flex-col md:flex-row gap-10 items-start transition-opacity ${profile.isFetching ? "opacity-45" : "opacity-100"}`}>
             <a href={user().url} target="_blank" rel="noopener">
               <img
                 src={user().icon ?? "/assets/placeholder.svg"}
@@ -90,6 +84,9 @@ export default function Page() {
               <h1 class="text-4xl md:text-6xl font-black uppercase tracking-tighter leading-none mb-3">
                 {user().displayName}
               </h1>
+              <p class="text-xs uppercase tracking-widest mb-3" style="color: #666">
+                {user().email}
+              </p>
               <div class="flex items-center gap-3 mb-8">
                 <span class="text-sm font-bold">
                   {user().followers?.toLocaleString()}

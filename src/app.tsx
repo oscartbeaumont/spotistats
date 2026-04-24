@@ -1,19 +1,11 @@
-import { Link, Meta, MetaProvider, Title } from "@solidjs/meta";
-import { Router, useLocation, useNavigate } from "@solidjs/router";
+import { Meta, MetaProvider, Title } from "@solidjs/meta";
+import { Router, useNavigate } from "@solidjs/router";
 import { FileRoutes } from "@solidjs/start/router";
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query";
-import {
-  createEffect,
-  createSignal,
-  ErrorBoundary,
-  onMount,
-  Show,
-  Suspense,
-} from "solid-js";
+import { createSignal, ErrorBoundary, onMount } from "solid-js";
 import { isServer } from "solid-js/web";
-import { Nav } from "~/components/Nav";
-import { accessToken, spotifyError } from "~/lib/storage";
-import { consumeSpotifyCallback, hasSpotifyCallbackCode } from "~/lib/spotify";
+import { spotifyError } from "~/lib/storage";
+import { consumeSpotifyCallback } from "~/lib/spotify";
 import "./app.css";
 
 const queryClient = new QueryClient({
@@ -57,13 +49,15 @@ function AppError(props: { error?: unknown } = {}) {
     };
 
   async function copyError() {
-    const current = error();
-    await navigator.clipboard.writeText(
-      [current.title, current.description, current.code].join("\n\n"),
-    );
+    await navigator.clipboard.writeText(errorText());
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1500);
   }
+
+  const errorText = () => {
+    const current = error();
+    return [current.title, current.description, current.code].join("\n\n");
+  };
 
   return (
     <main class="p-8 md:p-16 max-w-3xl">
@@ -71,12 +65,6 @@ function AppError(props: { error?: unknown } = {}) {
       <div class="text-xs uppercase tracking-[0.2em] mb-3" style="color: #999">
         System Error
       </div>
-      <h1 class="text-4xl md:text-6xl font-black uppercase tracking-tighter leading-none mb-4">
-        {error().title}
-      </h1>
-      <p class="text-sm mb-6 max-w-md" style="color: #555; line-height: 1.7">
-        {error().description}
-      </p>
       <p class="text-sm mb-6" style="color: #555">
         Try{" "}
         <a class="font-bold hover:underline" href="/login">
@@ -97,7 +85,7 @@ function AppError(props: { error?: unknown } = {}) {
         class="overflow-auto p-4 text-xs"
         style="border: 4px solid #0a0a0a; background: #0a0a0a; color: #f0ede8"
       >
-        <samp>{error().code}</samp>
+        <samp>{errorText()}</samp>
       </pre>
       <button
         type="button"
@@ -111,24 +99,13 @@ function AppError(props: { error?: unknown } = {}) {
 }
 
 function Root(props: { children?: import("solid-js").JSX.Element }) {
-  const location = useLocation();
   const navigate = useNavigate();
-  const hasCallbackCode = () => !isServer && hasSpotifyCallbackCode();
-  const publicRoute = () =>
-    ["/login"].includes(location.pathname) || hasCallbackCode();
-  const shouldRenderRoutes = () => accessToken() || publicRoute();
 
   onMount(() => {
     void consumeSpotifyCallback().then((consumed) => {
       if (consumed)
         navigate(window.location.pathname || "/", { replace: true });
     });
-  });
-
-  createEffect(() => {
-    if (isServer || accessToken() || hasCallbackCode()) return;
-    if (publicRoute()) return;
-    navigate("/login", { replace: true });
   });
 
   return (
@@ -140,13 +117,8 @@ function Root(props: { children?: import("solid-js").JSX.Element }) {
           content="Spotistats is a tool designed to analyse and backup your music on Spotify!"
         />
 
-        <Nav />
         <ErrorBoundary fallback={(error) => <AppError error={error} />}>
-          <Show when={location.pathname !== "/error"} fallback={<AppError />}>
-            <Show when={shouldRenderRoutes()}>
-              <Suspense fallback={null}>{props.children}</Suspense>
-            </Show>
-          </Show>
+          {props.children}
         </ErrorBoundary>
       </MetaProvider>
     </QueryClientProvider>

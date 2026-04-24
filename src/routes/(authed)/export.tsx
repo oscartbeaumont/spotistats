@@ -1,12 +1,11 @@
 import { Title } from "@solidjs/meta";
-import { useNavigate } from "@solidjs/router";
 import { createQuery } from "@tanstack/solid-query";
 import JSZip from "jszip";
-import { createSignal, For, onMount, Show } from "solid-js";
+import { createSignal, For, Show } from "solid-js";
 import { isServer } from "solid-js/web";
 import { csvCell, downloadTextFile } from "~/lib/download";
 import { accessToken, profileCache } from "~/lib/storage";
-import { hasSpotifyCallbackCode, useSpotifyFetch } from "~/lib/spotify";
+import { useSpotifyFetch } from "~/lib/spotify";
 
 type Playlist = {
   id?: string;
@@ -36,20 +35,13 @@ type Artist = { genres: string[] };
 const csvHeader = "Spotify ID,Artist IDs,Track Name,Album Name,Artist Name(s),Release Date,Duration (ms),Popularity,Added By,Added At,Genres,Danceability,Energy,Key,Loudness,Mode,Speechiness,Acousticness,Instrumentalness,Liveness,Valence,Tempo,Time Signature\n";
 
 export default function ExportPage() {
-  const navigate = useNavigate();
   const spotifyFetch = useSpotifyFetch();
-  const [mounted, setMounted] = createSignal(false);
   const [progress, setProgress] = createSignal(0);
   const [busy, setBusy] = createSignal(false);
 
-  onMount(() => {
-    setMounted(true);
-    if (!accessToken() && !hasSpotifyCallbackCode()) navigate("/login", { replace: true });
-  });
-
   const playlists = createQuery(() => ({
     queryKey: ["spotify", "playlists", accessToken()],
-    enabled: !isServer && mounted() && !!accessToken(),
+    enabled: !isServer && !!accessToken(),
     queryFn: async () => {
       let url: string | null = "https://api.spotify.com/v1/me/playlists?limit=50";
       let value: Playlist[] = [];
@@ -142,7 +134,7 @@ export default function ExportPage() {
   }
 
   return (
-    <main class="p-8 md:p-12">
+    <main class="app-main p-8 md:p-12">
       <Title>Spotistats | Export</Title>
       <div class="flex flex-wrap items-baseline gap-6 mb-8" style="border-bottom: 4px solid #0a0a0a; padding-bottom: 1rem">
         <h1 class="text-2xl font-black uppercase tracking-tight">Export Data</h1>

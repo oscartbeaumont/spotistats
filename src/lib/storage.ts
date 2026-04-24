@@ -30,7 +30,7 @@ export const [spotifyError, setSpotifyError] = makePersisted(
 );
 
 export const [profileCache, setProfileCache] = makePersisted(
-  createSignal<{ icon?: string; url?: string; displayName?: string; followers?: number } | null>(null),
+  createSignal<{ icon?: string; url?: string; displayName?: string; email?: string; followers?: number } | null>(null),
   { name: "profile_cache", storage },
 );
 

@@ -1,10 +1,11 @@
 import { Title } from "@solidjs/meta";
-import { useNavigate } from "@solidjs/router";
 import { createInfiniteQuery } from "@tanstack/solid-query";
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { isServer } from "solid-js/web";
+import * as v from "valibot";
+import { useValidatedSearchParams } from "~/lib/search-params";
 import { accessToken, linkToUri } from "~/lib/storage";
-import { hasSpotifyCallbackCode, useSpotifyFetch } from "~/lib/spotify";
+import { useSpotifyFetch } from "~/lib/spotify";
 
 type TimeRange = "long_term" | "medium_term" | "short_term";
 type ItemType = "Tracks" | "Artists";
@@ -19,25 +20,25 @@ type SpotifyItem = {
   album?: { images: { url: string }[] };
 };
 
+const filtersSchema = v.object({
+  type: v.optional(v.picklist(["Tracks", "Artists"] as const)),
+  timeRange: v.optional(v.picklist(["long_term", "medium_term", "short_term"] as const)),
+});
+
 function hasSaveData() {
   const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
   return connection?.saveData === true;
 }
 
 export default function Favourites() {
-  const navigate = useNavigate();
   const spotifyFetch = useSpotifyFetch();
-  const [type, setType] = createSignal<ItemType>("Tracks");
-  const [timeRange, setTimeRange] = createSignal<TimeRange>("short_term");
-  const [mounted, setMounted] = createSignal(false);
+  const [searchParams, setSearchParams] = useValidatedSearchParams(filtersSchema);
   const [atBottom, setAtBottom] = createSignal(false);
   const [saveData, setSaveData] = createSignal(false);
   let sentinel: HTMLDivElement | undefined;
   let observer: IntersectionObserver | undefined;
 
   onMount(() => {
-    setMounted(true);
-    if (!accessToken() && !hasSpotifyCallbackCode()) navigate("/login", { replace: true });
     localStorage.removeItem("top_items_cache");
     setSaveData(hasSaveData());
     observer = new IntersectionObserver(entries => {
@@ -47,11 +48,21 @@ export default function Favourites() {
   });
   onCleanup(() => observer?.disconnect());
 
+  const type = () => searchParams().type ?? "Tracks";
+  const timeRange = () => searchParams().timeRange ?? "short_term";
   const currentKind = () => type() === "Tracks" ? "tracks" as const : "artists" as const;
+
+  function setType(type: ItemType) {
+    setSearchParams({ type: type === "Tracks" ? undefined : type });
+  }
+
+  function setTimeRange(timeRange: TimeRange) {
+    setSearchParams({ timeRange: timeRange === "short_term" ? undefined : timeRange });
+  }
 
   const favourites = createInfiniteQuery(() => ({
     queryKey: ["spotify", "top", currentKind(), timeRange(), accessToken()],
-    enabled: !isServer && mounted() && !!accessToken() && !(currentKind() === "artists" && saveData()),
+    enabled: !isServer && !!accessToken() && !(currentKind() === "artists" && saveData()),
     initialPageParam: `https://api.spotify.com/v1/me/top/${currentKind()}?limit=50&time_range=${timeRange()}`,
     queryFn: ({ pageParam }) => spotifyFetch<SpotifyPage<SpotifyItem>>(pageParam),
     getNextPageParam: lastPage => lastPage.next || undefined,
@@ -65,7 +76,7 @@ export default function Favourites() {
   const showBottomPending = () => favourites.isLoading || (atBottom() && favourites.isFetchingNextPage);
 
   return (
-    <main class="p-8 md:p-12">
+    <main class="app-main p-8 md:p-12">
       <Title>Spotistats | Favourites</Title>
       <div class="flex flex-wrap items-center gap-0 mb-8">
         <h1 class="text-2xl font-black uppercase tracking-tight mr-6">Top {type()}</h1>
