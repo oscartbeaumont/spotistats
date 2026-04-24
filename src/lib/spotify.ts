@@ -1,7 +1,14 @@
-import { useNavigate } from "@solidjs/router";
-import { accessToken, clearStoredState, codeVerifier, setAccessToken, setCodeVerifier, setSpotifyError, stateToken, setStateToken } from "~/lib/storage";
+import { infiniteQueryOptions, queryOptions } from "@tanstack/solid-query";
+import posthog from "posthog-js";
+import { isServer } from "solid-js/web";
+import {
+  authStore,
+  clearStoredState,
+  setAuthStore,
+  type ProfileCache,
+} from "~/lib/storage";
 
-export const spotifyClientId = "1107a25b98c041bb90c9063553e5f1a8";
+export const spotifyClientId = import.meta.env.VITE_SPOTIFY_CLIENT_ID;
 export const spotifyScopes = [
   "user-library-read",
   "playlist-read-private",
@@ -11,6 +18,77 @@ export const spotifyScopes = [
   "user-read-recently-played",
 ];
 
+export class SpotifyUnauthenticatedError extends Error {
+  constructor() {
+    super("Spotistats: 401 Unauthorized");
+    this.name = "SpotifyUnauthenticatedError";
+  }
+}
+
+export class SpotifyApiError extends Error {
+  constructor(
+    readonly status: number,
+    readonly body: unknown,
+  ) {
+    super(`Spotistats: ${status}`);
+    this.name = "SpotifyApiError";
+  }
+}
+
+export type SpotifyPage<T> = {
+  items: T[];
+  next: string | null;
+  total: number;
+  limit: number;
+};
+
+export type SpotifyProfile = {
+  id: string;
+  display_name: string;
+  email?: string;
+  uri: string;
+  external_urls: { spotify: string };
+  followers: { total: number };
+  images: { url: string }[];
+};
+
+export type SpotifyItem = {
+  name: string;
+  type: "track" | "artist";
+  uri: string;
+  external_urls: { spotify: string };
+  images?: { url: string }[];
+  artists?: { name: string }[];
+  album?: { images: { url: string }[] };
+};
+
+export type Playlist = {
+  id?: string;
+  name: string;
+  public?: boolean;
+  collaborative?: boolean;
+  owner?: { display_name: string };
+  images: { url: string }[];
+};
+
+export type TrackingStatus = {
+  enabled: boolean;
+  consentedAt: number | null;
+  disabledAt: number | null;
+  lastPlayedAtMs: number | null;
+  lastSuccessAt: number | null;
+  lastError: string | null;
+  recent: {
+    played_at: string;
+    played_at_ms: number;
+    name: string;
+    album_name: string | null;
+    artist_names: string | null;
+    image_url: string | null;
+    external_url: string | null;
+  }[];
+};
+
 function base64UrlEncode(bytes: ArrayBuffer) {
   return btoa(String.fromCharCode(...new Uint8Array(bytes)))
     .replace(/\+/g, "-")
@@ -19,9 +97,12 @@ function base64UrlEncode(bytes: ArrayBuffer) {
 }
 
 function randomString(length: number) {
-  const possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
+  const possible =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
   const values = crypto.getRandomValues(new Uint8Array(length));
-  return Array.from(values, value => possible[value % possible.length]).join("");
+  return Array.from(values, (value) => possible[value % possible.length]).join(
+    "",
+  );
 }
 
 async function createPkceChallenge(verifier: string) {
@@ -40,8 +121,12 @@ export async function createLoginUrl(origin: string) {
   const token = Math.random().toString(36).slice(2);
   const verifier = randomString(96);
   const redirectOrigin = spotifyRedirectOrigin(origin);
-  setStateToken(token);
-  setCodeVerifier(verifier);
+  setAuthStore({
+    status: "authenticating",
+    stateToken: token,
+    codeVerifier: verifier,
+    linkToUri: false,
+  });
 
   const params = new URLSearchParams({
     client_id: spotifyClientId,
@@ -60,12 +145,12 @@ export async function consumeSpotifyCallback() {
   const params = new URLSearchParams(window.location.search);
   const code = params.get("code");
   const returnedState = params.get("state");
+  const store = authStore();
 
   if (!code) return false;
 
-  if (returnedState !== stateToken() || !codeVerifier()) {
-    setStateToken(null);
-    setCodeVerifier(null);
+  if (store.status !== "authenticating" || returnedState !== store.stateToken) {
+    setAuthStore({ status: "empty" });
     history.replaceState(null, "", window.location.pathname || "/");
     return false;
   }
@@ -75,7 +160,7 @@ export async function consumeSpotifyCallback() {
     grant_type: "authorization_code",
     code,
     redirect_uri: spotifyRedirectOrigin(window.location.origin),
-    code_verifier: codeVerifier() ?? "",
+    code_verifier: store.codeVerifier,
   });
 
   let res: Response;
@@ -86,31 +171,29 @@ export async function consumeSpotifyCallback() {
       body,
     });
   } catch (error) {
-    setSpotifyError({
-      title: "Spotify Login Network Error",
-      description: "The authorization request to Spotify failed. Please check your connection and try logging in again.",
-      code: JSON.stringify({ error: String(error), online: navigator.onLine }, null, 2),
-    });
+    console.error("Spotify login network error:", error);
     history.replaceState(null, "", "/error");
     return true;
   }
 
   if (!res.ok) {
-    setSpotifyError({
-      title: `${res.status}: Spotify Login Failed`,
-      description: "Spotify rejected the authorization code exchange. Please try logging in again.",
-      code: JSON.stringify(await res.json().catch(() => ({ status: res.status })), null, 2),
-    });
+    console.error(
+      "Spotify login failed:",
+      await res.json().catch(() => ({ status: res.status })),
+    );
     history.replaceState(null, "", "/error");
     return true;
   }
 
-  const token = await res.json() as { token_type: string; access_token: string };
-  setAccessToken(`${token.token_type} ${token.access_token}`);
-  setSpotifyError(null);
-
-  setStateToken(null);
-  setCodeVerifier(null);
+  const token = (await res.json()) as {
+    token_type: string;
+    access_token: string;
+  };
+  setAuthStore({
+    status: "authenticated",
+    accessToken: `${token.token_type} ${token.access_token}`,
+    linkToUri: false,
+  });
   history.replaceState(null, "", window.location.pathname || "/");
   return true;
 }
@@ -120,9 +203,12 @@ export function hasSpotifyCallbackCode() {
 }
 
 function statusDescription(status: number) {
-  if (status === 400) return "This is probably being caused by either a bug in the application or a recent change to the Spotify API.";
-  if (status === 403) return "This is probably being caused by a mismatch between the used endpoints and authorized scopes with the Spotify API.";
-  if (status === 404) return "This is probably being caused by an out of date cache or bug in the application which resulted in Spotify being unable to find a resource.";
+  if (status === 400)
+    return "This is probably being caused by either a bug in the application or a recent change to the Spotify API.";
+  if (status === 403)
+    return "This is probably being caused by a mismatch between the used endpoints and authorized scopes with the Spotify API.";
+  if (status === 404)
+    return "This is probably being caused by an out of date cache or bug in the application which resulted in Spotify being unable to find a resource.";
   return "Spotify had an issue, please try again later.";
 }
 
@@ -138,73 +224,163 @@ function statusTitle(status: number) {
   return `${status}: ${names[status] ?? "Spotify Error"}`;
 }
 
-export function useSpotifyFetch() {
-  const navigate = useNavigate();
+export async function spotifyFetch<T>(
+  url: string,
+  options?: RequestInit,
+): Promise<T> {
+  const store = authStore();
+  if (store.status !== "authenticated") throw new SpotifyUnauthenticatedError();
 
-  return async function spotifyFetch<T>(url: string, options?: RequestInit): Promise<T> {
-    try {
-      const res = await fetch(url, {
-        cache: "no-store",
-        ...options,
-        headers: {
-          Authorization: accessToken() ?? "",
-          ...(options?.headers ?? {}),
-        },
-      });
+  try {
+    const res = await fetch(url, {
+      cache: "no-store",
+      ...options,
+      headers: {
+        Authorization: store.accessToken,
+        ...(options?.headers ?? {}),
+      },
+    });
 
-      if ([200, 201, 202, 204, 304].includes(res.status)) {
-        if (res.status === 204) return undefined as T;
-        return (await res.json()) as T;
-      }
-
-      if (res.status === 401) {
-        setAccessToken(null);
-        navigate("/login", { replace: true });
-        throw new Error("Spotistats: 401 Unauthorized");
-      }
-
-      if (res.status === 429) {
-        const retryAfter = Number(res.headers.get("retry-after") ?? "1") + 1;
-        await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
-        return spotifyFetch<T>(url, options);
-      }
-
-      if ([400, 403, 404, 500, 502, 503].includes(res.status)) {
-        const body = await res.json().catch(() => ({ status: res.status }));
-        setSpotifyError({
-          title: statusTitle(res.status),
-          description: statusDescription(res.status),
-          code: JSON.stringify(body, null, 2),
-        });
-        navigate("/error", { replace: true });
-        throw new Error(`Spotistats: ${res.status}`);
-      }
-
-      console.error("Spotify returned unknown status:", res.status);
+    if ([200, 201, 202, 204, 304].includes(res.status)) {
+      if (res.status === 204) return undefined as T;
       return (await res.json()) as T;
-    } catch (error) {
-      if (String(error).startsWith("Error: Spotistats:")) throw error;
-
-      setSpotifyError({
-        title: "Accessing Spotify API",
-        description: "The network request failed, please reload to try again.",
-        code: JSON.stringify({ url, error: String(error), online: navigator.onLine }, null, 2),
-      });
-      navigate("/error", { replace: true });
-      throw new Error("Spotistats: Spotify API network request failed");
     }
-  };
+
+    if (res.status === 401) {
+      setAuthStore({ status: "empty" });
+      throw new SpotifyUnauthenticatedError();
+    }
+
+    if (res.status === 429) {
+      const retryAfter = Number(res.headers.get("retry-after") ?? "1") + 1;
+      await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000));
+      return spotifyFetch<T>(url, options);
+    }
+
+    if ([400, 403, 404, 500, 502, 503].includes(res.status)) {
+      const body = await res.json().catch(() => ({ status: res.status }));
+      console.error(statusTitle(res.status), statusDescription(res.status), body);
+      throw new SpotifyApiError(res.status, body);
+    }
+
+    console.error("Spotify returned unknown status:", res.status);
+    return (await res.json()) as T;
+  } catch (error) {
+    if (error instanceof SpotifyUnauthenticatedError) throw error;
+    if (error instanceof SpotifyApiError) throw error;
+
+    console.error("Spotify API network request failed:", {
+      url,
+      error: String(error),
+      online: navigator.onLine,
+    });
+    throw new Error("Spotistats: Spotify API network request failed");
+  }
+}
+
+export function profileQueryOptions(store = authStore()) {
+  return queryOptions({
+    queryKey: ["spotify", "profile"],
+    enabled: !isServer && store.status === "authenticated",
+    initialData: store.status === "authenticated" ? store.profile : undefined,
+    queryFn: async () => {
+      const data = await spotifyFetch<SpotifyProfile>(
+        "https://api.spotify.com/v1/me",
+      );
+      posthog.identify(data.id, {
+        username: data.display_name,
+        email: data.email,
+      });
+      const next = {
+        icon: data.images[0]?.url,
+        url: store.status === "authenticated" && store.linkToUri
+          ? data.uri
+          : data.external_urls.spotify,
+        displayName: data.display_name,
+        email: data.email,
+        followers: data.followers.total,
+      } satisfies ProfileCache;
+      setAuthStore((current) =>
+        current.status === "authenticated" ? { ...current, profile: next } : current,
+      );
+      return next;
+    },
+  });
+}
+
+export function favouritesQueryOptions(
+  kind: "tracks" | "artists",
+  timeRange: "long_term" | "medium_term" | "short_term",
+  enabled = true,
+) {
+  return infiniteQueryOptions({
+    queryKey: ["spotify", "top", kind, timeRange],
+    enabled: !isServer && authStore().status === "authenticated" && enabled,
+    initialPageParam: `https://api.spotify.com/v1/me/top/${kind}?limit=50&time_range=${timeRange}`,
+    placeholderData: (previous) => previous,
+    queryFn: ({ pageParam }) => spotifyFetch<SpotifyPage<SpotifyItem>>(pageParam as string),
+    getNextPageParam: (lastPage) => (lastPage as SpotifyPage<SpotifyItem>).next || undefined,
+  });
+}
+
+export function playlistsQueryOptions() {
+  return queryOptions({
+    queryKey: ["spotify", "playlists"],
+    enabled: !isServer && authStore().status === "authenticated",
+    queryFn: async () => {
+      let url: string | null = "https://api.spotify.com/v1/me/playlists?limit=50";
+      let value: Playlist[] = [];
+      while (url) {
+        const data: SpotifyPage<Playlist> = await spotifyFetch(url);
+        value = value.concat(data.items);
+        url = data.next;
+      }
+      return [{ name: "Liked Songs", public: true, images: [] }, ...value];
+    },
+  });
+}
+
+export function trackingStatusQueryOptions() {
+  return queryOptions({
+    queryKey: ["account", "tracking"],
+    enabled: !isServer && authStore().status === "authenticated",
+    queryFn: async () => {
+      const store = authStore();
+      if (store.status !== "authenticated") throw new SpotifyUnauthenticatedError();
+
+      const res = await fetch("/api/account/tracking", {
+        headers: { Authorization: store.accessToken },
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({
+          error: `Tracking status failed: ${res.status}`,
+        }))) as { error?: string };
+        return {
+          enabled: false,
+          consentedAt: null,
+          disabledAt: null,
+          lastPlayedAtMs: null,
+          lastSuccessAt: null,
+          lastError: body.error ?? `Tracking status failed: ${res.status}`,
+          recent: [],
+        } satisfies TrackingStatus;
+      }
+      return (await res.json()) as TrackingStatus;
+    },
+  });
 }
 
 export async function resetBrowserState() {
   if ("serviceWorker" in navigator) {
     const registrations = await navigator.serviceWorker.getRegistrations();
-    await Promise.all(registrations.map(registration => registration.unregister()));
+    await Promise.all(
+      registrations.map((registration) => registration.unregister()),
+    );
   }
 
   if ("caches" in window) {
     const keys = await window.caches.keys();
-    await Promise.all(keys.map(key => window.caches.delete(key)));
+    await Promise.all(keys.map((key) => window.caches.delete(key)));
   }
 
   clearStoredState();

@@ -2,17 +2,17 @@ import { Meta, MetaProvider, Title } from "@solidjs/meta";
 import { Router, useNavigate } from "@solidjs/router";
 import { FileRoutes } from "@solidjs/start/router";
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query";
-import { createSignal, ErrorBoundary, onMount } from "solid-js";
+import { createEffect, createSignal, ErrorBoundary, onMount } from "solid-js";
 import { isServer } from "solid-js/web";
-import { consumeSpotifyCallback } from "~/lib/spotify";
+import { consumeSpotifyCallback, SpotifyUnauthenticatedError } from "~/lib/spotify";
 import "./app.css";
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: (failureCount, error) =>
-        String(error) !== "Error: Spotistats: 401 Unauthorized" &&
-        failureCount < 3,
+        !(error instanceof SpotifyUnauthenticatedError) && failureCount < 3,
+      throwOnError: true,
     },
   },
 });
@@ -55,9 +55,16 @@ export default function App() {
 }
 
 function AppError(props: { error?: Error } = {}) {
+  const navigate = useNavigate();
   const [copied, setCopied] = createSignal(false);
   const errorText = () =>
     `${props.error?.message ?? "Unknown Error"}\n\n${props.error?.stack ?? ""}`;
+
+  createEffect(() => {
+    if (props.error instanceof SpotifyUnauthenticatedError) {
+      navigate("/login", { replace: true });
+    }
+  });
 
   return (
     <main class="p-8 md:p-16 max-w-3xl">

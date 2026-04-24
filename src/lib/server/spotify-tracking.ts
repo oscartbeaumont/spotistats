@@ -1,4 +1,7 @@
 import { env } from "cloudflare:workers";
+import { and, desc, eq, lte } from "drizzle-orm";
+
+import { db, schema } from "./db";
 
 export type SpotifySyncMessage = { spotifyUserId: string };
 
@@ -100,7 +103,7 @@ export function trackingRedirectUri(request: Request) {
 }
 
 function basicAuth() {
-  return btoa(`${env.SPOTIFY_CLIENT_ID}:${env.SPOTIFY_CLIENT_SECRET}`);
+  return btoa(`${env.VITE_SPOTIFY_CLIENT_ID}:${env.SPOTIFY_CLIENT_SECRET}`);
 }
 
 async function spotifyTokenRequest(body: URLSearchParams) {
@@ -130,26 +133,29 @@ export async function exchangeTrackingCode(request: Request, code: string) {
 }
 
 async function refreshAccessToken(spotifyUserId: string) {
-  const row = await env.DB.prepare(
-    "select refresh_token from spotify_tokens where spotify_user_id = ?",
-  )
-    .bind(spotifyUserId)
-    .first<{ refresh_token: string }>();
+  const database = db(env.DB);
+  const row = await database.query.spotifyTokens.findFirst({
+    columns: { refreshToken: true },
+    where: eq(schema.spotifyTokens.spotifyUserId, spotifyUserId),
+  });
   if (!row) throw new Error(`No refresh token for ${spotifyUserId}`);
 
   const token = await spotifyTokenRequest(
     new URLSearchParams({
       grant_type: "refresh_token",
-      refresh_token: row.refresh_token,
+      refresh_token: row.refreshToken,
     }),
   );
 
   if (token.refresh_token) {
-    await env.DB.prepare(
-      "update spotify_tokens set refresh_token = ?, scope = ?, updated_at = ? where spotify_user_id = ?",
-    )
-      .bind(token.refresh_token, token.scope, Date.now(), spotifyUserId)
-      .run();
+    await database
+      .update(schema.spotifyTokens)
+      .set({
+        refreshToken: token.refresh_token,
+        scope: token.scope,
+        updatedAt: Date.now(),
+      })
+      .where(eq(schema.spotifyTokens.spotifyUserId, spotifyUserId));
   }
 
   return token.access_token;
@@ -186,48 +192,51 @@ export async function enableTracking(token: SpotifyToken) {
     throw new Error("Spotify did not return a refresh token");
   const profile = await spotifyProfileFromAccessToken(token.access_token);
   const now = Date.now();
+  const database = db(env.DB);
 
-  await env.DB.batch([
-    env.DB.prepare(
-      `
-      insert into spotify_tracking_users (spotify_user_id, display_name, email, enabled, consented_at, disabled_at, created_at, updated_at)
-      values (?, ?, ?, 1, ?, null, ?, ?)
-      on conflict(spotify_user_id) do update set
-        display_name = excluded.display_name,
-        email = excluded.email,
-        enabled = 1,
-        consented_at = excluded.consented_at,
-        disabled_at = null,
-        updated_at = excluded.updated_at
-    `,
-    ).bind(
-      profile.id,
-      profile.display_name,
-      profile.email ?? null,
-      now,
-      now,
-      now,
-    ),
-    env.DB.prepare(
-      `
-      insert into spotify_tokens (spotify_user_id, refresh_token, scope, updated_at)
-      values (?, ?, ?, ?)
-      on conflict(spotify_user_id) do update set
-        refresh_token = excluded.refresh_token,
-        scope = excluded.scope,
-        updated_at = excluded.updated_at
-    `,
-    ).bind(profile.id, token.refresh_token, token.scope, now),
-    env.DB.prepare(
-      `
-      insert into spotify_sync_state (spotify_user_id, last_played_at_ms, last_success_at, last_error, next_sync_after, updated_at)
-      values (?, null, null, null, 0, ?)
-      on conflict(spotify_user_id) do update set
-        last_error = null,
-        next_sync_after = 0,
-        updated_at = excluded.updated_at
-    `,
-    ).bind(profile.id, now),
+  await database.batch([
+    database
+      .insert(schema.spotifyTrackingUsers)
+      .values({
+        spotifyUserId: profile.id,
+        displayName: profile.display_name,
+        email: profile.email ?? null,
+        enabled: 1,
+        consentedAt: now,
+        disabledAt: null,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: schema.spotifyTrackingUsers.spotifyUserId,
+        set: {
+          displayName: profile.display_name,
+          email: profile.email ?? null,
+          enabled: 1,
+          consentedAt: now,
+          disabledAt: null,
+          updatedAt: now,
+        },
+      }),
+    database
+      .insert(schema.spotifyTokens)
+      .values({
+        spotifyUserId: profile.id,
+        refreshToken: token.refresh_token,
+        scope: token.scope,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: schema.spotifyTokens.spotifyUserId,
+        set: { refreshToken: token.refresh_token, scope: token.scope, updatedAt: now },
+      }),
+    database
+      .insert(schema.spotifySyncState)
+      .values({ spotifyUserId: profile.id, nextSyncAfter: 0, updatedAt: now })
+      .onConflictDoUpdate({
+        target: schema.spotifySyncState.spotifyUserId,
+        set: { lastError: null, nextSyncAfter: 0, updatedAt: now },
+      }),
   ]);
 
   await env.SPOTIFY_SYNC_QUEUE.send({ spotifyUserId: profile.id });
@@ -235,35 +244,39 @@ export async function enableTracking(token: SpotifyToken) {
 }
 
 export async function disableTracking(spotifyUserId: string) {
-  await env.DB.prepare(
-    "update spotify_tracking_users set enabled = 0, disabled_at = ?, updated_at = ? where spotify_user_id = ?",
-  )
-    .bind(Date.now(), Date.now(), spotifyUserId)
-    .run();
+  const now = Date.now();
+  await db(env.DB)
+    .update(schema.spotifyTrackingUsers)
+    .set({ enabled: 0, disabledAt: now, updatedAt: now })
+    .where(eq(schema.spotifyTrackingUsers.spotifyUserId, spotifyUserId));
 }
 
 export async function enqueueDueTrackingUsers(limit = 100) {
   const now = Date.now();
-  const rows = await env.DB.prepare(
-    `
-    select u.spotify_user_id
-    from spotify_tracking_users u
-    join spotify_sync_state s on s.spotify_user_id = u.spotify_user_id
-    where u.enabled = 1 and s.next_sync_after <= ?
-    order by s.next_sync_after asc
-    limit ?
-  `,
-  )
-    .bind(now, limit)
-    .all<{ spotify_user_id: string }>();
+  const database = db(env.DB);
+  const rows = await database
+    .select({ spotifyUserId: schema.spotifyTrackingUsers.spotifyUserId })
+    .from(schema.spotifyTrackingUsers)
+    .innerJoin(
+      schema.spotifySyncState,
+      eq(schema.spotifySyncState.spotifyUserId, schema.spotifyTrackingUsers.spotifyUserId),
+    )
+    .where(
+      and(
+        eq(schema.spotifyTrackingUsers.enabled, 1),
+        lte(schema.spotifySyncState.nextSyncAfter, now),
+      ),
+    )
+    .orderBy(schema.spotifySyncState.nextSyncAfter)
+    .limit(limit);
 
-  if (!rows.results.length) return 0;
+  if (!rows.length) return 0;
   await env.SPOTIFY_SYNC_QUEUE.sendBatch(
-    rows.results.map((row) => ({
-      body: { spotifyUserId: row.spotify_user_id },
+    rows.map((row) => ({
+      body: { spotifyUserId: row.spotifyUserId },
     })),
   );
-  return rows.results.length;
+  return rows.length;
 }
 
 function listenId(spotifyUserId: string, trackId: string, playedAtMs: number) {
@@ -271,32 +284,30 @@ function listenId(spotifyUserId: string, trackId: string, playedAtMs: number) {
 }
 
 export async function syncSpotifyUser(spotifyUserId: string) {
-  const enabled = await env.DB.prepare(
-    "select enabled from spotify_tracking_users where spotify_user_id = ?",
-  )
-    .bind(spotifyUserId)
-    .first<{ enabled: number }>();
+  const database = db(env.DB);
+  const enabled = await database.query.spotifyTrackingUsers.findFirst({
+    columns: { enabled: true },
+    where: eq(schema.spotifyTrackingUsers.spotifyUserId, spotifyUserId),
+  });
   if (!enabled?.enabled) return;
 
   try {
-    const state = await env.DB.prepare(
-      "select last_played_at_ms from spotify_sync_state where spotify_user_id = ?",
-    )
-      .bind(spotifyUserId)
-      .first<{ last_played_at_ms: number | null }>();
+    const state = await database.query.spotifySyncState.findFirst({
+      columns: { lastPlayedAtMs: true },
+      where: eq(schema.spotifySyncState.spotifyUserId, spotifyUserId),
+    });
     const accessToken = await refreshAccessToken(spotifyUserId);
     const url = new URL("https://api.spotify.com/v1/me/player/recently-played");
     url.searchParams.set("limit", "50");
-    if (state?.last_played_at_ms)
-      url.searchParams.set("after", String(state.last_played_at_ms));
+    if (state?.lastPlayedAtMs)
+      url.searchParams.set("after", String(state.lastPlayedAtMs));
 
     const data = await spotifyFetch<RecentlyPlayedResponse>(
       url.toString(),
       accessToken,
     );
     const now = Date.now();
-    let newest = state?.last_played_at_ms ?? null;
-    const statements: D1PreparedStatement[] = [];
+    let newest = state?.lastPlayedAtMs ?? null;
 
     for (const item of data.items) {
       if (!item.track.id) continue;
@@ -307,131 +318,121 @@ export async function syncSpotifyUser(spotifyUserId: string) {
       const artists =
         item.track.artists?.map((artist) => artist.name).join(", ") ?? "";
 
-      statements.push(
-        env.DB.prepare(
-          `
-        insert into spotify_tracks (spotify_track_id, name, album_name, artist_names, duration_ms, uri, external_url, image_url, raw_json, updated_at)
-        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        on conflict(spotify_track_id) do update set
-          name = excluded.name,
-          album_name = excluded.album_name,
-          artist_names = excluded.artist_names,
-          duration_ms = excluded.duration_ms,
-          uri = excluded.uri,
-          external_url = excluded.external_url,
-          image_url = excluded.image_url,
-          raw_json = excluded.raw_json,
-          updated_at = excluded.updated_at
-      `,
-        ).bind(
-          item.track.id,
-          item.track.name,
-          item.track.album?.name ?? null,
-          artists,
-          item.track.duration_ms,
-          item.track.uri,
-          item.track.external_urls?.spotify ?? null,
-          image,
-          JSON.stringify(item.track),
-          now,
-        ),
-      );
+      await database
+        .insert(schema.spotifyTracks)
+        .values({
+          spotifyTrackId: item.track.id,
+          name: item.track.name,
+          albumName: item.track.album?.name ?? null,
+          artistNames: artists,
+          durationMs: item.track.duration_ms,
+          uri: item.track.uri,
+          externalUrl: item.track.external_urls?.spotify ?? null,
+          imageUrl: image,
+          rawJson: JSON.stringify(item.track),
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: schema.spotifyTracks.spotifyTrackId,
+          set: {
+            name: item.track.name,
+            albumName: item.track.album?.name ?? null,
+            artistNames: artists,
+            durationMs: item.track.duration_ms,
+            uri: item.track.uri,
+            externalUrl: item.track.external_urls?.spotify ?? null,
+            imageUrl: image,
+            rawJson: JSON.stringify(item.track),
+            updatedAt: now,
+          },
+        });
 
-      statements.push(
-        env.DB.prepare(
-          `
-        insert or ignore into spotify_listens (id, spotify_user_id, spotify_track_id, played_at, played_at_ms, context_type, context_uri, raw_json, created_at)
-        values (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `,
-        ).bind(
-          listenId(spotifyUserId, item.track.id, playedAtMs),
+      await database
+        .insert(schema.spotifyListens)
+        .values({
+          id: listenId(spotifyUserId, item.track.id, playedAtMs),
           spotifyUserId,
-          item.track.id,
-          item.played_at,
+          spotifyTrackId: item.track.id,
+          playedAt: item.played_at,
           playedAtMs,
-          item.context?.type ?? null,
-          item.context?.uri ?? null,
-          JSON.stringify(item),
-          now,
-        ),
-      );
+          contextType: item.context?.type ?? null,
+          contextUri: item.context?.uri ?? null,
+          rawJson: JSON.stringify(item),
+          createdAt: now,
+        })
+        .onConflictDoNothing();
     }
 
-    statements.push(
-      env.DB.prepare(
-        `
-      update spotify_sync_state
-      set last_played_at_ms = coalesce(?, last_played_at_ms), last_success_at = ?, last_error = null, next_sync_after = ?, updated_at = ?
-      where spotify_user_id = ?
-    `,
-      ).bind(newest, now, now + 15 * 60 * 1000, now, spotifyUserId),
-    );
-
-    await env.DB.batch(statements);
+    await database
+      .update(schema.spotifySyncState)
+      .set({
+        lastPlayedAtMs: newest ?? state?.lastPlayedAtMs ?? null,
+        lastSuccessAt: now,
+        lastError: null,
+        nextSyncAfter: now + 15 * 60 * 1000,
+        updatedAt: now,
+      })
+      .where(eq(schema.spotifySyncState.spotifyUserId, spotifyUserId));
   } catch (error) {
     const retryAfter = (error as Error & { retryAfter?: number }).retryAfter;
     const now = Date.now();
-    await env.DB.prepare(
-      "update spotify_sync_state set last_error = ?, next_sync_after = ?, updated_at = ? where spotify_user_id = ?",
-    )
-      .bind(
-        String(error),
-        now + (retryAfter ?? 15 * 60) * 1000,
-        now,
-        spotifyUserId,
-      )
-      .run();
+    await database
+      .update(schema.spotifySyncState)
+      .set({
+        lastError: String(error),
+        nextSyncAfter: now + (retryAfter ?? 15 * 60) * 1000,
+        updatedAt: now,
+      })
+      .where(eq(schema.spotifySyncState.spotifyUserId, spotifyUserId));
     if (!retryAfter) throw error;
   }
 }
 
 export async function trackingStatus(spotifyUserId: string) {
-  const status = await env.DB.prepare(
-    `
-    select u.enabled, u.consented_at, u.disabled_at, s.last_played_at_ms, s.last_success_at, s.last_error
-    from spotify_tracking_users u
-    left join spotify_sync_state s on s.spotify_user_id = u.spotify_user_id
-    where u.spotify_user_id = ?
-  `,
-  )
-    .bind(spotifyUserId)
-    .first<{
-      enabled: number;
-      consented_at: number;
-      disabled_at: number | null;
-      last_played_at_ms: number | null;
-      last_success_at: number | null;
-      last_error: string | null;
-    }>();
+  const database = db(env.DB);
+  const [status] = await database
+    .select({
+      enabled: schema.spotifyTrackingUsers.enabled,
+      consentedAt: schema.spotifyTrackingUsers.consentedAt,
+      disabledAt: schema.spotifyTrackingUsers.disabledAt,
+      lastPlayedAtMs: schema.spotifySyncState.lastPlayedAtMs,
+      lastSuccessAt: schema.spotifySyncState.lastSuccessAt,
+      lastError: schema.spotifySyncState.lastError,
+    })
+    .from(schema.spotifyTrackingUsers)
+    .leftJoin(
+      schema.spotifySyncState,
+      eq(schema.spotifySyncState.spotifyUserId, schema.spotifyTrackingUsers.spotifyUserId),
+    )
+    .where(eq(schema.spotifyTrackingUsers.spotifyUserId, spotifyUserId))
+    .limit(1);
 
-  const recent = await env.DB.prepare(
-    `
-    select l.played_at, l.played_at_ms, t.name, t.album_name, t.artist_names, t.image_url, t.external_url
-    from spotify_listens l
-    join spotify_tracks t on t.spotify_track_id = l.spotify_track_id
-    where l.spotify_user_id = ?
-    order by l.played_at_ms desc
-    limit 5
-  `,
-  )
-    .bind(spotifyUserId)
-    .all<{
-      played_at: string;
-      played_at_ms: number;
-      name: string;
-      album_name: string | null;
-      artist_names: string | null;
-      image_url: string | null;
-      external_url: string | null;
-    }>();
+  const recent = await database
+    .select({
+      played_at: schema.spotifyListens.playedAt,
+      played_at_ms: schema.spotifyListens.playedAtMs,
+      name: schema.spotifyTracks.name,
+      album_name: schema.spotifyTracks.albumName,
+      artist_names: schema.spotifyTracks.artistNames,
+      image_url: schema.spotifyTracks.imageUrl,
+      external_url: schema.spotifyTracks.externalUrl,
+    })
+    .from(schema.spotifyListens)
+    .innerJoin(
+      schema.spotifyTracks,
+      eq(schema.spotifyTracks.spotifyTrackId, schema.spotifyListens.spotifyTrackId),
+    )
+    .where(eq(schema.spotifyListens.spotifyUserId, spotifyUserId))
+    .orderBy(desc(schema.spotifyListens.playedAtMs))
+    .limit(5);
 
   return {
     enabled: !!status?.enabled,
-    consentedAt: status?.consented_at ?? null,
-    disabledAt: status?.disabled_at ?? null,
-    lastPlayedAtMs: status?.last_played_at_ms ?? null,
-    lastSuccessAt: status?.last_success_at ?? null,
-    lastError: status?.last_error ?? null,
-    recent: recent.results,
+    consentedAt: status?.consentedAt ?? null,
+    disabledAt: status?.disabledAt ?? null,
+    lastPlayedAtMs: status?.lastPlayedAtMs ?? null,
+    lastSuccessAt: status?.lastSuccessAt ?? null,
+    lastError: status?.lastError ?? null,
+    recent,
   };
 }

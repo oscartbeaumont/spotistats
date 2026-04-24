@@ -30,7 +30,7 @@ export async function GET(event: APIEvent) {
 
   const state = randomState();
   const params = new URLSearchParams({
-    client_id: env.SPOTIFY_CLIENT_ID,
+    client_id: env.VITE_SPOTIFY_CLIENT_ID,
     response_type: "code",
     redirect_uri: trackingRedirectUri(event.request),
     state,

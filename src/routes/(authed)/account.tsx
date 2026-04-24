@@ -1,27 +1,9 @@
 import { Title } from "@solidjs/meta";
 import { createQuery } from "@tanstack/solid-query";
 import { For, Show, createSignal } from "solid-js";
-import { isServer } from "solid-js/web";
 import { useLocation } from "@solidjs/router";
-import { accessToken } from "~/lib/storage";
-
-type TrackingStatus = {
-  enabled: boolean;
-  consentedAt: number | null;
-  disabledAt: number | null;
-  lastPlayedAtMs: number | null;
-  lastSuccessAt: number | null;
-  lastError: string | null;
-  recent: {
-    played_at: string;
-    played_at_ms: number;
-    name: string;
-    album_name: string | null;
-    artist_names: string | null;
-    image_url: string | null;
-    external_url: string | null;
-  }[];
-};
+import { authStore } from "~/lib/storage";
+import { SpotifyUnauthenticatedError, trackingStatusQueryOptions } from "~/lib/spotify";
 
 function formatDate(value: number | string | null) {
   if (!value) return "Never";
@@ -33,39 +15,20 @@ export default function AccountPage() {
   const [busy, setBusy] = createSignal(false);
   const trackingReason = () =>
     new URLSearchParams(location.search).get("reason");
-  const status = createQuery(() => ({
-    queryKey: ["account", "tracking", accessToken()],
-    enabled: !isServer && !!accessToken(),
-    queryFn: async () => {
-      const res = await fetch("/api/account/tracking", {
-        headers: { Authorization: accessToken() ?? "" },
-      });
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({
-          error: `Tracking status failed: ${res.status}`,
-        }))) as { error?: string };
-        return {
-          enabled: false,
-          consentedAt: null,
-          disabledAt: null,
-          lastPlayedAtMs: null,
-          lastSuccessAt: null,
-          lastError: body.error ?? `Tracking status failed: ${res.status}`,
-          recent: [],
-        } satisfies TrackingStatus;
-      }
-      return (await res.json()) as TrackingStatus;
-    },
-  }));
+  const status = createQuery(() => trackingStatusQueryOptions());
 
   async function disableTracking() {
     if (busy()) return;
     setBusy(true);
     try {
+      const store = authStore();
       const res = await fetch("/api/account/tracking", {
         method: "DELETE",
-        headers: { Authorization: accessToken() ?? "" },
+        headers: {
+          Authorization: store.status === "authenticated" ? store.accessToken : "",
+        },
       });
+      if (res.status === 401) throw new SpotifyUnauthenticatedError();
       if (!res.ok) throw new Error(`Disable tracking failed: ${res.status}`);
       await status.refetch();
     } finally {

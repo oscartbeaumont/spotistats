@@ -1,58 +1,21 @@
 import { Title } from "@solidjs/meta";
 import { A } from "@solidjs/router";
 import { createQuery } from "@tanstack/solid-query";
-import posthog from "posthog-js";
 import { createSignal, onMount, Show } from "solid-js";
-import { isServer } from "solid-js/web";
-import {
-  accessToken,
-  linkToUri,
-  profileCache,
-  setProfileCache,
-} from "~/lib/storage";
-import { useSpotifyFetch } from "~/lib/spotify";
-
-type SpotifyProfile = {
-  id: string;
-  display_name: string;
-  email?: string;
-  uri: string;
-  external_urls: { spotify: string };
-  followers: { total: number };
-  images: { url: string }[];
-};
+import { authStore } from "~/lib/storage";
+import { profileQueryOptions } from "~/lib/spotify";
 
 export default function Page() {
-  const spotifyFetch = useSpotifyFetch();
   const [hydrated, setHydrated] = createSignal(false);
 
   onMount(() => setHydrated(true));
 
-  const profile = createQuery(() => ({
-    queryKey: ["spotify", "profile", accessToken()],
-    enabled: !isServer && !!accessToken(),
-    initialData: hydrated() ? profileCache() ?? undefined : undefined,
-    queryFn: async () => {
-      const data = await spotifyFetch<SpotifyProfile>(
-        "https://api.spotify.com/v1/me",
-      );
-      posthog.identify(data.id, {
-        username: data.display_name,
-        email: data.email,
-      });
-      const next = {
-        icon: data.images[0]?.url,
-        url: linkToUri() ? data.uri : data.external_urls.spotify,
-        displayName: data.display_name,
-        email: data.email,
-        followers: data.followers.total,
-      };
-      setProfileCache(next);
-      return next;
-    },
-  }));
+  const profile = createQuery(() => profileQueryOptions(authStore()));
 
-  const current = () => profile.data ?? (hydrated() ? profileCache() : null);
+  const current = () => {
+    const store = authStore();
+    return profile.data ?? (hydrated() && store.status === "authenticated" ? store.profile : null);
+  };
 
   return (
     <main class="app-main flex-1 p-8 md:p-16">

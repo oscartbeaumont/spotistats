@@ -1,0 +1,419 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "2ed9ba93-dee8-417e-ad7d-ba0b061bcf53",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "tables": {
+    "spotify_listens": {
+      "name": "spotify_listens",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "spotify_user_id": {
+          "name": "spotify_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "spotify_track_id": {
+          "name": "spotify_track_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "played_at": {
+          "name": "played_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "played_at_ms": {
+          "name": "played_at_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "context_type": {
+          "name": "context_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "context_uri": {
+          "name": "context_uri",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "raw_json": {
+          "name": "raw_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "spotify_listens_spotify_user_id_spotify_track_id_played_at_ms_unique": {
+          "name": "spotify_listens_spotify_user_id_spotify_track_id_played_at_ms_unique",
+          "columns": [
+            "spotify_user_id",
+            "spotify_track_id",
+            "played_at_ms"
+          ],
+          "isUnique": true
+        },
+        "idx_spotify_listens_recent": {
+          "name": "idx_spotify_listens_recent",
+          "columns": [
+            "spotify_user_id",
+            "played_at_ms"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "spotify_listens_spotify_user_id_spotify_tracking_users_spotify_user_id_fk": {
+          "name": "spotify_listens_spotify_user_id_spotify_tracking_users_spotify_user_id_fk",
+          "tableFrom": "spotify_listens",
+          "tableTo": "spotify_tracking_users",
+          "columnsFrom": [
+            "spotify_user_id"
+          ],
+          "columnsTo": [
+            "spotify_user_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "spotify_listens_spotify_track_id_spotify_tracks_spotify_track_id_fk": {
+          "name": "spotify_listens_spotify_track_id_spotify_tracks_spotify_track_id_fk",
+          "tableFrom": "spotify_listens",
+          "tableTo": "spotify_tracks",
+          "columnsFrom": [
+            "spotify_track_id"
+          ],
+          "columnsTo": [
+            "spotify_track_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "spotify_sync_state": {
+      "name": "spotify_sync_state",
+      "columns": {
+        "spotify_user_id": {
+          "name": "spotify_user_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "last_played_at_ms": {
+          "name": "last_played_at_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "last_success_at": {
+          "name": "last_success_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "last_error": {
+          "name": "last_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "next_sync_after": {
+          "name": "next_sync_after",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_spotify_sync_state_due": {
+          "name": "idx_spotify_sync_state_due",
+          "columns": [
+            "next_sync_after"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "spotify_sync_state_spotify_user_id_spotify_tracking_users_spotify_user_id_fk": {
+          "name": "spotify_sync_state_spotify_user_id_spotify_tracking_users_spotify_user_id_fk",
+          "tableFrom": "spotify_sync_state",
+          "tableTo": "spotify_tracking_users",
+          "columnsFrom": [
+            "spotify_user_id"
+          ],
+          "columnsTo": [
+            "spotify_user_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "spotify_tokens": {
+      "name": "spotify_tokens",
+      "columns": {
+        "spotify_user_id": {
+          "name": "spotify_user_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "refresh_token": {
+          "name": "refresh_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "scope": {
+          "name": "scope",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "spotify_tokens_spotify_user_id_spotify_tracking_users_spotify_user_id_fk": {
+          "name": "spotify_tokens_spotify_user_id_spotify_tracking_users_spotify_user_id_fk",
+          "tableFrom": "spotify_tokens",
+          "tableTo": "spotify_tracking_users",
+          "columnsFrom": [
+            "spotify_user_id"
+          ],
+          "columnsTo": [
+            "spotify_user_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "spotify_tracking_users": {
+      "name": "spotify_tracking_users",
+      "columns": {
+        "spotify_user_id": {
+          "name": "spotify_user_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "display_name": {
+          "name": "display_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "enabled": {
+          "name": "enabled",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "consented_at": {
+          "name": "consented_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "disabled_at": {
+          "name": "disabled_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_spotify_tracking_users_due": {
+          "name": "idx_spotify_tracking_users_due",
+          "columns": [
+            "enabled",
+            "spotify_user_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "spotify_tracks": {
+      "name": "spotify_tracks",
+      "columns": {
+        "spotify_track_id": {
+          "name": "spotify_track_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "album_name": {
+          "name": "album_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "artist_names": {
+          "name": "artist_names",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "duration_ms": {
+          "name": "duration_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "uri": {
+          "name": "uri",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "external_url": {
+          "name": "external_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "image_url": {
+          "name": "image_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "raw_json": {
+          "name": "raw_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {}
+  }
+}

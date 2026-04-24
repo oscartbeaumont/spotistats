@@ -1,14 +1,14 @@
 import { Title } from "@solidjs/meta";
 import { useNavigate } from "@solidjs/router";
 import { onMount } from "solid-js";
-import { accessToken } from "~/lib/storage";
+import { authStore } from "~/lib/storage";
 import { createLoginUrl } from "~/lib/spotify";
 
 export default function Page() {
   const navigate = useNavigate();
 
   onMount(() => {
-    if (accessToken()) navigate("/", { replace: true });
+    if (authStore().status === "authenticated") navigate("/", { replace: true });
   });
 
   return (

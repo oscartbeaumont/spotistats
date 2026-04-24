@@ -1,21 +1,13 @@
+import { createShortcut } from "@solid-primitives/keyboard";
 import { Title } from "@solidjs/meta";
 import { createQuery } from "@tanstack/solid-query";
 import JSZip from "jszip";
-import { createSignal, For, Show } from "solid-js";
-import { isServer } from "solid-js/web";
+import { createEffect, createMemo, createSignal, For, onMount, Show } from "solid-js";
 import { csvCell, downloadTextFile } from "~/lib/download";
-import { accessToken, profileCache } from "~/lib/storage";
-import { useSpotifyFetch } from "~/lib/spotify";
+import { isEditableShortcutTarget } from "~/lib/keyboard";
+import { authStore } from "~/lib/storage";
+import { playlistsQueryOptions, spotifyFetch, type Playlist, type SpotifyPage } from "~/lib/spotify";
 
-type Playlist = {
-  id?: string;
-  name: string;
-  public?: boolean;
-  collaborative?: boolean;
-  owner?: { display_name: string };
-  images: { url: string }[];
-};
-type SpotifyPage<T> = { items: T[]; next: string | null; total: number; limit: number };
 type TrackItem = {
   added_by?: { id: string };
   added_at: string;
@@ -35,24 +27,13 @@ type Artist = { genres: string[] };
 const csvHeader = "Spotify ID,Artist IDs,Track Name,Album Name,Artist Name(s),Release Date,Duration (ms),Popularity,Added By,Added At,Genres,Danceability,Energy,Key,Loudness,Mode,Speechiness,Acousticness,Instrumentalness,Liveness,Valence,Tempo,Time Signature\n";
 
 export default function ExportPage() {
-  const spotifyFetch = useSpotifyFetch();
   const [progress, setProgress] = createSignal(0);
   const [busy, setBusy] = createSignal(false);
+  const [selectedIndex, setSelectedIndex] = createSignal(0);
 
-  const playlists = createQuery(() => ({
-    queryKey: ["spotify", "playlists", accessToken()],
-    enabled: !isServer && !!accessToken(),
-    queryFn: async () => {
-      let url: string | null = "https://api.spotify.com/v1/me/playlists?limit=50";
-      let value: Playlist[] = [];
-      while (url) {
-        const data: SpotifyPage<Playlist> = await spotifyFetch(url);
-        value = value.concat(data.items);
-        url = data.next;
-      }
-      return [{ name: "Liked Songs", public: true, images: [] }, ...value];
-    },
-  }));
+  const playlists = createQuery(() => playlistsQueryOptions());
+  const playlistItems = createMemo(() => playlists.data ?? []);
+  const selectedPlaylist = () => playlistItems()[selectedIndex()];
 
   async function downloadUrl(baseUrl: string, totalProgress = 1) {
     let csv = csvHeader;
@@ -107,7 +88,7 @@ export default function ExportPage() {
   }
 
   async function backupAll() {
-    const all = playlists.data ?? [];
+    const all = playlistItems();
     if (busy()) return alert("Please wait for the current download to complete.");
     setBusy(true);
     setProgress(0);
@@ -121,7 +102,8 @@ export default function ExportPage() {
         console.error(error);
       }
     }
-    zip.file("user.json", JSON.stringify(profileCache()));
+    const store = authStore();
+    zip.file("user.json", JSON.stringify(store.status === "authenticated" ? store.profile : null));
     const blob = await zip.generateAsync({ type: "blob" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
@@ -132,6 +114,54 @@ export default function ExportPage() {
     setBusy(false);
     setProgress(0);
   }
+
+  function moveSelection(delta: number) {
+    const nextIndex = Math.max(0, Math.min(selectedIndex() + delta, playlistItems().length - 1));
+    setSelectedIndex(nextIndex);
+    document.getElementById(`playlist-${nextIndex}`)?.scrollIntoView({ block: "nearest" });
+  }
+
+  createEffect(() => {
+    if (selectedIndex() >= playlistItems().length) setSelectedIndex(Math.max(playlistItems().length - 1, 0));
+  });
+
+  onMount(() => {
+    createShortcut(["j"], event => {
+      if (isEditableShortcutTarget(event)) return;
+      event?.preventDefault();
+      moveSelection(1);
+    }, { preventDefault: false, requireReset: true });
+
+    createShortcut(["k"], event => {
+      if (isEditableShortcutTarget(event)) return;
+      event?.preventDefault();
+      moveSelection(-1);
+    }, { preventDefault: false, requireReset: true });
+
+    createShortcut(["ArrowDown"], event => {
+      if (isEditableShortcutTarget(event)) return;
+      event?.preventDefault();
+      moveSelection(1);
+    }, { preventDefault: false, requireReset: true });
+
+    createShortcut(["ArrowUp"], event => {
+      if (isEditableShortcutTarget(event)) return;
+      event?.preventDefault();
+      moveSelection(-1);
+    }, { preventDefault: false, requireReset: true });
+
+    createShortcut(["Enter"], event => {
+      if (isEditableShortcutTarget(event)) return;
+      event?.preventDefault();
+      void exportPlaylist(selectedPlaylist());
+    }, { preventDefault: false, requireReset: true });
+
+    createShortcut(["b"], event => {
+      if (isEditableShortcutTarget(event)) return;
+      event?.preventDefault();
+      void backupAll();
+    }, { preventDefault: false, requireReset: true });
+  });
 
   return (
     <main class="app-main p-8 md:p-12">
@@ -145,8 +175,14 @@ export default function ExportPage() {
           onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "#0a0a0a"; (e.currentTarget as HTMLElement).style.color = "#f0ede8"; }}
           onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = ""; (e.currentTarget as HTMLElement).style.color = ""; }}
         >
-          Backup All →
+          Backup All <span class="ml-2 text-[0.6rem] opacity-50">B</span> →
         </button>
+      </div>
+      <div class="mb-6 flex flex-wrap gap-2 text-[0.65rem] font-bold uppercase tracking-widest" style="color: #777">
+        <span>J/↓ Next</span>
+        <span>K/↑ Previous</span>
+        <span>Enter Export</span>
+        <span>B Backup All</span>
       </div>
       <Show when={busy()}>
         <div class="mb-6 h-4" style="border: 3px solid #0a0a0a">
@@ -155,17 +191,18 @@ export default function ExportPage() {
       </Show>
       <Show when={!playlists.isLoading} fallback={<p class="text-sm uppercase tracking-widest" style="color: #999">LOADING_</p>}>
         <div>
-          <For each={playlists.data}>
-            {playlist => {
+          <For each={playlistItems()}>
+            {(playlist, index) => {
               const img = () => playlist.images?.[0]?.url;
+              const selected = () => selectedIndex() === index();
               return (
                 <button
+                  id={`playlist-${index()}`}
                   type="button"
+                  onFocus={() => setSelectedIndex(index())}
                   onClick={() => exportPlaylist(playlist)}
-                  class="w-full flex items-center gap-4 py-3 text-left transition"
-                  style="border-bottom: 3px solid #0a0a0a"
-                  onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.background = "#0a0a0a"; el.style.color = "#f0ede8"; el.style.paddingLeft = "0.5rem"; }}
-                  onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.background = ""; el.style.color = ""; el.style.paddingLeft = ""; }}
+                  class="w-full flex items-center gap-4 py-3 text-left transition outline-none"
+                  style={selected() ? "border-bottom: 3px solid #0a0a0a; background: #0a0a0a; color: #f0ede8; padding-left: 0.5rem" : "border-bottom: 3px solid #0a0a0a"}
                 >
                   <img
                     src={img() ?? "/assets/placeholder.svg"}

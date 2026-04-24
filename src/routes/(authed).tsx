@@ -1,21 +1,95 @@
-import { useNavigate } from "@solidjs/router";
-import { createEffect, Suspense } from "solid-js";
+import { createShortcut } from "@solid-primitives/keyboard";
+import { useLocation, useNavigate } from "@solidjs/router";
+import { createEffect, onMount, Suspense } from "solid-js";
 import { isServer } from "solid-js/web";
-import { Nav } from "~/components/Nav";
-import { accessToken } from "~/lib/storage";
+import { isEditableShortcutTarget } from "~/lib/keyboard";
+import { authStore, clearStoredState } from "~/lib/storage";
 import { hasSpotifyCallbackCode } from "~/lib/spotify";
 
 export default function AuthedLayout(props: { children?: import("solid-js").JSX.Element }) {
+  const location = useLocation();
   const navigate = useNavigate();
 
+  const isActive = (href: string) =>
+    href === "/" ? location.pathname === "/" : location.pathname === href;
+  const linkClass = (href: string) => `font-black text-xs sm:text-sm uppercase px-3 sm:px-4 py-2 tracking-wide transition ${isActive(href) ? "" : "hover:bg-[#0a0a0a] hover:text-[#f0ede8]"}`;
+  const linkStyle = (href: string) => isActive(href) ? "background: #0a0a0a; color: #f0ede8" : "border: 4px solid #0a0a0a";
+
+  const logout = () => {
+    clearStoredState();
+    navigate("/login");
+  };
+
   createEffect(() => {
-    if (isServer || accessToken() || hasSpotifyCallbackCode()) return;
+    if (isServer || authStore().status === "authenticated" || hasSpotifyCallbackCode()) return;
     navigate("/login", { replace: true });
+  });
+
+  onMount(() => {
+    const openProfile = (event: KeyboardEvent | null) => {
+      if (isEditableShortcutTarget(event)) return;
+      event?.preventDefault();
+      navigate("/");
+    };
+
+    createShortcut(["Alt", "1"], openProfile, { preventDefault: false, requireReset: true });
+    createShortcut(["Control", "1"], openProfile, { preventDefault: false, requireReset: true });
+    createShortcut(["Meta", "1"], openProfile, { preventDefault: false, requireReset: true });
+
+    const openFavourites = (event: KeyboardEvent | null) => {
+      if (isEditableShortcutTarget(event)) return;
+      event?.preventDefault();
+      navigate("/favourites");
+    };
+
+    createShortcut(["Alt", "2"], openFavourites, { preventDefault: false, requireReset: true });
+    createShortcut(["Control", "2"], openFavourites, { preventDefault: false, requireReset: true });
+    createShortcut(["Meta", "2"], openFavourites, { preventDefault: false, requireReset: true });
+
+    const openExport = (event: KeyboardEvent | null) => {
+      if (isEditableShortcutTarget(event)) return;
+      event?.preventDefault();
+      navigate("/export");
+    };
+
+    createShortcut(["Alt", "3"], openExport, { preventDefault: false, requireReset: true });
+    createShortcut(["Control", "3"], openExport, { preventDefault: false, requireReset: true });
+    createShortcut(["Meta", "3"], openExport, { preventDefault: false, requireReset: true });
+
+    const openAccount = (event: KeyboardEvent | null) => {
+      if (isEditableShortcutTarget(event)) return;
+      event?.preventDefault();
+      navigate("/account");
+    };
+
+    createShortcut(["Alt", "4"], openAccount, { preventDefault: false, requireReset: true });
+    createShortcut(["Control", "4"], openAccount, { preventDefault: false, requireReset: true });
+    createShortcut(["Meta", "4"], openAccount, { preventDefault: false, requireReset: true });
   });
 
   return (
     <>
-      <Nav />
+      <header
+        class="fixed left-0 right-0 top-0 z-50 flex items-center justify-between bg-[#f0ede8] p-4 sm:p-5"
+        style="border-bottom: 4px solid #0a0a0a"
+      >
+        <span class="font-black text-xl tracking-tighter uppercase select-none">
+          SPOTISTATS
+        </span>
+        <nav class="flex flex-wrap gap-0">
+          <a href="/" class={linkClass("/")} style={linkStyle("/")}>Profile <span class="ml-2 text-[0.6rem] opacity-50">Ctrl/Alt+1</span></a>
+          <a href="/favourites" class={linkClass("/favourites")} style={linkStyle("/favourites")}>Favourites <span class="ml-2 text-[0.6rem] opacity-50">Ctrl/Alt+2</span></a>
+          <a href="/export" class={linkClass("/export")} style={linkStyle("/export")}>Export Data <span class="ml-2 text-[0.6rem] opacity-50">Ctrl/Alt+3</span></a>
+          <a href="/account" class={linkClass("/account")} style={linkStyle("/account")}>Account <span class="ml-2 text-[0.6rem] opacity-50">Ctrl/Alt+4</span></a>
+        </nav>
+        <button
+          onClick={logout}
+          class="text-xs uppercase tracking-widest font-bold transition hover:underline"
+          style="color: #999"
+        >
+          Logout
+        </button>
+      </header>
       <Suspense fallback={<main class="app-main p-8 md:p-16 text-sm uppercase tracking-widest text-[#999]">LOADING_</main>}>
         {props.children}
       </Suspense>

@@ -12,7 +12,7 @@
     "enabled": true,
   },
   "vars": {
-    "SPOTIFY_CLIENT_ID": "1107a25b98c041bb90c9063553e5f1a8",
+    "VITE_SPOTIFY_CLIENT_ID": "1107a25b98c041bb90c9063553e5f1a8",
   },
   "d1_databases": [
     {
