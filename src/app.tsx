@@ -4,7 +4,10 @@ import { FileRoutes } from "@solidjs/start/router";
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query";
 import { createEffect, createSignal, ErrorBoundary, onMount } from "solid-js";
 import { isServer } from "solid-js/web";
-import { consumeSpotifyCallback, SpotifyUnauthenticatedError } from "~/lib/spotify";
+import {
+  consumeSpotifyCallback,
+  SpotifyUnauthenticatedError,
+} from "~/lib/spotify";
 import "./app.css";
 
 const queryClient = new QueryClient({
@@ -51,7 +54,9 @@ export default function App() {
                       Spotistats needs JavaScript
                     </h1>
                     <p class="text-sm leading-7 text-[#555]">
-                      This app connects to Spotify in your browser and uses JavaScript to load your music data. Enable JavaScript, then refresh the page.
+                      This app connects to Spotify in your browser and uses
+                      JavaScript to load your music data. Enable JavaScript,
+                      then refresh the page.
                     </p>
                   </section>
                 </main>
@@ -84,7 +89,6 @@ export function AppError(props: { error?: Error } = {}) {
 
   return (
     <main class="p-8 md:p-16 max-w-3xl">
-      <Title>Spotistats | Error</Title>
       <div class="text-xs uppercase tracking-[0.2em] mb-3 text-[#999]">
         System Error
       </div>
@@ -104,9 +108,7 @@ export function AppError(props: { error?: Error } = {}) {
         </a>
         . Include the details below.
       </p>
-      <pre
-        class="overflow-auto p-4 text-xs border-4 border-[#0a0a0a] bg-[#0a0a0a] text-[#f0ede8]"
-      >
+      <pre class="overflow-auto p-4 text-xs border-4 border-[#0a0a0a] bg-[#0a0a0a] text-[#f0ede8]">
         <samp>{errorText()}</samp>
       </pre>
       <button
