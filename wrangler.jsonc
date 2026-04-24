@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "spotistats",
-  "main": "src/worker.ts",
+  "main": "@solidjs/start/server/entry",
   "compatibility_date": "2026-04-24",
   "compatibility_flags": ["nodejs_compat"],
   "route": {
@@ -25,12 +25,12 @@
     "producers": [
       {
         "binding": "SPOTIFY_SYNC_QUEUE",
-        "queue": "spotistats",
+        "queue": "spotistats-spotify-sync",
       },
     ],
     "consumers": [
       {
-        "queue": "spotistats",
+        "queue": "spotistats-spotify-sync",
         "max_batch_size": 10,
         "max_batch_timeout": 30,
       },

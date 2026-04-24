@@ -1,5 +1,5 @@
 import { createShortcut } from "@solid-primitives/keyboard";
-import { A, useLocation, useNavigate } from "@solidjs/router";
+import { useLocation, useNavigate } from "@solidjs/router";
 import { onMount } from "solid-js";
 import { isEditableShortcutTarget } from "~/lib/keyboard";
 import { clearStoredState } from "~/lib/storage";
@@ -48,10 +48,10 @@ export function Nav() {
         SPOTISTATS
       </span>
       <nav class="flex flex-wrap gap-0">
-        <A href="/" class={linkClass("/")} style={linkStyle("/")}>Profile <span class="ml-2 text-[0.6rem] opacity-50">Ctrl/Alt+1</span></A>
-        <A href="/favourites" class={linkClass("/favourites")} style={linkStyle("/favourites")}>Favourites <span class="ml-2 text-[0.6rem] opacity-50">Ctrl/Alt+2</span></A>
-        <A href="/export" class={linkClass("/export")} style={linkStyle("/export")}>Export Data <span class="ml-2 text-[0.6rem] opacity-50">Ctrl/Alt+3</span></A>
-        <A href="/account" class={linkClass("/account")} style={linkStyle("/account")}>Account <span class="ml-2 text-[0.6rem] opacity-50">Ctrl/Alt+4</span></A>
+        <a href="/" class={linkClass("/")} style={linkStyle("/")}>Profile <span class="ml-2 text-[0.6rem] opacity-50">Ctrl/Alt+1</span></a>
+        <a href="/favourites" class={linkClass("/favourites")} style={linkStyle("/favourites")}>Favourites <span class="ml-2 text-[0.6rem] opacity-50">Ctrl/Alt+2</span></a>
+        <a href="/export" class={linkClass("/export")} style={linkStyle("/export")}>Export Data <span class="ml-2 text-[0.6rem] opacity-50">Ctrl/Alt+3</span></a>
+        <a href="/account" class={linkClass("/account")} style={linkStyle("/account")}>Account <span class="ml-2 text-[0.6rem] opacity-50">Ctrl/Alt+4</span></a>
       </nav>
       <button
         onClick={logout}

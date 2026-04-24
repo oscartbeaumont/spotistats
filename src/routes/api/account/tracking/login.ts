@@ -1,5 +1,6 @@
 import type { APIEvent } from "@solidjs/start/server";
-import { cookie, getTrackingEnv, json, randomState, trackingRedirectUri } from "~/lib/server/spotify-tracking";
+import { env } from "cloudflare:workers";
+import { assertTrackingBindings, cookie, json, originFromRequest, randomState, trackingRedirectUri } from "~/lib/server/spotify-tracking";
 
 const scopes = [
   "user-read-email",
@@ -7,8 +8,25 @@ const scopes = [
 ];
 
 export async function GET(event: APIEvent) {
-  const env = getTrackingEnv();
-  if (!env) return json({ error: "Cloudflare environment is unavailable" }, { status: 500 });
+  try {
+    assertTrackingBindings();
+  } catch (error) {
+    return json({ error: String(error) }, { status: 503 });
+  }
+
+  const requestUrl = new URL(event.request.url);
+  const normalizedOrigin = originFromRequest(event.request);
+  if (requestUrl.origin !== normalizedOrigin) {
+    const normalizedUrl = new URL(event.request.url);
+    const origin = new URL(normalizedOrigin);
+    normalizedUrl.protocol = origin.protocol;
+    normalizedUrl.hostname = origin.hostname;
+    normalizedUrl.port = origin.port;
+    return new Response(null, {
+      status: 302,
+      headers: { Location: normalizedUrl.toString() },
+    });
+  }
 
   const state = randomState();
   const params = new URLSearchParams({

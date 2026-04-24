@@ -1,7 +1,12 @@
 // @refresh reload
 import { createHandler, StartServer } from "@solidjs/start/server";
+import {
+  enqueueDueTrackingUsers,
+  SpotifySyncMessage,
+  syncSpotifyUser,
+} from "./lib/server/spotify-tracking";
 
-export default createHandler(() => (
+const handler = createHandler(() => (
   <StartServer
     document={({ assets, children, scripts }) => (
       <html lang="en">
@@ -26,3 +31,19 @@ export default createHandler(() => (
     )}
   />
 ));
+
+console.log("BOOT", handler); // TODO
+
+export default {
+  ...handler,
+  ...({
+    async scheduled() {
+      await enqueueDueTrackingUsers(100);
+    },
+    async queue(batch) {
+      for (const message of batch.messages) {
+        await syncSpotifyUser(message.body.spotifyUserId);
+      }
+    },
+  } satisfies ExportedHandler<Env, SpotifySyncMessage>),
+};

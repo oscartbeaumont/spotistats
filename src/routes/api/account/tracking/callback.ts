@@ -1,28 +1,53 @@
 import type { APIEvent } from "@solidjs/start/server";
-import { clearCookie, enableTracking, exchangeTrackingCode, getTrackingEnv, json, parseCookie } from "~/lib/server/spotify-tracking";
+import { assertTrackingBindings, clearCookie, enableTracking, exchangeTrackingCode, json, parseCookie } from "~/lib/server/spotify-tracking";
+
+function failedLocation(reason: string) {
+  return `/account?tracking=failed&reason=${encodeURIComponent(reason)}`;
+}
 
 export async function GET(event: APIEvent) {
-  const env = getTrackingEnv();
-  if (!env) return json({ error: "Cloudflare environment is unavailable" }, { status: 500 });
+  try {
+    assertTrackingBindings();
+  } catch (error) {
+    return new Response(null, {
+      status: 302,
+      headers: {
+        Location: failedLocation(error instanceof Error ? error.message : String(error)),
+        "Set-Cookie": clearCookie("spotify_tracking_state"),
+      },
+    });
+  }
 
   const url = new URL(event.request.url);
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
   const expectedState = parseCookie(event.request, "spotify_tracking_state");
+  const spotifyError = url.searchParams.get("error");
 
-  if (!code || !state || state !== expectedState) {
+  if (spotifyError) {
     return new Response(null, {
       status: 302,
       headers: {
-        Location: "/account?tracking=failed",
+        Location: failedLocation(spotifyError),
+        "Set-Cookie": clearCookie("spotify_tracking_state"),
+      },
+    });
+  }
+
+  if (!code || !state || state !== expectedState) {
+    const reason = !code ? "missing_code" : !state ? "missing_state" : !expectedState ? "missing_state_cookie" : "state_mismatch";
+    return new Response(null, {
+      status: 302,
+      headers: {
+        Location: failedLocation(reason),
         "Set-Cookie": clearCookie("spotify_tracking_state"),
       },
     });
   }
 
   try {
-    const token = await exchangeTrackingCode(env, event.request, code);
-    await enableTracking(env, token);
+    const token = await exchangeTrackingCode(event.request, code);
+    await enableTracking(token);
     return new Response(null, {
       status: 302,
       headers: {
@@ -35,7 +60,7 @@ export async function GET(event: APIEvent) {
     return new Response(null, {
       status: 302,
       headers: {
-        Location: "/account?tracking=failed",
+        Location: failedLocation(error instanceof Error ? error.message : String(error)),
         "Set-Cookie": clearCookie("spotify_tracking_state"),
       },
     });

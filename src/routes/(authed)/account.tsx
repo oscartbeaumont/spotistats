@@ -2,6 +2,7 @@ import { Title } from "@solidjs/meta";
 import { createQuery } from "@tanstack/solid-query";
 import { For, Show, createSignal } from "solid-js";
 import { isServer } from "solid-js/web";
+import { useLocation } from "@solidjs/router";
 import { accessToken } from "~/lib/storage";
 
 type TrackingStatus = {
@@ -28,7 +29,10 @@ function formatDate(value: number | string | null) {
 }
 
 export default function AccountPage() {
+  const location = useLocation();
   const [busy, setBusy] = createSignal(false);
+  const trackingReason = () =>
+    new URLSearchParams(location.search).get("reason");
   const status = createQuery(() => ({
     queryKey: ["account", "tracking", accessToken()],
     enabled: !isServer && !!accessToken(),
@@ -36,7 +40,20 @@ export default function AccountPage() {
       const res = await fetch("/api/account/tracking", {
         headers: { Authorization: accessToken() ?? "" },
       });
-      if (!res.ok) throw new Error(`Tracking status failed: ${res.status}`);
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({
+          error: `Tracking status failed: ${res.status}`,
+        }))) as { error?: string };
+        return {
+          enabled: false,
+          consentedAt: null,
+          disabledAt: null,
+          lastPlayedAtMs: null,
+          lastSuccessAt: null,
+          lastError: body.error ?? `Tracking status failed: ${res.status}`,
+          recent: [],
+        } satisfies TrackingStatus;
+      }
       return (await res.json()) as TrackingStatus;
     },
   }));
@@ -72,6 +89,17 @@ export default function AccountPage() {
           Server Sync
         </span>
       </div>
+
+      <Show when={trackingReason()}>
+        {(reason) => (
+          <pre
+            class="overflow-auto p-4 text-xs mb-6 text-red-600"
+            style="border: 4px solid #0a0a0a; background: #0a0a0a"
+          >
+            <samp>Failed to authenticate: {reason()}</samp>
+          </pre>
+        )}
+      </Show>
 
       <Show
         when={!status.isLoading}
