@@ -7,6 +7,7 @@ export const spotifyScopes = [
   "playlist-read-private",
   "playlist-read-collaborative",
   "user-top-read",
+  "user-read-email",
   "user-read-recently-played",
 ];
 

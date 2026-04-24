@@ -30,6 +30,7 @@
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.33.1",
     "@cloudflare/workers-types": "^4.20260423.1",
+    "typescript": "^6.0.3",
     "wrangler": "^4.84.1"
   }
 }

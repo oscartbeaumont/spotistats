@@ -1,13 +1,16 @@
 import { Title } from "@solidjs/meta";
 import { useNavigate } from "@solidjs/router";
 import { createQuery } from "@tanstack/solid-query";
+import posthog from "posthog-js";
 import { createSignal, onMount, Show } from "solid-js";
 import { isServer } from "solid-js/web";
 import { accessToken, linkToUri, profileCache, setProfileCache } from "~/lib/storage";
 import { hasSpotifyCallbackCode, useSpotifyFetch } from "~/lib/spotify";
 
 type SpotifyProfile = {
+  id: string;
   display_name: string;
+  email?: string;
   uri: string;
   external_urls: { spotify: string };
   followers: { total: number };
@@ -32,6 +35,7 @@ export default function Home() {
       if (cached?.displayName && cached.followers !== undefined) return cached;
 
       const data = await spotifyFetch<SpotifyProfile>("https://api.spotify.com/v1/me");
+      posthog.identify(data.id, { name: data.display_name, email: data.email });
       const next = {
         icon: data.images[0]?.url,
         url: linkToUri() ? data.uri : data.external_urls.spotify,
