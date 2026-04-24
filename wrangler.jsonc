@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "spotistats",
+  "main": "@solidjs/start/server/entry",
+  "compatibility_date": "2026-04-24",
+  "compatibility_flags": ["nodejs_compat"],
+  "route": {
+    "pattern": "spotistats.otbeaumont.me",
+    "custom_domain": true,
+  },
+  "observability": {
+    "enabled": true,
+  },
+}

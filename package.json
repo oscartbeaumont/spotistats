@@ -1,0 +1,28 @@
+{
+  "name": "spotistats",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "start": "vite start",
+    "preview": "pnpm run build && wrangler dev",
+    "deploy": "pnpm run build && wrangler deploy",
+    "cf-typegen": "wrangler types"
+  },
+  "dependencies": {
+    "@solidjs/meta": "^0.29.4",
+    "@solidjs/router": "^0.16.1",
+    "@solidjs/start": "https://pkg.pr.new/solidjs/solid-start/@solidjs/start@aaa5c51",
+    "solid-js": "^1.9.12",
+    "vite": "^8.0.10"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.33.1",
+    "@cloudflare/workers-types": "^4.20260423.1",
+    "wrangler": "^4.84.1"
+  }
+}
