@@ -1,5 +1,5 @@
 import { useNavigate } from "@solidjs/router";
-import { accessToken, clearStoredState, setAccessToken, setSpotifyError, stateToken, setStateToken } from "~/lib/storage";
+import { accessToken, clearStoredState, codeVerifier, setAccessToken, setCodeVerifier, setSpotifyError, stateToken, setStateToken } from "~/lib/storage";
 
 export const spotifyClientId = "1107a25b98c041bb90c9063553e5f1a8";
 export const spotifyScopes = [
@@ -10,36 +10,94 @@ export const spotifyScopes = [
   "user-read-recently-played",
 ];
 
-export function createLoginUrl(origin: string) {
+function base64UrlEncode(bytes: ArrayBuffer) {
+  return btoa(String.fromCharCode(...new Uint8Array(bytes)))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+function randomString(length: number) {
+  const possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
+  const values = crypto.getRandomValues(new Uint8Array(length));
+  return Array.from(values, value => possible[value % possible.length]).join("");
+}
+
+async function createPkceChallenge(verifier: string) {
+  const data = new TextEncoder().encode(verifier);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return base64UrlEncode(digest);
+}
+
+function spotifyRedirectOrigin(origin: string) {
+  const url = new URL(origin);
+  if (url.hostname === "localhost") url.hostname = "127.0.0.1";
+  return url.origin;
+}
+
+export async function createLoginUrl(origin: string) {
   const token = Math.random().toString(36).slice(2);
+  const verifier = randomString(96);
+  const redirectOrigin = spotifyRedirectOrigin(origin);
   setStateToken(token);
+  setCodeVerifier(verifier);
 
   const params = new URLSearchParams({
     client_id: spotifyClientId,
-    response_type: "token",
-    redirect_uri: origin,
+    response_type: "code",
+    redirect_uri: redirectOrigin,
     state: token,
     scope: spotifyScopes.join(" "),
+    code_challenge_method: "S256",
+    code_challenge: await createPkceChallenge(verifier),
   });
 
   return `https://accounts.spotify.com/authorize?${params.toString()}`;
 }
 
-export function consumeSpotifyCallbackHash() {
-  if (!window.location.hash) return false;
-
-  const params = new URLSearchParams(window.location.hash.slice(1));
-  const token = params.get("access_token");
-  const type = params.get("token_type");
+export async function consumeSpotifyCallback() {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get("code");
   const returnedState = params.get("state");
 
-  if (!token || !type) return false;
+  if (!code) return false;
 
-  if (returnedState === stateToken()) {
-    setAccessToken(`${type} ${token}`);
+  if (returnedState !== stateToken() || !codeVerifier()) {
+    setStateToken(null);
+    setCodeVerifier(null);
+    history.replaceState(null, "", window.location.pathname || "/");
+    return false;
   }
 
+  const body = new URLSearchParams({
+    client_id: spotifyClientId,
+    grant_type: "authorization_code",
+    code,
+    redirect_uri: spotifyRedirectOrigin(window.location.origin),
+    code_verifier: codeVerifier() ?? "",
+  });
+
+  const res = await fetch("https://accounts.spotify.com/api/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+  });
+
+  if (!res.ok) {
+    setSpotifyError({
+      title: `${res.status}: Spotify Login Failed`,
+      description: "Spotify rejected the authorization code exchange. Please try logging in again.",
+      code: JSON.stringify(await res.json().catch(() => ({ status: res.status })), null, 2),
+    });
+    history.replaceState(null, "", "/error");
+    return true;
+  }
+
+  const token = await res.json() as { token_type: string; access_token: string };
+  setAccessToken(`${token.token_type} ${token.access_token}`);
+
   setStateToken(null);
+  setCodeVerifier(null);
   history.replaceState(null, "", window.location.pathname || "/");
   return true;
 }

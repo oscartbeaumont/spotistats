@@ -14,6 +14,11 @@ export const [stateToken, setStateToken] = makePersisted(createSignal<string | n
   storage,
 });
 
+export const [codeVerifier, setCodeVerifier] = makePersisted(createSignal<string | null>(null), {
+  name: "auth_code_verifier",
+  storage,
+});
+
 export const [linkToUri, setLinkToUri] = makePersisted(createSignal(false), {
   name: "link_to_uri",
   storage,
@@ -37,6 +42,7 @@ export const [topItemsCache, setTopItemsCache] = makePersisted(createSignal<Reco
 export function clearStoredState() {
   setAccessToken(null);
   setStateToken(null);
+  setCodeVerifier(null);
   setSpotifyError(null);
   setProfileCache(null);
   setTopItemsCache({});
