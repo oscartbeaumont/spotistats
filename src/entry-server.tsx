@@ -5,7 +5,7 @@ import {
   enqueueDueTrackingUsers,
   SpotifySyncMessage,
   syncSpotifyUser,
-} from "./lib/server/spotify-tracking";
+} from "./lib/server/spotify-stats";
 
 const handler = createHandler(() => (
   <StartServer

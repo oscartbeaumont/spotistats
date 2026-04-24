@@ -1,23 +1,11 @@
 import type { APIEvent } from "@solidjs/start/server";
-import { assertTrackingBindings, clearCookie, enableTracking, exchangeTrackingCode, parseCookie } from "~/lib/server/spotify-tracking";
+import { clearCookie, enableTracking, exchangeTrackingCode, parseCookie } from "~/lib/server/spotify-stats";
 
 function failedLocation(reason: string) {
   return `/account?stats=failed&reason=${encodeURIComponent(reason)}`;
 }
 
 export async function GET(event: APIEvent) {
-  try {
-    assertTrackingBindings();
-  } catch (error) {
-    return new Response(null, {
-      status: 302,
-      headers: {
-        Location: failedLocation(error instanceof Error ? error.message : String(error)),
-        "Set-Cookie": clearCookie("spotify_stats_state"),
-      },
-    });
-  }
-
   const url = new URL(event.request.url);
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");

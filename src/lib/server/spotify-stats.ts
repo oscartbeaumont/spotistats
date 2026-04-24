@@ -37,26 +37,6 @@ type PlayHistory = {
   };
 };
 
-export function assertTrackingBindings() {
-  if (!env.DB)
-    throw new Error(
-      "Missing Cloudflare D1 binding DB. Run this through wrangler dev/preview or deploy to Cloudflare.",
-    );
-  if (!env.SPOTIFY_SYNC_QUEUE)
-    throw new Error(
-      "Missing Cloudflare Queue binding SPOTIFY_SYNC_QUEUE. Run this through wrangler dev/preview or deploy to Cloudflare.",
-    );
-  if (!env.SPOTIFY_CLIENT_SECRET)
-    throw new Error("Missing SPOTIFY_CLIENT_SECRET secret.");
-}
-
-export function assertTrackingReadBindings() {
-  if (!env.DB)
-    throw new Error(
-      "Missing Cloudflare D1 binding DB. Run this through wrangler dev/preview or deploy to Cloudflare.",
-    );
-}
-
 export function json(data: unknown, init?: ResponseInit) {
   return new Response(JSON.stringify(data), {
     ...init,

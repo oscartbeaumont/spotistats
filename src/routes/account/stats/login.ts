@@ -1,16 +1,10 @@
 import type { APIEvent } from "@solidjs/start/server";
 import { env } from "cloudflare:workers";
-import { assertTrackingBindings, cookie, json, originFromRequest, randomState, trackingRedirectUri } from "~/lib/server/spotify-tracking";
+import { cookie, originFromRequest, randomState, trackingRedirectUri } from "~/lib/server/spotify-stats";
 
 const scopes = ["user-read-email", "user-read-recently-played"];
 
 export async function GET(event: APIEvent) {
-  try {
-    assertTrackingBindings();
-  } catch (error) {
-    return json({ error: String(error) }, { status: 503 });
-  }
-
   const requestUrl = new URL(event.request.url);
   const normalizedOrigin = originFromRequest(event.request);
   if (requestUrl.origin !== normalizedOrigin) {

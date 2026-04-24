@@ -1,9 +1,12 @@
-import { type InfiniteData, mutationOptions, queryOptions } from "@tanstack/solid-query";
+import {
+  type InfiniteData,
+  mutationOptions,
+  queryOptions,
+} from "@tanstack/solid-query";
 import posthog from "posthog-js";
 import { isServer } from "solid-js/web";
 import {
   authStore,
-  clearStoredState,
   setAuthStore,
   type ProfileCache,
 } from "~/lib/storage";
@@ -271,7 +274,11 @@ export async function spotifyFetch<T>(
 
     if ([400, 403, 404, 500, 502, 503].includes(res.status)) {
       const body = await res.json().catch(() => ({ status: res.status }));
-      console.error(statusTitle(res.status), statusDescription(res.status), body);
+      console.error(
+        statusTitle(res.status),
+        statusDescription(res.status),
+        body,
+      );
       throw new SpotifyApiError(res.status, body);
     }
 
@@ -294,28 +301,31 @@ export const profileQueryOptions = queryOptions({
   queryKey: ["spotify", "profile"],
   enabled: !isServer && authStore().status === "authenticated",
   queryFn: async () => {
-      const store = authStore();
-      const data = await spotifyFetch<SpotifyProfile>(
-        "https://api.spotify.com/v1/me",
-      );
-      posthog.identify(data.id, {
-        username: data.display_name,
-        email: data.email,
-      });
-      const next = {
-        icon: data.images[0]?.url,
-        url: store.status === "authenticated" && store.linkToUri
+    const store = authStore();
+    const data = await spotifyFetch<SpotifyProfile>(
+      "https://api.spotify.com/v1/me",
+    );
+    posthog.identify(data.id, {
+      username: data.display_name,
+      email: data.email,
+    });
+    const next = {
+      icon: data.images[0]?.url,
+      url:
+        store.status === "authenticated" && store.linkToUri
           ? data.uri
           : data.external_urls.spotify,
-        displayName: data.display_name,
-        email: data.email,
-        followers: data.followers.total,
-      } satisfies ProfileCache;
-      setAuthStore((current) =>
-        current.status === "authenticated" ? { ...current, profile: next } : current,
-      );
-      return next;
-    },
+      displayName: data.display_name,
+      email: data.email,
+      followers: data.followers.total,
+    } satisfies ProfileCache;
+    setAuthStore((current) =>
+      current.status === "authenticated"
+        ? { ...current, profile: next }
+        : current,
+    );
+    return next;
+  },
 });
 
 export function favouritesQueryOptions(
@@ -323,39 +333,55 @@ export function favouritesQueryOptions(
   range: "long" | "medium" | "short",
   enabled = true,
 ) {
-  const timeRange = `${range}_term` as "long_term" | "medium_term" | "short_term";
+  const timeRange = `${range}_term` as
+    | "long_term"
+    | "medium_term"
+    | "short_term";
   return {
     queryKey: ["spotify", "favourites", kind, range],
     enabled: !isServer && authStore().status === "authenticated" && enabled,
-    initialPageParam: kind === "tracks"
-      ? `https://api.spotify.com/v1/me/top/tracks?limit=50&time_range=${timeRange}`
-      : "https://api.spotify.com/v1/me/albums?limit=50",
-    placeholderData: (previous: InfiniteData<SpotifyPage<SpotifyItem>, string> | undefined) => previous,
+    initialPageParam:
+      kind === "tracks"
+        ? `https://api.spotify.com/v1/me/top/tracks?limit=50&time_range=${timeRange}`
+        : "https://api.spotify.com/v1/me/albums?limit=50",
+    placeholderData: (
+      previous: InfiniteData<SpotifyPage<SpotifyItem>, string> | undefined,
+    ) => previous,
     queryFn: async ({ pageParam }: { pageParam: string }) => {
-      if (kind === "tracks") return spotifyFetch<SpotifyPage<SpotifyItem>>(pageParam as string);
-      const data = await spotifyFetch<SpotifyPage<SavedAlbumItem>>(pageParam as string);
-      return { ...data, items: data.items.map((item) => item.album) } satisfies SpotifyPage<SpotifyItem>;
+      if (kind === "tracks")
+        return spotifyFetch<SpotifyPage<SpotifyItem>>(pageParam as string);
+      const data = await spotifyFetch<SpotifyPage<SavedAlbumItem>>(
+        pageParam as string,
+      );
+      return {
+        ...data,
+        items: data.items.map((item) => item.album),
+      } satisfies SpotifyPage<SpotifyItem>;
     },
-    getNextPageParam: (lastPage: SpotifyPage<SpotifyItem>) => lastPage.next || undefined,
+    getNextPageParam: (lastPage: SpotifyPage<SpotifyItem>) =>
+      lastPage.next || undefined,
   };
 }
 
 export const playlistsQueryOptions = queryOptions({
-    queryKey: ["spotify", "playlists"],
-    enabled: !isServer && authStore().status === "authenticated",
-    queryFn: async () => {
-      let url: string | null = "https://api.spotify.com/v1/me/playlists?limit=50";
-      let value: Playlist[] = [];
-      while (url) {
-        const data: SpotifyPage<Playlist> = await spotifyFetch(url);
-        value = value.concat(data.items);
-        url = data.next;
-      }
-      return [{ name: "Liked Songs", public: true, images: [] }, ...value];
-    },
+  queryKey: ["spotify", "playlists"],
+  enabled: !isServer && authStore().status === "authenticated",
+  queryFn: async () => {
+    let url: string | null = "https://api.spotify.com/v1/me/playlists?limit=50";
+    let value: Playlist[] = [];
+    while (url) {
+      const data: SpotifyPage<Playlist> = await spotifyFetch(url);
+      value = value.concat(data.items);
+      url = data.next;
+    }
+    return [{ name: "Liked Songs", public: true, images: [] }, ...value];
+  },
 });
 
-async function accountStatsFetch<T>(path = "/api/account/stats", options?: RequestInit): Promise<T> {
+async function accountStatsFetch<T>(
+  path = "/api/account/stats",
+  options?: RequestInit,
+): Promise<T> {
   const store = authStore();
   if (store.status !== "authenticated") throw new SpotifyUnauthenticatedError();
 
@@ -368,7 +394,9 @@ async function accountStatsFetch<T>(path = "/api/account/stats", options?: Reque
   });
   if (res.status === 401) throw new SpotifyUnauthenticatedError();
   if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: `Stats request failed: ${res.status}` }));
+    const body = await res
+      .json()
+      .catch(() => ({ error: `Stats request failed: ${res.status}` }));
     throw new SpotifyApiError(res.status, body);
   }
   return (await res.json()) as T;
@@ -379,9 +407,13 @@ async function fetchTrackingStatus() {
     return await accountStatsFetch<TrackingStatus>();
   } catch (error) {
     if (error instanceof SpotifyUnauthenticatedError) throw error;
-    const message = error instanceof SpotifyApiError && typeof error.body === "object" && error.body && "error" in error.body
-      ? String(error.body.error)
-      : String(error);
+    const message =
+      error instanceof SpotifyApiError &&
+      typeof error.body === "object" &&
+      error.body &&
+      "error" in error.body
+        ? String(error.body.error)
+        : String(error);
     return {
       enabled: false,
       consentedAt: null,
@@ -397,54 +429,46 @@ async function fetchTrackingStatus() {
 }
 
 export const statsStatusQueryOptions = queryOptions({
-    queryKey: ["account", "stats"],
-    enabled: !isServer && authStore().status === "authenticated",
-    refetchInterval: (query) => {
-      const data = query.state.data as TrackingStatus | undefined;
-      if (data?.enabled && data.recent.length === 0) return 3000;
-      return 20000;
-    },
-    queryFn: fetchTrackingStatus,
+  queryKey: ["account", "stats"],
+  enabled: !isServer && authStore().status === "authenticated",
+  refetchInterval: (query) => {
+    const data = query.state.data as TrackingStatus | undefined;
+    if (data?.enabled && data.recent.length === 0) return 3000;
+    return 20000;
+  },
+  queryFn: fetchTrackingStatus,
 });
 
 export const refreshListeningStatsMutationOptions = mutationOptions({
-  mutationFn: () => accountStatsFetch<{ queued: boolean }>("/api/account/stats", { method: "POST" }),
+  mutationFn: () =>
+    accountStatsFetch<{ queued: boolean }>("/api/account/stats", {
+      method: "POST",
+    }),
 });
 
 export const disableListeningStatsMutationOptions = mutationOptions({
-  mutationFn: () => accountStatsFetch<TrackingStatus>("/api/account/stats", { method: "DELETE" }),
+  mutationFn: () =>
+    accountStatsFetch<TrackingStatus>("/api/account/stats", {
+      method: "DELETE",
+    }),
 });
 
 export const deleteListeningStatsMutationOptions = mutationOptions({
-  mutationFn: () => accountStatsFetch<TrackingStatus>("/api/account/stats?all=1", { method: "DELETE" }),
+  mutationFn: () =>
+    accountStatsFetch<TrackingStatus>("/api/account/stats?all=1", {
+      method: "DELETE",
+    }),
 });
 
 export const currentlyPlayingQueryOptions = queryOptions({
-    queryKey: ["spotify", "currently-playing"],
-    enabled: !isServer && authStore().status === "authenticated",
-    refetchInterval: 5000,
-    queryFn: async () => {
-      const data = await spotifyFetch<CurrentlyPlaying | undefined>(
-        "https://api.spotify.com/v1/me/player/currently-playing",
-      );
-      if (!data || data.currently_playing_type !== "track") return null;
-      return data;
-    },
-});
-
-export async function resetBrowserState() {
-  if ("serviceWorker" in navigator) {
-    const registrations = await navigator.serviceWorker.getRegistrations();
-    await Promise.all(
-      registrations.map((registration) => registration.unregister()),
+  queryKey: ["spotify", "currently-playing"],
+  enabled: !isServer && authStore().status === "authenticated",
+  refetchInterval: 5000,
+  queryFn: async () => {
+    const data = await spotifyFetch<CurrentlyPlaying | undefined>(
+      "https://api.spotify.com/v1/me/player/currently-playing",
     );
-  }
-
-  if ("caches" in window) {
-    const keys = await window.caches.keys();
-    await Promise.all(keys.map((key) => window.caches.delete(key)));
-  }
-
-  clearStoredState();
-  localStorage.clear();
-}
+    if (!data || data.currently_playing_type !== "track") return null;
+    return data;
+  },
+});

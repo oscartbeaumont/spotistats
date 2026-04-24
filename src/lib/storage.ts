@@ -36,20 +36,7 @@ export type AuthStore =
 export const [authStore, setAuthStore] = makePersisted(
   createSignal<AuthStore>({ status: "empty" }),
   {
-    name: "auth_store",
+    name: "auth",
     storage,
   },
 );
-
-export const [topItemsCache, setTopItemsCache] = makePersisted(
-  createSignal<Record<string, unknown[]>>({}),
-  {
-    name: "top_items_cache",
-    storage,
-  },
-);
-
-export function clearStoredState() {
-  setAuthStore({ status: "empty" });
-  setTopItemsCache({});
-}

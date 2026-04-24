@@ -153,6 +153,8 @@ export function FavouritesPage(props: { kind: FavouritesKind }) {
   );
   const showBottomPending = () =>
     favourites.isLoading || (atBottom() && favourites.isFetchingNextPage);
+  const showSwitchingPending = () =>
+    favourites.isFetching && !favourites.isFetchingNextPage;
   const selectedItem = () => items()[selectedIndex()];
 
   function itemUrl(item: SpotifyItem) {
@@ -325,7 +327,9 @@ export function FavouritesPage(props: { kind: FavouritesKind }) {
         <span>T Toggle Type</span>
         <span>1/2/3 Range</span>
       </div>
-      <div>
+      <div
+        class={`transition-opacity ${showSwitchingPending() ? "opacity-45" : "opacity-100"}`}
+      >
         <For
           each={items()}
           fallback={

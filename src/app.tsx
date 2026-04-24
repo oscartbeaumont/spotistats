@@ -111,17 +111,26 @@ export function AppError(props: { error?: Error } = {}) {
       <pre class="overflow-auto p-4 text-xs border-4 border-[#0a0a0a] bg-[#0a0a0a] text-[#f0ede8]">
         <samp>{errorText()}</samp>
       </pre>
-      <button
-        type="button"
-        onClick={async () => {
-          await navigator.clipboard.writeText(errorText());
-          setCopied(true);
-          window.setTimeout(() => setCopied(false), 1500);
-        }}
-        class="mt-4 border-4 border-[#0a0a0a] px-4 py-2 text-xs font-black uppercase tracking-[0.16em] hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
-      >
-        {copied() ? "Copied" : "Copy Error"}
-      </button>
+      <div class="mt-4 flex flex-wrap gap-3">
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          class="border-4 border-[#0a0a0a] px-4 py-2 text-xs font-black uppercase tracking-[0.16em] hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
+        >
+          Retry
+        </button>
+        <button
+          type="button"
+          onClick={async () => {
+            await navigator.clipboard.writeText(errorText());
+            setCopied(true);
+            window.setTimeout(() => setCopied(false), 1500);
+          }}
+          class="border-4 border-[#0a0a0a] px-4 py-2 text-xs font-black uppercase tracking-[0.16em] hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
+        >
+          {copied() ? "Copied" : "Copy Error"}
+        </button>
+      </div>
     </main>
   );
 }

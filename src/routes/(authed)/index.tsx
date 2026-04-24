@@ -1,7 +1,9 @@
+import { createShortcut } from "@solid-primitives/keyboard";
 import { Title } from "@solidjs/meta";
 import { A } from "@solidjs/router";
 import { createMutation, createQuery } from "@tanstack/solid-query";
 import { createSignal, For, onMount, Show } from "solid-js";
+import { isEditableShortcutTarget } from "~/lib/keyboard";
 import { authStore } from "~/lib/storage";
 import {
   currentlyPlayingQueryOptions,
@@ -18,7 +20,21 @@ function formatDate(value: number | string | null) {
 export default function Page() {
   const [hydrated, setHydrated] = createSignal(false);
 
-  onMount(() => setHydrated(true));
+  onMount(() => {
+    setHydrated(true);
+
+    createShortcut(
+      ["r"],
+      (event) => {
+        if (isEditableShortcutTarget(event)) return;
+        if (!stats.data?.enabled || refreshListening.isPending) return;
+
+        event?.preventDefault();
+        refreshStats();
+      },
+      { preventDefault: false, requireReset: true },
+    );
+  });
 
   const profile = createQuery(() => profileQueryOptions);
   const stats = createQuery(() => statsStatusQueryOptions);
@@ -32,6 +48,11 @@ export default function Page() {
     const store = authStore();
     return profile.data ?? (hydrated() && store.status === "authenticated" ? store.profile : null);
   };
+
+  function refreshStats() {
+    if (refreshListening.isPending || !stats.data?.enabled) return;
+    refreshListening.mutate();
+  }
 
   return (
     <main class="app-main flex-1 p-8 md:p-16">
@@ -126,10 +147,11 @@ export default function Page() {
                 <button
                   type="button"
                   disabled={refreshListening.isPending || !stats.data?.enabled}
-                  onClick={() => refreshListening.mutate()}
+                  onClick={refreshStats}
                   class="shrink-0 border-[3px] border-[#0a0a0a] px-3 py-2 text-[0.65rem] font-black uppercase tracking-widest transition disabled:opacity-40 hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
+                  title="Shortcut: R"
                 >
-                  {refreshListening.isPending ? "Queued_" : "Refresh"}
+                  {refreshListening.isPending ? "Queued_" : "Refresh (R)"}
                 </button>
               </div>
               <Show

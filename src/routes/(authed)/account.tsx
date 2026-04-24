@@ -1,7 +1,9 @@
+import { createShortcut } from "@solid-primitives/keyboard";
 import { Title } from "@solidjs/meta";
 import { createMutation, createQuery } from "@tanstack/solid-query";
 import { Show, createSignal, onMount } from "solid-js";
 import { useLocation, useNavigate } from "@solidjs/router";
+import { isEditableShortcutTarget } from "~/lib/keyboard";
 import {
   deleteListeningStatsMutationOptions,
   disableListeningStatsMutationOptions,
@@ -31,7 +33,24 @@ export default function AccountPage() {
 
   onMount(() => {
     if (location.search) navigate("/account", { replace: true });
+
+    createShortcut(
+      ["Shift", "D"],
+      (event) => {
+        if (isEditableShortcutTarget(event)) return;
+        if (!status.data?.enabled || disableStatsMutation.isPending) return;
+
+        event?.preventDefault();
+        disableStats();
+      },
+      { preventDefault: false, requireReset: true },
+    );
   });
+
+  function disableStats() {
+    if (disableStatsMutation.isPending) return;
+    disableStatsMutation.mutate();
+  }
 
   function deleteAccountData() {
     if (deleteStatsMutation.isPending) return;
@@ -150,10 +169,11 @@ export default function AccountPage() {
                   <button
                     type="button"
                     disabled={disableStatsMutation.isPending}
-                    onClick={() => disableStatsMutation.mutate()}
+                    onClick={disableStats}
                     class="font-black text-sm uppercase tracking-widest py-4 px-8 transition disabled:opacity-50 border-4 border-[#0a0a0a] hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
+                    title="Shortcut: Shift+D"
                   >
-                    {disableStatsMutation.isPending ? "Disabling_" : "Disable Stats"}
+                    {disableStatsMutation.isPending ? "Disabling_" : "Disable Stats (Shift+D)"}
                   </button>
                 </div>
               </Show>

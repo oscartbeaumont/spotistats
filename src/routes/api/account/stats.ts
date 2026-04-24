@@ -1,6 +1,6 @@
 import type { APIEvent } from "@solidjs/start/server";
 import { waitUntil } from "cloudflare:workers";
-import { assertTrackingReadBindings, deleteAccountData, disableTracking, enqueueSpotifyUserStatsRefresh, json, markStatsRead, spotifyProfileFromAccessToken, trackingStatus } from "~/lib/server/spotify-tracking";
+import { deleteAccountData, disableTracking, enqueueSpotifyUserStatsRefresh, json, markStatsRead, spotifyProfileFromAccessToken, trackingStatus } from "~/lib/server/spotify-stats";
 
 async function currentSpotifyUserId(event: APIEvent) {
   const auth = event.request.headers.get("Authorization");
@@ -10,12 +10,6 @@ async function currentSpotifyUserId(event: APIEvent) {
 }
 
 export async function GET(event: APIEvent) {
-  try {
-    assertTrackingReadBindings();
-  } catch (error) {
-    return json({ error: String(error) }, { status: 503 });
-  }
-
   const spotifyUserId = await currentSpotifyUserId(event).catch(() => null);
   if (!spotifyUserId) return json({ error: "Unauthorized" }, { status: 401 });
 
@@ -24,12 +18,6 @@ export async function GET(event: APIEvent) {
 }
 
 export async function DELETE(event: APIEvent) {
-  try {
-    assertTrackingReadBindings();
-  } catch (error) {
-    return json({ error: String(error) }, { status: 503 });
-  }
-
   const spotifyUserId = await currentSpotifyUserId(event).catch(() => null);
   if (!spotifyUserId) return json({ error: "Unauthorized" }, { status: 401 });
 
@@ -44,12 +32,6 @@ export async function DELETE(event: APIEvent) {
 }
 
 export async function POST(event: APIEvent) {
-  try {
-    assertTrackingReadBindings();
-  } catch (error) {
-    return json({ error: String(error) }, { status: 503 });
-  }
-
   const spotifyUserId = await currentSpotifyUserId(event).catch(() => null);
   if (!spotifyUserId) return json({ error: "Unauthorized" }, { status: 401 });
 
