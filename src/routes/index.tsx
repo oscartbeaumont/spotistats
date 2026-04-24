@@ -1,6 +1,6 @@
 import { Title } from "@solidjs/meta";
 import { useNavigate } from "@solidjs/router";
-import { createResource, onMount, Show } from "solid-js";
+import { createResource, createSignal, onMount, Show } from "solid-js";
 import { isServer } from "solid-js/web";
 import { accessToken, linkToUri, profileCache, setProfileCache } from "~/lib/storage";
 import { hasSpotifyCallbackCode, useSpotifyFetch } from "~/lib/spotify";
@@ -16,13 +16,15 @@ type SpotifyProfile = {
 export default function Home() {
   const navigate = useNavigate();
   const spotifyFetch = useSpotifyFetch();
+  const [mounted, setMounted] = createSignal(false);
 
   onMount(() => {
+    setMounted(true);
     if (!accessToken() && !hasSpotifyCallbackCode()) navigate("/login", { replace: true });
   });
 
   const [profile] = createResource(
-    () => (!isServer && accessToken() ? accessToken() : null),
+    () => (!isServer && mounted() && accessToken() ? accessToken() : null),
     async () => {
       const cached = profileCache();
       if (cached?.displayName && cached.followers !== undefined) return cached;
@@ -39,7 +41,7 @@ export default function Home() {
     },
   );
 
-  const current = () => profile() ?? profileCache();
+  const current = () => mounted() ? profile() ?? profileCache() : null;
 
   return (
     <main class="mx-auto grid min-h-[70vh] max-w-3xl place-items-center px-5 text-center">

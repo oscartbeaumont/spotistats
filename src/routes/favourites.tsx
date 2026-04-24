@@ -3,7 +3,7 @@ import { useNavigate } from "@solidjs/router";
 import { createEffect, createSignal, For, onCleanup, onMount, Show, untrack } from "solid-js";
 import { isServer } from "solid-js/web";
 import { ItemCard } from "~/components/ItemCard";
-import { accessToken, linkToUri, setTopItemsCache, topItemsCache } from "~/lib/storage";
+import { accessToken, linkToUri } from "~/lib/storage";
 import { hasSpotifyCallbackCode, useSpotifyFetch } from "~/lib/spotify";
 
 type TimeRange = "long_term" | "medium_term" | "short_term";
@@ -39,6 +39,7 @@ export default function Favourites() {
 
   onMount(() => {
     if (!accessToken() && !hasSpotifyCallbackCode()) navigate("/login", { replace: true });
+    localStorage.removeItem("top_items_cache");
 
     observer = new IntersectionObserver(entries => {
       setAtBottom(entries.some(entry => entry.isIntersecting));
@@ -66,13 +67,6 @@ export default function Favourites() {
     const key = cacheKey(kind, range);
     if (loadingByKey()[key] || completeByKey()[key]) return;
 
-    const cached = topItemsCache()[key] as SpotifyItem[] | undefined;
-    if (cached && !itemsByKey()[key]) {
-      setItemsByKey(value => ({ ...value, [key]: cached }));
-      setCompleteByKey(value => ({ ...value, [key]: true }));
-      return;
-    }
-
     if (kind === "artists" && !itemsByKey()[key] && await hasSaveData()) {
       setItemsByKey(value => ({ ...value, [key]: [] }));
       setCompleteByKey(value => ({ ...value, [key]: true }));
@@ -88,7 +82,6 @@ export default function Favourites() {
 
         setItemsByKey(value => ({ ...value, [key]: nextItems }));
         setNextByKey(value => ({ ...value, [key]: data.next }));
-        setTopItemsCache({ ...topItemsCache(), [key]: nextItems });
         url = data.next;
       }
       setCompleteByKey(value => ({ ...value, [key]: true }));

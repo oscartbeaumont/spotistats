@@ -1,32 +1,22 @@
-# SolidStart
+<h1 align="center">Spotistats</h1>
+<p align="center">
+    <img width="156" height="156" src="public/assets/logo-256.png"></img>
+</p>
+<p align="center">
+    Spotistats is a tool designed to analyse and backup your music on Spotify!
+    <br />
+    <a target="_blank" href="https://spotistats.otbeaumont.me">https://spotistats.otbeaumont.me</a>
+</p>
 
-Everything you need to build a Solid project, powered by [`solid-start`](https://start.solidjs.com);
+Previously [https://spotistats.js.org].
 
-## Creating a project
+This project is build using [Solid Start](https://start.solidjs.com), [TailwindCSS](https://tailwindcss.com) and is deployed to [Cloudflare](https://www.cloudflare.com).
 
-```bash
-# create a new project in the current directory
-npm init solid@latest
-
-# create a new project in my-app
-npm init solid@latest my-app
-```
-
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+# Usage
 
 ```bash
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
+git clone https://github.com/oscartbeaumont/spotistats
+cd spotistats/
+pnpm i
+pnpm dev
 ```
-
-## Building
-
-Solid apps are built with _presets_, which optimise your project for deployment to different environments.
-
-By default, `npm run build` will generate a Node app that you can run with `npm start`. To use a different preset, add it to the `devDependencies` in `package.json` and specify in your `app.config.js`.
-
-## This project was created with the [Solid CLI](https://github.com/solidjs-community/solid-cli)
