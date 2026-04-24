@@ -1,35 +1,32 @@
-<h1 align="center">Spotistats</h1>
-<p align="center">
-    <img width="156" height="156" src="assets/logo-256.png"></img>
-</p>
-<p align="center">
-    Spotistats is a tool designed to analyse and backup your music on Spotify!
-    <br />
-    <a target="_blank" href="https://spotistats.js.org">https://spotistats.js.org</a>
-</p>
+# SolidStart
 
-[![Netlify Status](https://api.netlify.com/api/v1/badges/e33e737f-b5dc-461b-a7ba-daf6386c8ed9/deploy-status)](https://app.netlify.com/sites/spotistats-app/deploys)
+Everything you need to build a Solid project, powered by [`solid-start`](https://start.solidjs.com);
 
-# Usage
+## Creating a project
 
 ```bash
-# npm install netlify-cli -g
-git clone https://github.com/oscartbeaumont/spotistats.git
-cd spotistats/
-make setup
-netlify dev
+# create a new project in the current directory
+npm init solid@latest
+
+# create a new project in my-app
+npm init solid@latest my-app
 ```
 
-# Analytics
+## Developing
 
-[Analytics Dashboard](https://plausible.otbeaumont.me/spotistats.js.org)
+Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
 
-# Credits
+```bash
+npm run dev
 
-This project is a rewritten version of [amaraliou/spotistats](https://github.com/amaraliou/spotistats) with added features including the whole app running in the browser instead of relying on a Go Lang backend.
+# or start the server and open the app in a new browser tab
+npm run dev -- --open
+```
 
-[Open Icons](https://www.useiconic.com/open) have also been used.
+## Building
 
-[Netlify](https://netlify.com) provides hosting for the website.
+Solid apps are built with _presets_, which optimise your project for deployment to different environments.
 
-[js.org](https://js.org/) provides domain name for the website.
+By default, `npm run build` will generate a Node app that you can run with `npm start`. To use a different preset, add it to the `devDependencies` in `package.json` and specify in your `app.config.js`.
+
+## This project was created with the [Solid CLI](https://github.com/solidjs-community/solid-cli)
