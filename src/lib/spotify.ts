@@ -102,6 +102,10 @@ export async function consumeSpotifyCallback() {
   return true;
 }
 
+export function hasSpotifyCallbackCode() {
+  return new URLSearchParams(window.location.search).has("code");
+}
+
 function statusDescription(status: number) {
   if (status === 400) return "This is probably being caused by either a bug in the application or a recent change to the Spotify API.";
   if (status === 403) return "This is probably being caused by a mismatch between the used endpoints and authorized scopes with the Spotify API.";
