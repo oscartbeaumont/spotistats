@@ -1,8 +1,0 @@
-.DS_Store
-/public/fonts/
-/public/jszip/
-/public/assets/
-/dist
-
-# Local Netlify folder
-.netlify

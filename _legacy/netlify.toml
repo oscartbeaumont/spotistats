@@ -1,6 +1,0 @@
-[build]
-publish = "dist"
-command = "make install-build-tools && make build"
-
-[dev]
-publish = "public"
