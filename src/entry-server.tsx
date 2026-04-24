@@ -32,18 +32,18 @@ const handler = createHandler(() => (
   />
 ));
 
-console.log("BOOT", handler); // TODO
+const cloudflare = {
+  async scheduled() {
+    await enqueueDueTrackingUsers(100);
+  },
+  async queue(batch) {
+    for (const message of batch.messages) {
+      await syncSpotifyUser(message.body.spotifyUserId);
+    }
+  },
+} satisfies ExportedHandler<Env, SpotifySyncMessage>;
 
 export default {
   ...handler,
-  ...({
-    async scheduled() {
-      await enqueueDueTrackingUsers(100);
-    },
-    async queue(batch) {
-      for (const message of batch.messages) {
-        await syncSpotifyUser(message.body.spotifyUserId);
-      }
-    },
-  } satisfies ExportedHandler<Env, SpotifySyncMessage>),
+  ...cloudflare,
 };
