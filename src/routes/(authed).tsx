@@ -1,9 +1,9 @@
 import { createShortcut } from "@solid-primitives/keyboard";
 import { useLocation, useNavigate } from "@solidjs/router";
-import { children, createEffect, createSignal, ErrorBoundary, onMount, Suspense } from "solid-js";
+import { children, createEffect, ErrorBoundary, onMount, Suspense } from "solid-js";
 import { isServer } from "solid-js/web";
 import { AppError } from "~/app";
-import { isEditableShortcutTarget, platformShortcutModifier } from "~/lib/keyboard";
+import { isEditableShortcutTarget } from "~/lib/keyboard";
 import { authStore, clearStoredState } from "~/lib/storage";
 import { hasSpotifyCallbackCode } from "~/lib/spotify";
 
@@ -11,7 +11,6 @@ export default function AuthedLayout(props: { children?: import("solid-js").JSX.
   const location = useLocation();
   const navigate = useNavigate();
   const resolvedChildren = children(() => props.children);
-  const [mod, setMod] = createSignal("Ctrl");
 
   const isActive = (href: string) =>
     href === "/"
@@ -31,8 +30,6 @@ export default function AuthedLayout(props: { children?: import("solid-js").JSX.
   });
 
   onMount(() => {
-    setMod(platformShortcutModifier());
-
     const openProfile = (event: KeyboardEvent | null) => {
       if (isEditableShortcutTarget(event)) return;
       event?.preventDefault();
@@ -83,10 +80,10 @@ export default function AuthedLayout(props: { children?: import("solid-js").JSX.
           SPOTISTATS
         </span>
         <nav class="flex flex-wrap gap-0">
-          <a href="/" class={linkClass("/")}>Profile <span class="ml-2 text-[0.6rem] opacity-50">{mod()}+1</span></a>
-          <a href="/favourites/tracks" class={linkClass("/favourites/tracks")}>Favourites <span class="ml-2 text-[0.6rem] opacity-50">{mod()}+2</span></a>
-          <a href="/export" class={linkClass("/export")}>Export Data <span class="ml-2 text-[0.6rem] opacity-50">{mod()}+3</span></a>
-          <a href="/account" class={linkClass("/account")}>Account <span class="ml-2 text-[0.6rem] opacity-50">{mod()}+4</span></a>
+          <a href="/" class={linkClass("/")}>Profile <span class="ml-2 text-[0.6rem] opacity-50">Alt+1</span></a>
+          <a href="/favourites/tracks" class={linkClass("/favourites/tracks")}>Favourites <span class="ml-2 text-[0.6rem] opacity-50">Alt+2</span></a>
+          <a href="/export" class={linkClass("/export")}>Export Data <span class="ml-2 text-[0.6rem] opacity-50">Alt+3</span></a>
+          <a href="/account" class={linkClass("/account")}>Account <span class="ml-2 text-[0.6rem] opacity-50">Alt+4</span></a>
         </nav>
         <button
           onClick={logout}

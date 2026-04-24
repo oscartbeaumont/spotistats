@@ -40,7 +40,9 @@ const cloudflare = {
   },
   async queue(batch) {
     await Promise.all(
-      batch.messages.map((message) => syncSpotifyUser(message.body.spotifyUserId)),
+      batch.messages.map((message) =>
+        syncSpotifyUser(message.body.spotifyUserId),
+      ),
     );
   },
 } satisfies ExportedHandler<Env, SpotifySyncMessage>;

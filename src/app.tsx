@@ -2,7 +2,7 @@ import { Meta, MetaProvider, Title } from "@solidjs/meta";
 import { Router, useNavigate } from "@solidjs/router";
 import { FileRoutes } from "@solidjs/start/router";
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query";
-import { children, createEffect, createSignal, ErrorBoundary, onMount } from "solid-js";
+import { createEffect, createSignal, ErrorBoundary, onMount } from "solid-js";
 import { isServer } from "solid-js/web";
 import { consumeSpotifyCallback, SpotifyUnauthenticatedError } from "~/lib/spotify";
 import "./app.css";
@@ -24,7 +24,6 @@ export default function App() {
     <Router
       root={(props) => {
         const navigate = useNavigate();
-        const resolvedChildren = children(() => props.children);
 
         onMount(() => {
           void consumeSpotifyCallback().then((consumed) => {
@@ -59,7 +58,7 @@ export default function App() {
               </noscript>
 
               <ErrorBoundary fallback={(error) => <AppError error={error} />}>
-                {resolvedChildren()}
+                {props.children}
               </ErrorBoundary>
             </MetaProvider>
           </QueryClientProvider>
