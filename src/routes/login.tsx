@@ -40,8 +40,8 @@ export default function Page() {
             class="text-sm mb-10 max-w-xs"
             style="color: #555; line-height: 1.7"
           >
-            Spotistats analyses your Spotify listening history. No data is
-            stored on our servers.
+            Spotistats analyses your Spotify listening history. Server-side
+            tracking is optional and can be managed from your account page.
           </p>
           <button
             type="button"

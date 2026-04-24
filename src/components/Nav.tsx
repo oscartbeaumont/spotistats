@@ -8,6 +8,7 @@ const links = [
   ["/", "1"],
   ["/favourites", "2"],
   ["/export", "3"],
+  ["/account", "4"],
 ] as const;
 
 export function Nav() {
@@ -50,6 +51,7 @@ export function Nav() {
         <A href="/" class={linkClass("/")} style={linkStyle("/")}>Profile <span class="ml-2 text-[0.6rem] opacity-50">Ctrl/Alt+1</span></A>
         <A href="/favourites" class={linkClass("/favourites")} style={linkStyle("/favourites")}>Favourites <span class="ml-2 text-[0.6rem] opacity-50">Ctrl/Alt+2</span></A>
         <A href="/export" class={linkClass("/export")} style={linkStyle("/export")}>Export Data <span class="ml-2 text-[0.6rem] opacity-50">Ctrl/Alt+3</span></A>
+        <A href="/account" class={linkClass("/account")} style={linkStyle("/account")}>Account <span class="ml-2 text-[0.6rem] opacity-50">Ctrl/Alt+4</span></A>
       </nav>
       <button
         onClick={logout}

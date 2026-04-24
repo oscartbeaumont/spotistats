@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "spotistats",
-  "main": "@solidjs/start/server/entry",
+  "main": "src/worker.ts",
   "compatibility_date": "2026-04-24",
   "compatibility_flags": ["nodejs_compat"],
   "route": {
@@ -13,6 +13,31 @@
   },
   "vars": {
     "SPOTIFY_CLIENT_ID": "1107a25b98c041bb90c9063553e5f1a8",
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "spotistats",
+      "database_id": "7529dabd-7b6d-42f6-ac94-ddc3db1332ab",
+    },
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "SPOTIFY_SYNC_QUEUE",
+        "queue": "spotistats",
+      },
+    ],
+    "consumers": [
+      {
+        "queue": "spotistats",
+        "max_batch_size": 10,
+        "max_batch_timeout": 30,
+      },
+    ],
+  },
+  "triggers": {
+    "crons": ["*/15 * * * *"],
   },
   "secrets": {
     "required": ["SPOTIFY_CLIENT_SECRET"],
