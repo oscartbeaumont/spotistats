@@ -1,10 +1,12 @@
+import { createShortcut } from "@solid-primitives/keyboard";
 import { A, useLocation, useNavigate } from "@solidjs/router";
+import { isEditableShortcutTarget } from "~/lib/keyboard";
 import { clearStoredState } from "~/lib/storage";
 
 const links = [
-  ["/", "Profile"],
-  ["/favourites", "Favourites"],
-  ["/export", "Export Data"],
+  ["/", "Profile", "Alt+1"],
+  ["/favourites", "Favourites", "Alt+2"],
+  ["/export", "Export Data", "Alt+3"],
 ] as const;
 
 export function Nav() {
@@ -19,6 +21,14 @@ export function Nav() {
     navigate("/login");
   };
 
+  links.forEach(([href, , shortcut], index) => {
+    createShortcut(["Alt", String(index + 1)], event => {
+      if (isEditableShortcutTarget(event)) return;
+      event?.preventDefault();
+      navigate(href);
+    }, { preventDefault: false, requireReset: true });
+  });
+
   return (
     <header
       class="fixed left-0 right-0 top-0 z-50 flex items-center justify-between bg-[#f0ede8] p-4 sm:p-5"
@@ -28,7 +38,7 @@ export function Nav() {
         SPOTISTATS
       </span>
       <nav class="flex flex-wrap gap-0">
-        {links.map(([href, label]) => (
+        {links.map(([href, label, shortcut]) => (
           <A
             href={href}
             class={`font-black text-xs sm:text-sm uppercase px-3 sm:px-4 py-2 tracking-wide transition ${isActive(href) ? "" : "hover:bg-[#0a0a0a] hover:text-[#f0ede8]"}`}
@@ -38,7 +48,7 @@ export function Nav() {
                 : "border: 4px solid #0a0a0a"
             }
           >
-            {label}
+            {label} <span class="ml-2 text-[0.6rem] opacity-50">{shortcut}</span>
           </A>
         ))}
       </nav>

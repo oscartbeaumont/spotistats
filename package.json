@@ -12,6 +12,7 @@
     "typecheck": "tsc -b"
   },
   "dependencies": {
+    "@solid-primitives/keyboard": "^1.3.5",
     "@solid-primitives/storage": "^4.3.4",
     "@solidjs/meta": "^0.29.4",
     "@solidjs/router": "^0.16.1",
