@@ -3,7 +3,7 @@ import { useNavigate } from "@solidjs/router";
 import { createResource, onMount, Show } from "solid-js";
 import { isServer } from "solid-js/web";
 import { accessToken, linkToUri, profileCache, setProfileCache } from "~/lib/storage";
-import { useSpotifyFetch } from "~/lib/spotify";
+import { hasSpotifyCallbackCode, useSpotifyFetch } from "~/lib/spotify";
 
 type SpotifyProfile = {
   display_name: string;
@@ -18,7 +18,7 @@ export default function Home() {
   const spotifyFetch = useSpotifyFetch();
 
   onMount(() => {
-    if (!accessToken()) navigate("/login", { replace: true });
+    if (!accessToken() && !hasSpotifyCallbackCode()) navigate("/login", { replace: true });
   });
 
   const [profile] = createResource(

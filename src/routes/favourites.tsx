@@ -1,10 +1,10 @@
 import { Title } from "@solidjs/meta";
 import { useNavigate } from "@solidjs/router";
-import { createEffect, createResource, createSignal, For, onMount, Show } from "solid-js";
+import { createEffect, createSignal, For, onCleanup, onMount, Show, untrack } from "solid-js";
 import { isServer } from "solid-js/web";
 import { ItemCard } from "~/components/ItemCard";
 import { accessToken, linkToUri, setTopItemsCache, topItemsCache } from "~/lib/storage";
-import { useSpotifyFetch } from "~/lib/spotify";
+import { hasSpotifyCallbackCode, useSpotifyFetch } from "~/lib/spotify";
 
 type TimeRange = "long_term" | "medium_term" | "short_term";
 type ItemType = "Tracks" | "Artists";
@@ -29,39 +29,83 @@ export default function Favourites() {
   const spotifyFetch = useSpotifyFetch();
   const [type, setType] = createSignal<ItemType>("Tracks");
   const [timeRange, setTimeRange] = createSignal<TimeRange>("short_term");
+  const [itemsByKey, setItemsByKey] = createSignal<Record<string, SpotifyItem[]>>({});
+  const [nextByKey, setNextByKey] = createSignal<Record<string, string | null>>({});
+  const [loadingByKey, setLoadingByKey] = createSignal<Record<string, boolean>>({});
+  const [completeByKey, setCompleteByKey] = createSignal<Record<string, boolean>>({});
+  const [atBottom, setAtBottom] = createSignal(false);
+  let sentinel: HTMLDivElement | undefined;
+  let observer: IntersectionObserver | undefined;
 
   onMount(() => {
-    if (!accessToken()) navigate("/login", { replace: true });
+    if (!accessToken() && !hasSpotifyCallbackCode()) navigate("/login", { replace: true });
+
+    observer = new IntersectionObserver(entries => {
+      setAtBottom(entries.some(entry => entry.isIntersecting));
+    }, { rootMargin: "500px" });
+
+    if (sentinel) observer.observe(sentinel);
   });
 
-  async function loadAndCache(kind: "tracks" | "artists", range: TimeRange, dataSaver = false) {
-    const key = `top_${kind}_${range}`;
-    const cached = topItemsCache()[key] as SpotifyItem[] | undefined;
-    if (cached) return cached;
-    if (dataSaver) return [];
+  onCleanup(() => observer?.disconnect());
 
-    let url: string | null = `https://api.spotify.com/v1/me/top/${kind}?limit=30&time_range=${range}`;
-    let value: SpotifyItem[] = [];
-    while (url) {
-      const data: SpotifyPage<SpotifyItem> = await spotifyFetch(url);
-      value = value.concat(data.items);
-      url = data.next;
-    }
-    setTopItemsCache({ ...topItemsCache(), [key]: value });
-    return value;
+  const currentKind = () => type() === "Tracks" ? "tracks" as const : "artists" as const;
+  const currentKey = () => cacheKey(currentKind(), timeRange());
+
+  function cacheKey(kind: "tracks" | "artists", range: TimeRange) {
+    return `top_${kind}_${range}`;
   }
 
-  const [tracks] = createResource(() => (!isServer && accessToken() ? timeRange() : null), range => loadAndCache("tracks", range));
-  const [artists, { refetch: refetchArtists }] = createResource(
-    () => (!isServer && accessToken() ? timeRange() : null),
-    async range => loadAndCache("artists", range, await hasSaveData()),
-  );
+  function firstPageUrl(kind: "tracks" | "artists", range: TimeRange) {
+    return `https://api.spotify.com/v1/me/top/${kind}?limit=50&time_range=${range}`;
+  }
+
+  async function loadRemainingPages(kind: "tracks" | "artists", range: TimeRange) {
+    if (isServer || !accessToken()) return;
+
+    const key = cacheKey(kind, range);
+    if (loadingByKey()[key] || completeByKey()[key]) return;
+
+    const cached = topItemsCache()[key] as SpotifyItem[] | undefined;
+    if (cached && !itemsByKey()[key]) {
+      setItemsByKey(value => ({ ...value, [key]: cached }));
+      setCompleteByKey(value => ({ ...value, [key]: true }));
+      return;
+    }
+
+    if (kind === "artists" && !itemsByKey()[key] && await hasSaveData()) {
+      setItemsByKey(value => ({ ...value, [key]: [] }));
+      setCompleteByKey(value => ({ ...value, [key]: true }));
+      return;
+    }
+
+    setLoadingByKey(value => ({ ...value, [key]: true }));
+    try {
+      let url: string | null = nextByKey()[key] ?? firstPageUrl(kind, range);
+      while (url) {
+        const data: SpotifyPage<SpotifyItem> = await spotifyFetch(url);
+        const nextItems = [...(untrack(itemsByKey)[key] ?? []), ...data.items];
+
+        setItemsByKey(value => ({ ...value, [key]: nextItems }));
+        setNextByKey(value => ({ ...value, [key]: data.next }));
+        setTopItemsCache({ ...topItemsCache(), [key]: nextItems });
+        url = data.next;
+      }
+      setCompleteByKey(value => ({ ...value, [key]: true }));
+    } finally {
+      setLoadingByKey(value => ({ ...value, [key]: false }));
+    }
+  }
 
   createEffect(() => {
-    if (type() === "Artists" && artists()?.length === 0) refetchArtists();
+    if (!accessToken()) return;
+    const kind = currentKind();
+    const range = timeRange();
+    untrack(() => void loadRemainingPages(kind, range));
   });
 
-  const items = () => (type() === "Tracks" ? tracks() : artists()) ?? [];
+  const items = () => itemsByKey()[currentKey()] ?? [];
+  const showBottomPending = () => atBottom() && loadingByKey()[currentKey()] === true;
 
   return (
     <main class="mx-auto max-w-5xl px-3 pb-12 sm:px-6">
@@ -78,9 +122,14 @@ export default function Favourites() {
           </For>
         </div>
       </header>
-      <Show when={!tracks.loading && !artists.loading} fallback={<p class="px-2 text-zinc-400">Loading favourites...</p>}>
-        <div class="space-y-1">
-          <For each={items()}>{(item, index) => <ItemCard name={`${index() + 1}. ${item.name}`} description={item.type === "track" ? item.artists?.map(artist => artist.name).join(", ") : ""} images={item.type === "track" ? item.album?.images : item.images} url={linkToUri() ? item.uri : item.external_urls.spotify} />}</For>
+      <div class="space-y-1">
+        <For each={items()}>{(item, index) => <ItemCard name={`${index() + 1}. ${item.name}`} description={item.type === "track" ? item.artists?.map(artist => artist.name).join(", ") : ""} images={item.type === "track" ? item.album?.images : item.images} url={linkToUri() ? item.uri : item.external_urls.spotify} />}</For>
+      </div>
+      <div ref={sentinel} class="h-8" />
+      <Show when={showBottomPending()}>
+        <div class="mx-auto my-8 flex w-fit items-center gap-3 rounded-full border border-[#1DB954]/30 bg-white/[0.04] px-5 py-3 text-sm text-zinc-300">
+          <span class="h-2.5 w-2.5 animate-pulse rounded-full bg-[#1DB954]" />
+          Loading more favourites...
         </div>
       </Show>
     </main>

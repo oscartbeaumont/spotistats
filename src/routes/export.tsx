@@ -6,7 +6,7 @@ import { isServer } from "solid-js/web";
 import { ItemCard } from "~/components/ItemCard";
 import { csvCell, downloadTextFile } from "~/lib/download";
 import { accessToken, profileCache } from "~/lib/storage";
-import { useSpotifyFetch } from "~/lib/spotify";
+import { hasSpotifyCallbackCode, useSpotifyFetch } from "~/lib/spotify";
 
 type Playlist = {
   id?: string;
@@ -42,7 +42,7 @@ export default function ExportPage() {
   const [busy, setBusy] = createSignal(false);
 
   onMount(() => {
-    if (!accessToken()) navigate("/login", { replace: true });
+    if (!accessToken() && !hasSpotifyCallbackCode()) navigate("/login", { replace: true });
   });
 
   const [playlists] = createResource(
