@@ -1,0 +1,17 @@
+{
+    "name": "Spotistats",
+    "short_name": "Spotistats",
+    "description": "Spotistats is a tool designed to analyse and backup your music on Spotify!",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#191414",
+    "theme_color": "#1DB954",
+    "orientation": "portrait",
+    "icons": [
+        {
+            "src": "/assets/logo-256.png",
+            "sizes": "709x709",
+            "type": "image/png"
+        }
+    ]
+}

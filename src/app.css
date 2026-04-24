@@ -1,1 +1,36 @@
 @import "tailwindcss";
+
+html,
+body {
+  min-height: 100%;
+  background: #191414;
+  color: white;
+}
+
+body {
+  margin: 0;
+  padding: 2.5px;
+  font-family: Montserrat, ui-sans-serif, system-ui, sans-serif;
+}
+
+button,
+a {
+  cursor: pointer;
+}
+
+@keyframes itemFadeIn {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -20%, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@media (min-width: 768px) {
+  body {
+    padding: 15px;
+  }
+}

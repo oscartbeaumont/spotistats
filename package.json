@@ -12,10 +12,12 @@
     "typecheck": "tsc -b"
   },
   "dependencies": {
+    "@solid-primitives/storage": "^4.3.4",
     "@solidjs/meta": "^0.29.4",
     "@solidjs/router": "^0.16.1",
     "@solidjs/start": "https://pkg.pr.new/solidjs/solid-start/@solidjs/start@aaa5c51",
     "@tailwindcss/vite": "^4.2.4",
+    "jszip": "^3.10.1",
     "solid-js": "^1.9.12",
     "tailwindcss": "^4.2.4",
     "vite": "^8.0.10"
