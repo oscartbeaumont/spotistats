@@ -4,11 +4,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build",
+    "build": "wrangler types --cwd src && tsc -b && vite build",
     "start": "vite start",
     "preview": "pnpm run build && wrangler dev",
     "deploy": "pnpm run build && wrangler deploy",
-    "cf-typegen": "wrangler types"
+    "types": "wrangler types --cwd src",
+    "typecheck": "tsc -b"
   },
   "dependencies": {
     "@solidjs/meta": "^0.29.4",
