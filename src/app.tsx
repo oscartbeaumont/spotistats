@@ -85,10 +85,10 @@ export function AppError(props: { error?: Error } = {}) {
   return (
     <main class="p-8 md:p-16 max-w-3xl">
       <Title>Spotistats | Error</Title>
-      <div class="text-xs uppercase tracking-[0.2em] mb-3" style="color: #999">
+      <div class="text-xs uppercase tracking-[0.2em] mb-3 text-[#999]">
         System Error
       </div>
-      <p class="text-sm mb-6" style="color: #555">
+      <p class="text-sm mb-6 text-[#555]">
         Try{" "}
         <a class="font-bold hover:underline" href="/login">
           logging in again
@@ -105,8 +105,7 @@ export function AppError(props: { error?: Error } = {}) {
         . Include the details below.
       </p>
       <pre
-        class="overflow-auto p-4 text-xs"
-        style="border: 4px solid #0a0a0a; background: #0a0a0a; color: #f0ede8"
+        class="overflow-auto p-4 text-xs border-4 border-[#0a0a0a] bg-[#0a0a0a] text-[#f0ede8]"
       >
         <samp>{errorText()}</samp>
       </pre>

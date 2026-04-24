@@ -166,30 +166,25 @@ export default function ExportPage() {
   return (
     <main class="app-main p-8 md:p-12">
       <Title>Spotistats | Export</Title>
-      <div class="flex flex-wrap items-baseline gap-6 mb-8" style="border-bottom: 4px solid #0a0a0a; padding-bottom: 1rem">
+      <div class="flex flex-wrap items-baseline gap-6 mb-8 border-b-4 border-[#0a0a0a] pb-4">
         <h1 class="text-2xl font-black uppercase tracking-tight">Export Data</h1>
         <button
           onClick={backupAll}
-          class="font-black text-xs uppercase px-4 py-2 tracking-wide transition ml-auto"
-          style="border: 3px solid #0a0a0a"
-          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "#0a0a0a"; (e.currentTarget as HTMLElement).style.color = "#f0ede8"; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = ""; (e.currentTarget as HTMLElement).style.color = ""; }}
+          class="font-black text-xs uppercase px-4 py-2 tracking-wide transition ml-auto border-[3px] border-[#0a0a0a] hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
         >
           Backup All <span class="ml-2 text-[0.6rem] opacity-50">B</span> →
         </button>
       </div>
-      <div class="mb-6 flex flex-wrap gap-2 text-[0.65rem] font-bold uppercase tracking-widest" style="color: #777">
+      <div class="mb-6 flex flex-wrap gap-2 text-[0.65rem] font-bold uppercase tracking-widest text-[#777]">
         <span>J/↓ Next</span>
         <span>K/↑ Previous</span>
         <span>Enter Export</span>
         <span>B Backup All</span>
       </div>
       <Show when={busy()}>
-        <div class="mb-6 h-4" style="border: 3px solid #0a0a0a">
-          <div style={`background: #1DB954; height: 100%; width: ${progress() * 100}%; transition: width 0.3s`} />
-        </div>
+        <progress class="mb-6 h-4 w-full border-[3px] border-[#0a0a0a] accent-[#1DB954]" value={progress()} max="1" />
       </Show>
-      <Show when={!playlists.isLoading} fallback={<p class="text-sm uppercase tracking-widest" style="color: #999">LOADING_</p>}>
+      <Show when={!playlists.isLoading} fallback={<p class="text-sm uppercase tracking-widest text-[#999]">LOADING_</p>}>
         <div>
           <For each={playlistItems()}>
             {(playlist, index) => {
@@ -201,23 +196,21 @@ export default function ExportPage() {
                   type="button"
                   onFocus={() => setSelectedIndex(index())}
                   onClick={() => exportPlaylist(playlist)}
-                  class="w-full flex items-center gap-4 py-3 text-left transition outline-none"
-                  style={selected() ? "border-bottom: 3px solid #0a0a0a; background: #0a0a0a; color: #f0ede8; padding-left: 0.5rem" : "border-bottom: 3px solid #0a0a0a"}
+                  class={`w-full flex items-center gap-4 py-3 text-left transition outline-none border-b-[3px] border-[#0a0a0a] ${selected() ? "bg-[#0a0a0a] pl-2 text-[#f0ede8]" : ""}`}
                 >
                   <img
                     src={img() ?? "/assets/placeholder.svg"}
                     alt={playlist.name}
-                    class="h-10 w-10 object-cover shrink-0"
-                    style="border: 2px solid #0a0a0a"
+                    class="h-10 w-10 object-cover shrink-0 border-2 border-[#0a0a0a]"
                   />
                   <div class="min-w-0 flex-1">
                     <p class="text-sm font-black uppercase tracking-tight truncate">{playlist.name}</p>
-                    <p class="text-xs truncate mt-0.5" style="color: #888">{playlist.owner?.display_name}</p>
+                    <p class="text-xs truncate mt-0.5 text-[#888]">{playlist.owner?.display_name}</p>
                   </div>
                   <div class="flex gap-2 shrink-0">
-                    {playlist.collaborative && <span class="text-xs uppercase tracking-widest font-bold" style="color: #aaa">Collab</span>}
-                    {!playlist.public && !playlist.collaborative && <span class="text-xs uppercase tracking-widest font-bold" style="color: #aaa">Private</span>}
-                    <span class="text-xs uppercase tracking-widest font-bold" style="color: #1DB954">↓ CSV</span>
+                    {playlist.collaborative && <span class="text-xs uppercase tracking-widest font-bold text-[#aaa]">Collab</span>}
+                    {!playlist.public && !playlist.collaborative && <span class="text-xs uppercase tracking-widest font-bold text-[#aaa]">Private</span>}
+                    <span class="text-xs uppercase tracking-widest font-bold text-[#1DB954]">↓ CSV</span>
                   </div>
                 </button>
               );

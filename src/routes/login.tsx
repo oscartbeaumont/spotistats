@@ -15,14 +15,11 @@ export default function Page() {
   return (
     <div class="min-h-screen flex flex-col">
       <Title>Spotistats | Login</Title>
-      <header
-        class="p-5 flex items-center justify-between"
-        style="border-bottom: 4px solid #0a0a0a"
-      >
+      <header class="p-5 flex items-center justify-between border-b-4 border-[#0a0a0a]">
         <span class="font-black text-xl tracking-tighter uppercase">
           SPOTISTATS
         </span>
-        <span class="text-xs uppercase tracking-widest" style="color: #999">
+        <span class="text-xs uppercase tracking-widest text-[#999]">
           Created by{" "}
           <a
             href="https://otbeaumont.me"
@@ -36,19 +33,13 @@ export default function Page() {
       </header>
       <main class="flex-1 flex items-center p-8 md:p-16">
         <div class="max-w-lg">
-          <div
-            class="text-xs uppercase tracking-[0.2em] mb-4"
-            style="color: #999"
-          >
+          <div class="text-xs uppercase tracking-[0.2em] mb-4 text-[#999]">
             Access Required
           </div>
           <h1 class="text-5xl md:text-7xl font-black uppercase tracking-tighter leading-none mb-6">
             LOGIN
           </h1>
-          <p
-            class="text-sm mb-10 max-w-xs"
-            style="color: #555; line-height: 1.7"
-          >
+          <p class="text-sm mb-10 max-w-xs leading-[1.7] text-[#555]">
             Spotistats analyses your Spotify listening history. By default your
             data doesn't touch our servers, but you can enable stats sync in
             settings for a more enhanced experience.
@@ -61,18 +52,7 @@ export default function Page() {
                 window.location.origin,
               );
             }}
-            class="font-black text-sm uppercase tracking-widest py-4 px-8 transition"
-            style="background: #0a0a0a; color: #f0ede8; border: 4px solid #0a0a0a"
-            onMouseEnter={(e) => {
-              (e.target as HTMLElement).style.background = "#1DB954";
-              (e.target as HTMLElement).style.borderColor = "#1DB954";
-              (e.target as HTMLElement).style.color = "#0a0a0a";
-            }}
-            onMouseLeave={(e) => {
-              (e.target as HTMLElement).style.background = "#0a0a0a";
-              (e.target as HTMLElement).style.borderColor = "#0a0a0a";
-              (e.target as HTMLElement).style.color = "#f0ede8";
-            }}
+            class="font-black text-sm uppercase tracking-widest py-4 px-8 border-4 border-[#0a0a0a] bg-[#0a0a0a] text-[#f0ede8] transition hover:border-[#1DB954] hover:bg-[#1DB954] hover:text-[#0a0a0a]"
           >
             Login via Spotify →
           </button>

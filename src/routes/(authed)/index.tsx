@@ -23,7 +23,7 @@ export default function Page() {
       <Show
         when={current()}
         fallback={
-          <p class="text-sm uppercase tracking-widest" style="color: #999">
+          <p class="text-sm uppercase tracking-widest text-[#999]">
             LOADING_
           </p>
         }
@@ -34,21 +34,19 @@ export default function Page() {
               <img
                 src={user().icon ?? "/assets/placeholder.svg"}
                 alt={user().displayName ?? "Profile"}
-                class="h-36 w-36 object-cover"
-                style="border: 4px solid #0a0a0a"
+                class="h-36 w-36 object-cover border-4 border-[#0a0a0a]"
               />
             </a>
             <div>
               <div
-                class="text-xs uppercase tracking-[0.2em] mb-3"
-                style="color: #999"
+                class="text-xs uppercase tracking-[0.2em] mb-3 text-[#999]"
               >
                 User Profile
               </div>
               <h1 class="text-4xl md:text-6xl font-black uppercase tracking-tighter leading-none mb-3">
                 {user().displayName}
               </h1>
-              <p class="text-xs uppercase tracking-widest mb-3" style="color: #666">
+              <p class="text-xs uppercase tracking-widest mb-3 text-[#666]">
                 {user().email}
               </p>
               <div class="flex items-center gap-3 mb-8">
@@ -56,24 +54,14 @@ export default function Page() {
                   {user().followers?.toLocaleString()}
                 </span>
                 <span
-                  class="text-xs uppercase tracking-widest"
-                  style="color: #666"
+                  class="text-xs uppercase tracking-widest text-[#666]"
                 >
                   followers
                 </span>
               </div>
               <A
                 href="/favourites/tracks"
-                class="inline-block font-black text-sm uppercase px-6 py-3 tracking-wide transition hover:bg-[#1DB954] hover:text-black"
-                style="border: 4px solid #0a0a0a"
-                onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLElement).style.borderColor =
-                    "#1DB954";
-                }}
-                onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLElement).style.borderColor =
-                    "#0a0a0a";
-                }}
+                class="inline-block border-4 border-[#0a0a0a] font-black text-sm uppercase px-6 py-3 tracking-wide transition hover:border-[#1DB954] hover:bg-[#1DB954] hover:text-black"
               >
                 See Top Music →
               </A>

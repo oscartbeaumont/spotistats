@@ -64,12 +64,9 @@ export default function AccountPage() {
   return (
     <main class="app-main p-8 md:p-12">
       <Title>Spotistats | Account</Title>
-      <div
-        class="flex flex-wrap items-baseline gap-6 mb-8"
-        style="border-bottom: 4px solid #0a0a0a; padding-bottom: 1rem"
-      >
+      <div class="flex flex-wrap items-baseline gap-6 mb-8 border-b-4 border-[#0a0a0a] pb-4">
         <h1 class="text-2xl font-black uppercase tracking-tight">Account</h1>
-        <span class="text-xs uppercase tracking-widest" style="color: #999">
+        <span class="text-xs uppercase tracking-widest text-[#999]">
           Stats Sync
         </span>
       </div>
@@ -77,8 +74,7 @@ export default function AccountPage() {
       <Show when={statsReason()}>
         {(reason) => (
           <pre
-            class="overflow-auto p-4 text-xs mb-6 text-red-600"
-            style="border: 4px solid #0a0a0a; background: #0a0a0a"
+            class="overflow-auto p-4 text-xs mb-6 text-red-600 border-4 border-[#0a0a0a] bg-[#0a0a0a]"
           >
             <samp>Failed to authenticate: {reason()}</samp>
           </pre>
@@ -88,17 +84,16 @@ export default function AccountPage() {
       <Show
         when={!status.isLoading}
         fallback={
-          <p class="text-sm uppercase tracking-widest" style="color: #999">
+          <p class="text-sm uppercase tracking-widest text-[#999]">
             LOADING_
           </p>
         }
       >
         <section class="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(22rem,28rem)]">
           <div>
-            <div class="mb-6 p-5" style="border: 4px solid #0a0a0a">
+            <div class="mb-6 p-5 border-4 border-[#0a0a0a]">
               <div
-                class="text-xs uppercase tracking-[0.2em] mb-3"
-                style="color: #999"
+                class="text-xs uppercase tracking-[0.2em] mb-3 text-[#999]"
               >
                 Listening Stats
               </div>
@@ -106,15 +101,13 @@ export default function AccountPage() {
                 {status.data?.enabled ? "Enabled" : "Disabled"}
               </h2>
               <p
-                class="text-sm max-w-xl mb-6"
-                style="color: #555; line-height: 1.7"
+                class="text-sm max-w-xl mb-6 leading-[1.7] text-[#555]"
               >
                 When enabled, Spotistats securely stores your recently played Spotify
                 tracks so your listening stats can build over time.
               </p>
               <div
-                class="grid gap-3 text-xs uppercase tracking-widest mb-6"
-                style="color: #666"
+                class="grid gap-3 text-xs uppercase tracking-widest mb-6 text-[#666]"
               >
                 <p>
                   <span class="font-black text-[#0a0a0a]">Consented:</span>{" "}
@@ -132,8 +125,7 @@ export default function AccountPage() {
               <Show when={status.data?.lastError}>
                 {(error) => (
                   <pre
-                    class="overflow-auto p-4 text-xs mb-6"
-                    style="border: 4px solid #0a0a0a; background: #0a0a0a; color: #f0ede8"
+                    class="overflow-auto p-4 text-xs mb-6 border-4 border-[#0a0a0a] bg-[#0a0a0a] text-[#f0ede8]"
                   >
                     <samp>{error()}</samp>
                   </pre>
@@ -145,8 +137,7 @@ export default function AccountPage() {
                   <button
                     type="button"
                     onClick={enableStats}
-                    class="font-black text-sm uppercase tracking-widest py-4 px-8 transition hover:bg-[#1DB954] hover:text-black"
-                    style="background: #0a0a0a; color: #f0ede8; border: 4px solid #0a0a0a"
+                    class="font-black text-sm uppercase tracking-widest py-4 px-8 transition border-4 border-[#0a0a0a] bg-[#0a0a0a] text-[#f0ede8] hover:bg-[#1DB954] hover:text-black"
                   >
                     Connect Spotify Stats →
                   </button>
@@ -157,27 +148,25 @@ export default function AccountPage() {
                     type="button"
                     disabled={busy()}
                     onClick={disableStats}
-                    class="font-black text-sm uppercase tracking-widest py-4 px-8 transition disabled:opacity-50 hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
-                    style="border: 4px solid #0a0a0a"
+                    class="font-black text-sm uppercase tracking-widest py-4 px-8 transition disabled:opacity-50 border-4 border-[#0a0a0a] hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
                   >
                     {busy() ? "Disabling_" : "Disable Stats"}
                   </button>
                 </div>
               </Show>
             </div>
-            <div class="p-5" style="border: 4px solid #991b1b">
+            <div class="p-5 border-4 border-red-800">
               <div class="text-xs uppercase tracking-[0.2em] mb-3 text-red-700">
                 Danger Zone
               </div>
-              <p class="text-sm max-w-xl mb-5" style="color: #555; line-height: 1.7">
+              <p class="text-sm max-w-xl mb-5 leading-[1.7] text-[#555]">
                 Delete all account data stored by Spotistats for this Spotify account. This also stops stats sync.
               </p>
               <button
                 type="button"
                 disabled={deleteBusy()}
                 onClick={deleteAccountData}
-                class="font-black text-sm uppercase tracking-widest py-4 px-8 text-red-700 transition disabled:opacity-50 hover:bg-red-700 hover:text-[#f0ede8]"
-                style="border: 4px solid #991b1b"
+                class="font-black text-sm uppercase tracking-widest py-4 px-8 text-red-700 transition disabled:opacity-50 border-4 border-red-800 hover:bg-red-700 hover:text-[#f0ede8]"
               >
                 {deleteBusy() ? "Deleting_" : "Delete Site Data"}
               </button>
@@ -186,8 +175,7 @@ export default function AccountPage() {
 
           <aside>
             <div
-              class="text-xs uppercase tracking-[0.2em] mb-3"
-              style="color: #999"
+              class="text-xs uppercase tracking-[0.2em] mb-3 text-[#999]"
             >
               Recent Synced Songs
             </div>
@@ -195,8 +183,7 @@ export default function AccountPage() {
               when={(status.data?.recent.length ?? 0) > 0}
               fallback={
                 <p
-                  class="text-sm uppercase tracking-widest"
-                  style="color: #999"
+                  class="text-sm uppercase tracking-widest text-[#999]"
                 >
                   {status.data?.enabled ? "SYNCING STATS_" : "NO DATA YET_"}
                 </p>
@@ -209,25 +196,22 @@ export default function AccountPage() {
                       href={item.external_url ?? "#"}
                       target="_blank"
                       rel="noopener"
-                      class="flex items-center gap-4 py-3 text-left transition hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
-                      style="border-bottom: 3px solid #0a0a0a"
+                      class="flex items-center gap-4 py-3 text-left transition border-b-[3px] border-[#0a0a0a] hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
                     >
                       <img
                         src={item.image_url ?? "/assets/placeholder.svg"}
                         alt={item.name}
-                        class="h-10 w-10 object-cover shrink-0"
-                        style="border: 2px solid #0a0a0a"
+                        class="h-10 w-10 object-cover shrink-0 border-2 border-[#0a0a0a]"
                       />
                       <div class="min-w-0 flex-1">
                         <p class="text-sm font-black uppercase tracking-tight truncate">
                           {item.name}
                         </p>
-                        <p class="text-xs truncate mt-0.5" style="color: #888">
+                        <p class="text-xs truncate mt-0.5 text-[#888]">
                           {item.artist_names}
                         </p>
                         <p
-                          class="text-[0.65rem] uppercase tracking-widest mt-1"
-                          style="color: #999"
+                          class="text-[0.65rem] uppercase tracking-widest mt-1 text-[#999]"
                         >
                           {formatDate(item.played_at)}
                         </p>

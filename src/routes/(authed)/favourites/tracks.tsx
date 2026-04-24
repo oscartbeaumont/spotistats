@@ -62,27 +62,21 @@ function FavouriteRow(props: {
       type="button"
       onFocus={props.onFocus}
       onClick={props.onOpen}
-      class="w-full flex items-center gap-4 py-3 text-left transition outline-none"
-      style={
-        props.selected
-          ? "border-bottom: 3px solid #0a0a0a; background: #0a0a0a; color: #f0ede8; padding-left: 0.5rem"
-          : "border-bottom: 3px solid #0a0a0a"
-      }
+      class={`w-full flex items-center gap-4 py-3 text-left transition outline-none border-b-[3px] border-[#0a0a0a] ${props.selected ? "bg-[#0a0a0a] pl-2 text-[#f0ede8]" : ""}`}
     >
-      <span class="font-black text-lg w-8 shrink-0" style="color: #ccc">
+      <span class="font-black text-lg w-8 shrink-0 text-[#ccc]">
         {props.index + 1}
       </span>
       <img
         src={imageUrl() ?? "/assets/placeholder.svg"}
         alt={props.item.name}
-        class="h-10 w-10 object-cover shrink-0"
-        style="border: 2px solid #0a0a0a"
+        class="h-10 w-10 object-cover shrink-0 border-2 border-[#0a0a0a]"
       />
       <div class="min-w-0">
         <p class="text-sm font-black uppercase tracking-tight truncate">
           {props.item.name}
         </p>
-        <p class="text-xs truncate mt-0.5" style="color: #888">
+        <p class="text-xs truncate mt-0.5 text-[#888]">
           {sub()}
         </p>
       </div>
@@ -262,27 +256,17 @@ export function FavouritesPage(props: { kind: FavouritesKind }) {
         </h1>
         <a
           href="/favourites/tracks"
-          class="font-black text-xs uppercase px-4 py-2 tracking-wide transition"
-          style={
-            props.kind === "tracks"
-              ? "background: #0a0a0a; color: #f0ede8; border: 3px solid #0a0a0a"
-              : "border: 3px solid #0a0a0a; color: #0a0a0a"
-          }
+          class={`font-black text-xs uppercase px-4 py-2 tracking-wide transition border-[3px] border-[#0a0a0a] ${props.kind === "tracks" ? "bg-[#0a0a0a] text-[#f0ede8]" : "text-[#0a0a0a]"}`}
         >
           Tracks
         </a>
         <a
           href="/favourites/albums"
-          class="font-black text-xs uppercase px-4 py-2 tracking-wide transition"
-          style={
-            props.kind === "albums"
-              ? "background: #0a0a0a; color: #f0ede8; border: 3px solid #0a0a0a"
-              : "border: 3px solid #0a0a0a; color: #0a0a0a"
-          }
+          class={`font-black text-xs uppercase px-4 py-2 tracking-wide transition border-[3px] border-[#0a0a0a] ${props.kind === "albums" ? "bg-[#0a0a0a] text-[#f0ede8]" : "text-[#0a0a0a]"}`}
         >
           Albums
         </a>
-        <span class="mx-4 font-black" style="color: #ccc">
+        <span class="mx-4 font-black text-[#ccc]">
           /
         </span>
         {(
@@ -294,12 +278,7 @@ export function FavouritesPage(props: { kind: FavouritesKind }) {
         ).map(([optionRange, label], index) => (
           <button
             onClick={() => setRange(optionRange)}
-            class="text-xs uppercase tracking-wide px-3 py-2 font-bold transition"
-            style={
-              range() === optionRange
-                ? "background: #1DB954; color: black; border: 3px solid #1DB954"
-                : "border: 3px solid transparent; color: #999"
-            }
+            class={`text-xs uppercase tracking-wide px-3 py-2 font-bold transition border-[3px] ${range() === optionRange ? "border-[#1DB954] bg-[#1DB954] text-black" : "border-transparent text-[#999]"}`}
           >
             {label}{" "}
             <span class="ml-1 text-[0.6rem] opacity-50">{index + 1}</span>
@@ -307,8 +286,7 @@ export function FavouritesPage(props: { kind: FavouritesKind }) {
         ))}
       </div>
       <div
-        class="mb-6 flex flex-wrap gap-2 text-[0.65rem] font-bold uppercase tracking-widest"
-        style="color: #777"
+        class="mb-6 flex flex-wrap gap-2 text-[0.65rem] font-bold uppercase tracking-widest text-[#777]"
       >
         <span>J/↓ Next</span>
         <span>K/↑ Previous</span>
@@ -331,7 +309,7 @@ export function FavouritesPage(props: { kind: FavouritesKind }) {
       </div>
       <div ref={sentinel} class="h-8" />
       <Show when={showBottomPending()}>
-        <p class="text-xs uppercase tracking-[0.2em] py-6" style="color: #aaa">
+        <p class="text-xs uppercase tracking-[0.2em] py-6 text-[#aaa]">
           LOADING_
         </p>
       </Show>

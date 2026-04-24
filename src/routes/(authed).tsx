@@ -13,8 +13,7 @@ export default function AuthedLayout(props: { children?: import("solid-js").JSX.
 
   const isActive = (href: string) =>
     href === "/" ? location.pathname === "/" : location.pathname === href;
-  const linkClass = (href: string) => `font-black text-xs sm:text-sm uppercase px-3 sm:px-4 py-2 tracking-wide transition ${isActive(href) ? "" : "hover:bg-[#0a0a0a] hover:text-[#f0ede8]"}`;
-  const linkStyle = (href: string) => isActive(href) ? "background: #0a0a0a; color: #f0ede8" : "border: 4px solid #0a0a0a";
+  const linkClass = (href: string) => `font-black text-xs sm:text-sm uppercase px-3 sm:px-4 py-2 tracking-wide transition ${isActive(href) ? "bg-[#0a0a0a] text-[#f0ede8]" : "border-4 border-[#0a0a0a] hover:bg-[#0a0a0a] hover:text-[#f0ede8]"}`;
   const mod = platformShortcutModifier();
 
   const logout = () => {
@@ -72,22 +71,20 @@ export default function AuthedLayout(props: { children?: import("solid-js").JSX.
   return (
     <>
       <header
-        class="fixed left-0 right-0 top-0 z-50 flex items-center justify-between bg-[#f0ede8] p-4 sm:p-5"
-        style="border-bottom: 4px solid #0a0a0a"
+        class="fixed left-0 right-0 top-0 z-50 flex items-center justify-between border-b-4 border-[#0a0a0a] bg-[#f0ede8] p-4 sm:p-5"
       >
         <span class="font-black text-xl tracking-tighter uppercase select-none">
           SPOTISTATS
         </span>
         <nav class="flex flex-wrap gap-0">
-          <a href="/" class={linkClass("/")} style={linkStyle("/")}>Profile <span class="ml-2 text-[0.6rem] opacity-50">{mod}+1</span></a>
-          <a href="/favourites/tracks" class={linkClass("/favourites/tracks")} style={linkStyle("/favourites/tracks")}>Favourites <span class="ml-2 text-[0.6rem] opacity-50">{mod}+2</span></a>
-          <a href="/export" class={linkClass("/export")} style={linkStyle("/export")}>Export Data <span class="ml-2 text-[0.6rem] opacity-50">{mod}+3</span></a>
-          <a href="/account" class={linkClass("/account")} style={linkStyle("/account")}>Account <span class="ml-2 text-[0.6rem] opacity-50">{mod}+4</span></a>
+          <a href="/" class={linkClass("/")}>Profile <span class="ml-2 text-[0.6rem] opacity-50">{mod}+1</span></a>
+          <a href="/favourites/tracks" class={linkClass("/favourites/tracks")}>Favourites <span class="ml-2 text-[0.6rem] opacity-50">{mod}+2</span></a>
+          <a href="/export" class={linkClass("/export")}>Export Data <span class="ml-2 text-[0.6rem] opacity-50">{mod}+3</span></a>
+          <a href="/account" class={linkClass("/account")}>Account <span class="ml-2 text-[0.6rem] opacity-50">{mod}+4</span></a>
         </nav>
         <button
           onClick={logout}
-          class="text-xs uppercase tracking-widest font-bold transition hover:underline"
-          style="color: #999"
+          class="text-xs uppercase tracking-widest font-bold text-[#999] transition hover:underline"
         >
           Logout
         </button>
