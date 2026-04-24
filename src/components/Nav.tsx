@@ -12,25 +12,37 @@ export function Nav() {
   const location = useLocation();
   const navigate = useNavigate();
   const [mounted, setMounted] = createSignal(false);
-  const hidden = () => ["/login", "/reset"].includes(location.pathname);
+  const hidden = () => ["/login"].includes(location.pathname);
 
   onMount(() => setMounted(true));
 
   const isActive = (href: string) =>
     href === "/" ? location.pathname === "/" : location.pathname === href;
 
-  const logout = () => { clearStoredState(); navigate("/login"); };
+  const logout = () => {
+    clearStoredState();
+    navigate("/login");
+  };
 
   return (
     <Show when={mounted() && accessToken() && !hidden()}>
-      <header class="flex items-center justify-between p-4 sm:p-5" style="border-bottom: 4px solid #0a0a0a">
-        <span class="font-black text-xl tracking-tighter uppercase select-none">SPOTISTATS</span>
+      <header
+        class="flex items-center justify-between p-4 sm:p-5"
+        style="border-bottom: 4px solid #0a0a0a"
+      >
+        <span class="font-black text-xl tracking-tighter uppercase select-none">
+          SPOTISTATS
+        </span>
         <nav class="flex flex-wrap gap-0">
           {links.map(([href, label]) => (
             <A
               href={href}
               class={`font-black text-xs sm:text-sm uppercase px-3 sm:px-4 py-2 tracking-wide transition ${isActive(href) ? "" : "hover:bg-[#0a0a0a] hover:text-[#f0ede8]"}`}
-              style={isActive(href) ? "background: #0a0a0a; color: #f0ede8" : "border: 4px solid #0a0a0a"}
+              style={
+                isActive(href)
+                  ? "background: #0a0a0a; color: #f0ede8"
+                  : "border: 4px solid #0a0a0a"
+              }
             >
               {label}
             </A>

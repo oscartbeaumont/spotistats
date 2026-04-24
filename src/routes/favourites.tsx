@@ -29,12 +29,14 @@ export default function Favourites() {
   const spotifyFetch = useSpotifyFetch();
   const [type, setType] = createSignal<ItemType>("Tracks");
   const [timeRange, setTimeRange] = createSignal<TimeRange>("short_term");
+  const [mounted, setMounted] = createSignal(false);
   const [atBottom, setAtBottom] = createSignal(false);
   const [saveData, setSaveData] = createSignal(false);
   let sentinel: HTMLDivElement | undefined;
   let observer: IntersectionObserver | undefined;
 
   onMount(() => {
+    setMounted(true);
     if (!accessToken() && !hasSpotifyCallbackCode()) navigate("/login", { replace: true });
     localStorage.removeItem("top_items_cache");
     setSaveData(hasSaveData());
@@ -49,7 +51,7 @@ export default function Favourites() {
 
   const favourites = createInfiniteQuery(() => ({
     queryKey: ["spotify", "top", currentKind(), timeRange(), accessToken()],
-    enabled: !isServer && !!accessToken() && !(currentKind() === "artists" && saveData()),
+    enabled: !isServer && mounted() && !!accessToken() && !(currentKind() === "artists" && saveData()),
     initialPageParam: `https://api.spotify.com/v1/me/top/${currentKind()}?limit=50&time_range=${timeRange()}`,
     queryFn: ({ pageParam }) => spotifyFetch<SpotifyPage<SpotifyItem>>(pageParam),
     getNextPageParam: lastPage => lastPage.next || undefined,

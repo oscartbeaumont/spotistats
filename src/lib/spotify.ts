@@ -78,11 +78,22 @@ export async function consumeSpotifyCallback() {
     code_verifier: codeVerifier() ?? "",
   });
 
-  const res = await fetch("https://accounts.spotify.com/api/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body,
-  });
+  let res: Response;
+  try {
+    res = await fetch("https://accounts.spotify.com/api/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+    });
+  } catch (error) {
+    setSpotifyError({
+      title: "Spotify Login Network Error",
+      description: "The authorization request to Spotify failed. Please check your connection and try logging in again.",
+      code: JSON.stringify({ error: String(error), online: navigator.onLine }, null, 2),
+    });
+    history.replaceState(null, "", "/error");
+    return true;
+  }
 
   if (!res.ok) {
     setSpotifyError({
@@ -96,6 +107,7 @@ export async function consumeSpotifyCallback() {
 
   const token = await res.json() as { token_type: string; access_token: string };
   setAccessToken(`${token.token_type} ${token.access_token}`);
+  setSpotifyError(null);
 
   setStateToken(null);
   setCodeVerifier(null);
@@ -176,10 +188,10 @@ export function useSpotifyFetch() {
       setSpotifyError({
         title: "Accessing Spotify API",
         description: "The network request failed, please reload to try again.",
-        code: JSON.stringify(String(error), null, 2),
+        code: JSON.stringify({ url, error: String(error), online: navigator.onLine }, null, 2),
       });
       navigate("/error", { replace: true });
-      throw error;
+      throw new Error("Spotistats: Spotify API network request failed");
     }
   };
 }

@@ -38,16 +38,18 @@ const csvHeader = "Spotify ID,Artist IDs,Track Name,Album Name,Artist Name(s),Re
 export default function ExportPage() {
   const navigate = useNavigate();
   const spotifyFetch = useSpotifyFetch();
+  const [mounted, setMounted] = createSignal(false);
   const [progress, setProgress] = createSignal(0);
   const [busy, setBusy] = createSignal(false);
 
   onMount(() => {
+    setMounted(true);
     if (!accessToken() && !hasSpotifyCallbackCode()) navigate("/login", { replace: true });
   });
 
   const playlists = createQuery(() => ({
     queryKey: ["spotify", "playlists", accessToken()],
-    enabled: !isServer && !!accessToken(),
+    enabled: !isServer && mounted() && !!accessToken(),
     queryFn: async () => {
       let url: string | null = "https://api.spotify.com/v1/me/playlists?limit=50";
       let value: Playlist[] = [];

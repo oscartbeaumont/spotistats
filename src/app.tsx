@@ -2,7 +2,14 @@ import { Link, Meta, MetaProvider, Title } from "@solidjs/meta";
 import { Router, useLocation, useNavigate } from "@solidjs/router";
 import { FileRoutes } from "@solidjs/start/router";
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query";
-import { createEffect, ErrorBoundary, onMount, Show, Suspense } from "solid-js";
+import {
+  createEffect,
+  createSignal,
+  ErrorBoundary,
+  onMount,
+  Show,
+  Suspense,
+} from "solid-js";
 import { isServer } from "solid-js/web";
 import { Nav } from "~/components/Nav";
 import { accessToken, spotifyError } from "~/lib/storage";
@@ -13,26 +20,92 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       refetchOnWindowFocus: false,
-      retry: (failureCount, error) => String(error) !== "Error: Spotistats: 401 Unauthorized" && failureCount < 3,
+      retry: (failureCount, error) =>
+        String(error) !== "Error: Spotistats: 401 Unauthorized" &&
+        failureCount < 3,
     },
   },
 });
 
 if (!isServer) (window as any).__TANSTACK_QUERY_CLIENT__ = queryClient;
 
-function AppError() {
-  const error = () => spotifyError() ?? { title: "Unknown Error", description: "Something went wrong.", code: "No error details were captured." };
+function errorDetails(error: unknown) {
+  if (!error) return null;
+  if (error instanceof Error) {
+    return {
+      title: error.name || "Application Error",
+      description: error.message || "Something went wrong.",
+      code: error.stack ?? String(error),
+    };
+  }
+
+  return {
+    title: "Application Error",
+    description: "Something went wrong.",
+    code: typeof error === "string" ? error : JSON.stringify(error, null, 2),
+  };
+}
+
+function AppError(props: { error?: unknown } = {}) {
+  const [copied, setCopied] = createSignal(false);
+  const error = () =>
+    spotifyError() ??
+    errorDetails(props.error) ?? {
+      title: "Unknown Error",
+      description: "Something went wrong.",
+      code: "No error details were captured.",
+    };
+
+  async function copyError() {
+    const current = error();
+    await navigator.clipboard.writeText(
+      [current.title, current.description, current.code].join("\n\n"),
+    );
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
+  }
 
   return (
     <main class="p-8 md:p-16 max-w-3xl">
       <Title>Spotistats | Error</Title>
-      <div class="text-xs uppercase tracking-[0.2em] mb-3" style="color: #999">System Error</div>
-      <h1 class="text-4xl md:text-6xl font-black uppercase tracking-tighter leading-none mb-4">{error().title}</h1>
-      <p class="text-sm mb-6 max-w-md" style="color: #555; line-height: 1.7">{error().description}</p>
-      <p class="text-sm mb-6" style="color: #555">
-        Try <a class="font-bold hover:underline" href="/login">logging in again</a> or <a class="font-bold hover:underline" target="_blank" rel="noopener" href="https://github.com/oscartbeaumont/spotistats/issues/new">report this issue</a>. Include the details below.
+      <div class="text-xs uppercase tracking-[0.2em] mb-3" style="color: #999">
+        System Error
+      </div>
+      <h1 class="text-4xl md:text-6xl font-black uppercase tracking-tighter leading-none mb-4">
+        {error().title}
+      </h1>
+      <p class="text-sm mb-6 max-w-md" style="color: #555; line-height: 1.7">
+        {error().description}
       </p>
-      <pre class="overflow-auto p-4 text-xs" style="border: 4px solid #0a0a0a; background: #0a0a0a; color: #f0ede8"><samp>{error().code}</samp></pre>
+      <p class="text-sm mb-6" style="color: #555">
+        Try{" "}
+        <a class="font-bold hover:underline" href="/login">
+          logging in again
+        </a>{" "}
+        or{" "}
+        <a
+          class="font-bold hover:underline"
+          target="_blank"
+          rel="noopener"
+          href="https://github.com/oscartbeaumont/spotistats/issues/new"
+        >
+          report this issue
+        </a>
+        . Include the details below.
+      </p>
+      <pre
+        class="overflow-auto p-4 text-xs"
+        style="border: 4px solid #0a0a0a; background: #0a0a0a; color: #f0ede8"
+      >
+        <samp>{error().code}</samp>
+      </pre>
+      <button
+        type="button"
+        onClick={copyError}
+        class="mt-4 border-4 border-[#0a0a0a] px-4 py-2 text-xs font-black uppercase tracking-[0.16em] hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
+      >
+        {copied() ? "Copied" : "Copy Error"}
+      </button>
     </main>
   );
 }
@@ -40,6 +113,10 @@ function AppError() {
 function Root(props: { children?: import("solid-js").JSX.Element }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const hasCallbackCode = () => !isServer && hasSpotifyCallbackCode();
+  const publicRoute = () =>
+    ["/login"].includes(location.pathname) || hasCallbackCode();
+  const shouldRenderRoutes = () => accessToken() || publicRoute();
 
   onMount(() => {
     void consumeSpotifyCallback().then((consumed) => {
@@ -49,8 +126,8 @@ function Root(props: { children?: import("solid-js").JSX.Element }) {
   });
 
   createEffect(() => {
-    if (isServer || accessToken() || hasSpotifyCallbackCode()) return;
-    if (["/login", "/reset", "/error"].includes(location.pathname)) return;
+    if (isServer || accessToken() || hasCallbackCode()) return;
+    if (publicRoute()) return;
     navigate("/login", { replace: true });
   });
 
@@ -64,9 +141,11 @@ function Root(props: { children?: import("solid-js").JSX.Element }) {
         />
 
         <Nav />
-        <ErrorBoundary fallback={<AppError />}>
+        <ErrorBoundary fallback={(error) => <AppError error={error} />}>
           <Show when={location.pathname !== "/error"} fallback={<AppError />}>
-            <Suspense>{props.children}</Suspense>
+            <Show when={shouldRenderRoutes()}>
+              <Suspense fallback={null}>{props.children}</Suspense>
+            </Show>
           </Show>
         </ErrorBoundary>
       </MetaProvider>
