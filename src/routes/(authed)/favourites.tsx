@@ -1,7 +1,7 @@
 import { createShortcut } from "@solid-primitives/keyboard";
 import { Title } from "@solidjs/meta";
 import { createInfiniteQuery } from "@tanstack/solid-query";
-import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { isServer } from "solid-js/web";
 import { isEditableShortcutTarget } from "~/lib/keyboard";
 import * as v from "valibot";
@@ -30,6 +30,41 @@ const filtersSchema = v.object({
 function hasSaveData() {
   const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
   return connection?.saveData === true;
+}
+
+function FavouriteRow(props: {
+  item: SpotifyItem;
+  index: number;
+  selected: boolean;
+  onFocus: () => void;
+  onOpen: () => void;
+}) {
+  const initialImage = () => props.item.type === "track" ? props.item.album?.images?.[0]?.url : props.item.images?.[0]?.url;
+  const [imageUrl, setImageUrl] = createSignal(initialImage());
+  const sub = () => props.item.type === "track" ? props.item.artists?.map(a => a.name).join(", ") : "";
+
+  createEffect(() => {
+    const next = initialImage();
+    if (next) setImageUrl(next);
+  });
+
+  return (
+    <button
+      id={`favourite-${props.index}`}
+      type="button"
+      onFocus={props.onFocus}
+      onClick={props.onOpen}
+      class="w-full flex items-center gap-4 py-3 text-left transition outline-none"
+      style={props.selected ? "border-bottom: 3px solid #0a0a0a; background: #0a0a0a; color: #f0ede8; padding-left: 0.5rem" : "border-bottom: 3px solid #0a0a0a"}
+    >
+      <span class="font-black text-lg w-8 shrink-0" style="color: #ccc">{props.index + 1}</span>
+      <img src={imageUrl() ?? "/assets/placeholder.svg"} alt={props.item.name} class="h-10 w-10 object-cover shrink-0" style="border: 2px solid #0a0a0a" />
+      <div class="min-w-0">
+        <p class="text-sm font-black uppercase tracking-tight truncate">{props.item.name}</p>
+        <p class="text-xs truncate mt-0.5" style="color: #888">{sub()}</p>
+      </div>
+    </button>
+  );
 }
 
 export default function Favourites() {
@@ -67,15 +102,16 @@ export default function Favourites() {
     queryKey: ["spotify", "top", currentKind(), timeRange(), accessToken()],
     enabled: !isServer && !!accessToken() && !(currentKind() === "artists" && saveData()),
     initialPageParam: `https://api.spotify.com/v1/me/top/${currentKind()}?limit=50&time_range=${timeRange()}`,
-    queryFn: ({ pageParam }) => spotifyFetch<SpotifyPage<SpotifyItem>>(pageParam),
-    getNextPageParam: lastPage => lastPage.next || undefined,
+    placeholderData: previous => previous,
+    queryFn: ({ pageParam }) => spotifyFetch<SpotifyPage<SpotifyItem>>(pageParam as string),
+    getNextPageParam: lastPage => (lastPage as SpotifyPage<SpotifyItem>).next || undefined,
   }));
 
   createEffect(() => {
     if (atBottom() && favourites.hasNextPage && !favourites.isFetchingNextPage) void favourites.fetchNextPage();
   });
 
-  const items = () => favourites.data?.pages.flatMap(p => p.items) ?? [];
+  const items = createMemo(() => (favourites.data?.pages as SpotifyPage<SpotifyItem>[] | undefined)?.flatMap(p => p.items) ?? []);
   const showBottomPending = () => favourites.isLoading || (atBottom() && favourites.isFetchingNextPage);
   const selectedItem = () => items()[selectedIndex()];
 
@@ -100,50 +136,52 @@ export default function Favourites() {
     if (selectedIndex() >= items().length) setSelectedIndex(Math.max(items().length - 1, 0));
   });
 
-  createShortcut(["j"], event => {
-    if (isEditableShortcutTarget(event)) return;
-    event?.preventDefault();
-    moveSelection(1);
-  }, { preventDefault: false, requireReset: true });
-
-  createShortcut(["k"], event => {
-    if (isEditableShortcutTarget(event)) return;
-    event?.preventDefault();
-    moveSelection(-1);
-  }, { preventDefault: false, requireReset: true });
-
-  createShortcut(["ArrowDown"], event => {
-    if (isEditableShortcutTarget(event)) return;
-    event?.preventDefault();
-    moveSelection(1);
-  }, { preventDefault: false, requireReset: true });
-
-  createShortcut(["ArrowUp"], event => {
-    if (isEditableShortcutTarget(event)) return;
-    event?.preventDefault();
-    moveSelection(-1);
-  }, { preventDefault: false, requireReset: true });
-
-  createShortcut(["Enter"], event => {
-    if (isEditableShortcutTarget(event)) return;
-    event?.preventDefault();
-    openItem(selectedItem());
-  }, { preventDefault: false, requireReset: true });
-
-  createShortcut(["t"], event => {
-    if (isEditableShortcutTarget(event)) return;
-    event?.preventDefault();
-    setType(type() === "Tracks" ? "Artists" : "Tracks");
-    setSelectedIndex(0);
-  }, { preventDefault: false, requireReset: true });
-
-  (["short_term", "medium_term", "long_term"] as TimeRange[]).forEach((range, index) => {
-    createShortcut([String(index + 1)], event => {
+  onMount(() => {
+    createShortcut(["j"], event => {
       if (isEditableShortcutTarget(event)) return;
       event?.preventDefault();
-      setTimeRange(range);
+      moveSelection(1);
+    }, { preventDefault: false, requireReset: true });
+
+    createShortcut(["k"], event => {
+      if (isEditableShortcutTarget(event)) return;
+      event?.preventDefault();
+      moveSelection(-1);
+    }, { preventDefault: false, requireReset: true });
+
+    createShortcut(["ArrowDown"], event => {
+      if (isEditableShortcutTarget(event)) return;
+      event?.preventDefault();
+      moveSelection(1);
+    }, { preventDefault: false, requireReset: true });
+
+    createShortcut(["ArrowUp"], event => {
+      if (isEditableShortcutTarget(event)) return;
+      event?.preventDefault();
+      moveSelection(-1);
+    }, { preventDefault: false, requireReset: true });
+
+    createShortcut(["Enter"], event => {
+      if (isEditableShortcutTarget(event)) return;
+      event?.preventDefault();
+      openItem(selectedItem());
+    }, { preventDefault: false, requireReset: true });
+
+    createShortcut(["t"], event => {
+      if (isEditableShortcutTarget(event)) return;
+      event?.preventDefault();
+      setType(type() === "Tracks" ? "Artists" : "Tracks");
       setSelectedIndex(0);
     }, { preventDefault: false, requireReset: true });
+
+    (["short_term", "medium_term", "long_term"] as TimeRange[]).forEach((range, index) => {
+      createShortcut([String(index + 1)], event => {
+        if (isEditableShortcutTarget(event)) return;
+        event?.preventDefault();
+        setTimeRange(range);
+        setSelectedIndex(0);
+      }, { preventDefault: false, requireReset: true });
+    });
   });
 
   return (
@@ -180,27 +218,15 @@ export default function Favourites() {
       </div>
       <div>
         <For each={items()}>
-          {(item, index) => {
-            const img = () => item.type === "track" ? item.album?.images?.[0]?.url : item.images?.[0]?.url;
-            const sub = () => item.type === "track" ? item.artists?.map(a => a.name).join(", ") : "";
-            return (
-              <button
-                id={`favourite-${index()}`}
-                type="button"
-                onFocus={() => setSelectedIndex(index())}
-                onClick={() => openItem(item)}
-                class="w-full flex items-center gap-4 py-3 text-left transition outline-none"
-                style={selectedIndex() === index() ? "border-bottom: 3px solid #0a0a0a; background: #0a0a0a; color: #f0ede8; padding-left: 0.5rem" : "border-bottom: 3px solid #0a0a0a"}
-              >
-                <span class="font-black text-lg w-8 shrink-0" style="color: #ccc">{index() + 1}</span>
-                <img src={img() ?? "/assets/placeholder.svg"} alt={item.name} class="h-10 w-10 object-cover shrink-0" style="border: 2px solid #0a0a0a" />
-                <div class="min-w-0">
-                  <p class="text-sm font-black uppercase tracking-tight truncate">{item.name}</p>
-                  <p class="text-xs truncate mt-0.5" style="color: #888">{sub()}</p>
-                </div>
-              </button>
-            );
-          }}
+          {(item, index) => (
+            <FavouriteRow
+              item={item}
+              index={index()}
+              selected={selectedIndex() === index()}
+              onFocus={() => setSelectedIndex(index())}
+              onOpen={() => openItem(item)}
+            />
+          )}
         </For>
       </div>
       <div ref={sentinel} class="h-8" />

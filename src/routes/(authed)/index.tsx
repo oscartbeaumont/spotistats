@@ -2,7 +2,7 @@ import { Title } from "@solidjs/meta";
 import { A } from "@solidjs/router";
 import { createQuery } from "@tanstack/solid-query";
 import posthog from "posthog-js";
-import { Show } from "solid-js";
+import { createSignal, onMount, Show } from "solid-js";
 import { isServer } from "solid-js/web";
 import {
   accessToken,
@@ -24,14 +24,15 @@ type SpotifyProfile = {
 
 export default function Page() {
   const spotifyFetch = useSpotifyFetch();
+  const [hydrated, setHydrated] = createSignal(false);
+
+  onMount(() => setHydrated(true));
 
   const profile = createQuery(() => ({
     queryKey: ["spotify", "profile", accessToken()],
     enabled: !isServer && !!accessToken(),
-    initialData: profileCache() ?? undefined,
+    initialData: hydrated() ? profileCache() ?? undefined : undefined,
     queryFn: async () => {
-      const cached = profileCache();
-      if (cached?.displayName && cached.followers !== undefined) return cached;
       const data = await spotifyFetch<SpotifyProfile>(
         "https://api.spotify.com/v1/me",
       );
@@ -51,7 +52,7 @@ export default function Page() {
     },
   }));
 
-  const current = () => profile.data ?? profileCache();
+  const current = () => profile.data ?? (hydrated() ? profileCache() : null);
 
   return (
     <main class="app-main flex-1 p-8 md:p-16">
