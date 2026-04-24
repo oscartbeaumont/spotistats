@@ -2,10 +2,7 @@ import type { APIEvent } from "@solidjs/start/server";
 import { env } from "cloudflare:workers";
 import { assertTrackingBindings, cookie, json, originFromRequest, randomState, trackingRedirectUri } from "~/lib/server/spotify-tracking";
 
-const scopes = [
-  "user-read-email",
-  "user-read-recently-played",
-];
+const scopes = ["user-read-email", "user-read-recently-played"];
 
 export async function GET(event: APIEvent) {
   try {
@@ -42,7 +39,7 @@ export async function GET(event: APIEvent) {
     status: 302,
     headers: {
       Location: `https://accounts.spotify.com/authorize?${params.toString()}`,
-      "Set-Cookie": cookie("spotify_tracking_state", state, 10 * 60),
+      "Set-Cookie": cookie("spotify_stats_state", state, 10 * 60),
     },
   });
 }

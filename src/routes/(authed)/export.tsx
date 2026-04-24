@@ -31,7 +31,7 @@ export default function ExportPage() {
   const [busy, setBusy] = createSignal(false);
   const [selectedIndex, setSelectedIndex] = createSignal(0);
 
-  const playlists = createQuery(() => playlistsQueryOptions());
+  const playlists = createQuery(() => playlistsQueryOptions);
   const playlistItems = createMemo(() => playlists.data ?? []);
   const selectedPlaylist = () => playlistItems()[selectedIndex()];
 

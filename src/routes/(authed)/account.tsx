@@ -3,7 +3,7 @@ import { createQuery } from "@tanstack/solid-query";
 import { For, Show, createSignal } from "solid-js";
 import { useLocation } from "@solidjs/router";
 import { authStore } from "~/lib/storage";
-import { SpotifyUnauthenticatedError, trackingStatusQueryOptions } from "~/lib/spotify";
+import { SpotifyUnauthenticatedError, statsStatusQueryOptions } from "~/lib/spotify";
 
 function formatDate(value: number | string | null) {
   if (!value) return "Never";
@@ -13,31 +13,52 @@ function formatDate(value: number | string | null) {
 export default function AccountPage() {
   const location = useLocation();
   const [busy, setBusy] = createSignal(false);
-  const trackingReason = () =>
+  const [deleteBusy, setDeleteBusy] = createSignal(false);
+  const statsReason = () =>
     new URLSearchParams(location.search).get("reason");
-  const status = createQuery(() => trackingStatusQueryOptions());
+  const status = createQuery(() => statsStatusQueryOptions);
 
-  async function disableTracking() {
+  async function disableStats() {
     if (busy()) return;
     setBusy(true);
     try {
       const store = authStore();
-      const res = await fetch("/api/account/tracking", {
+      const res = await fetch("/api/account/stats", {
         method: "DELETE",
         headers: {
           Authorization: store.status === "authenticated" ? store.accessToken : "",
         },
       });
       if (res.status === 401) throw new SpotifyUnauthenticatedError();
-      if (!res.ok) throw new Error(`Disable tracking failed: ${res.status}`);
+      if (!res.ok) throw new Error(`Disable stats failed: ${res.status}`);
       await status.refetch();
     } finally {
       setBusy(false);
     }
   }
 
-  function enableTracking() {
-    window.location.href = "/api/account/tracking/login";
+  async function deleteAccountData() {
+    if (deleteBusy()) return;
+    if (!confirm("Delete all Spotistats account data stored by this site? This also stops stats sync.")) return;
+    setDeleteBusy(true);
+    try {
+      const store = authStore();
+      const res = await fetch("/api/account/stats?all=1", {
+        method: "DELETE",
+        headers: {
+          Authorization: store.status === "authenticated" ? store.accessToken : "",
+        },
+      });
+      if (res.status === 401) throw new SpotifyUnauthenticatedError();
+      if (!res.ok) throw new Error(`Delete account data failed: ${res.status}`);
+      await status.refetch();
+    } finally {
+      setDeleteBusy(false);
+    }
+  }
+
+  function enableStats() {
+    window.location.href = "/account/stats/login";
   }
 
   return (
@@ -49,11 +70,11 @@ export default function AccountPage() {
       >
         <h1 class="text-2xl font-black uppercase tracking-tight">Account</h1>
         <span class="text-xs uppercase tracking-widest" style="color: #999">
-          Server Sync
+          Stats Sync
         </span>
       </div>
 
-      <Show when={trackingReason()}>
+      <Show when={statsReason()}>
         {(reason) => (
           <pre
             class="overflow-auto p-4 text-xs mb-6 text-red-600"
@@ -79,7 +100,7 @@ export default function AccountPage() {
                 class="text-xs uppercase tracking-[0.2em] mb-3"
                 style="color: #999"
               >
-                Listening Tracking
+                Listening Stats
               </div>
               <h2 class="text-4xl md:text-5xl font-black uppercase tracking-tighter leading-none mb-4">
                 {status.data?.enabled ? "Enabled" : "Disabled"}
@@ -88,9 +109,8 @@ export default function AccountPage() {
                 class="text-sm max-w-xl mb-6"
                 style="color: #555; line-height: 1.7"
               >
-                When enabled, Spotistats stores your recently played Spotify
-                tracks in our Cloudflare D1 database so server-side stats can be
-                queried over time.
+                When enabled, Spotistats securely stores your recently played Spotify
+                tracks so your listening stats can build over time.
               </p>
               <div
                 class="grid gap-3 text-xs uppercase tracking-widest mb-6"
@@ -124,24 +144,43 @@ export default function AccountPage() {
                 fallback={
                   <button
                     type="button"
-                    onClick={enableTracking}
+                    onClick={enableStats}
                     class="font-black text-sm uppercase tracking-widest py-4 px-8 transition hover:bg-[#1DB954] hover:text-black"
                     style="background: #0a0a0a; color: #f0ede8; border: 4px solid #0a0a0a"
                   >
-                    Enable Tracking →
+                    Connect Spotify Stats →
                   </button>
                 }
               >
-                <button
-                  type="button"
-                  disabled={busy()}
-                  onClick={disableTracking}
-                  class="font-black text-sm uppercase tracking-widest py-4 px-8 transition disabled:opacity-50 hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
-                  style="border: 4px solid #0a0a0a"
-                >
-                  {busy() ? "Disabling_" : "Disable Tracking"}
-                </button>
+                <div class="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    disabled={busy()}
+                    onClick={disableStats}
+                    class="font-black text-sm uppercase tracking-widest py-4 px-8 transition disabled:opacity-50 hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
+                    style="border: 4px solid #0a0a0a"
+                  >
+                    {busy() ? "Disabling_" : "Disable Stats"}
+                  </button>
+                </div>
               </Show>
+            </div>
+            <div class="p-5" style="border: 4px solid #991b1b">
+              <div class="text-xs uppercase tracking-[0.2em] mb-3 text-red-700">
+                Danger Zone
+              </div>
+              <p class="text-sm max-w-xl mb-5" style="color: #555; line-height: 1.7">
+                Delete all account data stored by Spotistats for this Spotify account. This also stops stats sync.
+              </p>
+              <button
+                type="button"
+                disabled={deleteBusy()}
+                onClick={deleteAccountData}
+                class="font-black text-sm uppercase tracking-widest py-4 px-8 text-red-700 transition disabled:opacity-50 hover:bg-red-700 hover:text-[#f0ede8]"
+                style="border: 4px solid #991b1b"
+              >
+                {deleteBusy() ? "Deleting_" : "Delete Site Data"}
+              </button>
             </div>
           </div>
 
@@ -150,7 +189,7 @@ export default function AccountPage() {
               class="text-xs uppercase tracking-[0.2em] mb-3"
               style="color: #999"
             >
-              Recent Ingested Songs
+              Recent Synced Songs
             </div>
             <Show
               when={(status.data?.recent.length ?? 0) > 0}
@@ -159,7 +198,7 @@ export default function AccountPage() {
                   class="text-sm uppercase tracking-widest"
                   style="color: #999"
                 >
-                  NO DATA YET_
+                  {status.data?.enabled ? "SYNCING STATS_" : "NO DATA YET_"}
                 </p>
               }
             >

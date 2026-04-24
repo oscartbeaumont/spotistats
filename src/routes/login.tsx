@@ -8,7 +8,8 @@ export default function Page() {
   const navigate = useNavigate();
 
   onMount(() => {
-    if (authStore().status === "authenticated") navigate("/", { replace: true });
+    if (authStore().status === "authenticated")
+      navigate("/", { replace: true });
   });
 
   return (
@@ -22,7 +23,15 @@ export default function Page() {
           SPOTISTATS
         </span>
         <span class="text-xs uppercase tracking-widest" style="color: #999">
-          v1.0
+          Created by{" "}
+          <a
+            href="https://otbeaumont.me"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="hover:underline underline-offset-2"
+          >
+            Oscar Beaumont
+          </a>
         </span>
       </header>
       <main class="flex-1 flex items-center p-8 md:p-16">
@@ -40,8 +49,9 @@ export default function Page() {
             class="text-sm mb-10 max-w-xs"
             style="color: #555; line-height: 1.7"
           >
-            Spotistats analyses your Spotify listening history. Server-side
-            tracking is optional and can be managed from your account page.
+            Spotistats analyses your Spotify listening history. By default your
+            data doesn't touch our servers, but you can enable stats sync in
+            settings for a more enhanced experience.
           </p>
           <button
             type="button"

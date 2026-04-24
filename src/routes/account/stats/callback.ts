@@ -1,8 +1,8 @@
 import type { APIEvent } from "@solidjs/start/server";
-import { assertTrackingBindings, clearCookie, enableTracking, exchangeTrackingCode, json, parseCookie } from "~/lib/server/spotify-tracking";
+import { assertTrackingBindings, clearCookie, enableTracking, exchangeTrackingCode, parseCookie } from "~/lib/server/spotify-tracking";
 
 function failedLocation(reason: string) {
-  return `/account?tracking=failed&reason=${encodeURIComponent(reason)}`;
+  return `/account?stats=failed&reason=${encodeURIComponent(reason)}`;
 }
 
 export async function GET(event: APIEvent) {
@@ -13,7 +13,7 @@ export async function GET(event: APIEvent) {
       status: 302,
       headers: {
         Location: failedLocation(error instanceof Error ? error.message : String(error)),
-        "Set-Cookie": clearCookie("spotify_tracking_state"),
+        "Set-Cookie": clearCookie("spotify_stats_state"),
       },
     });
   }
@@ -21,7 +21,7 @@ export async function GET(event: APIEvent) {
   const url = new URL(event.request.url);
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
-  const expectedState = parseCookie(event.request, "spotify_tracking_state");
+  const expectedState = parseCookie(event.request, "spotify_stats_state");
   const spotifyError = url.searchParams.get("error");
 
   if (spotifyError) {
@@ -29,7 +29,7 @@ export async function GET(event: APIEvent) {
       status: 302,
       headers: {
         Location: failedLocation(spotifyError),
-        "Set-Cookie": clearCookie("spotify_tracking_state"),
+        "Set-Cookie": clearCookie("spotify_stats_state"),
       },
     });
   }
@@ -40,7 +40,7 @@ export async function GET(event: APIEvent) {
       status: 302,
       headers: {
         Location: failedLocation(reason),
-        "Set-Cookie": clearCookie("spotify_tracking_state"),
+        "Set-Cookie": clearCookie("spotify_stats_state"),
       },
     });
   }
@@ -51,8 +51,8 @@ export async function GET(event: APIEvent) {
     return new Response(null, {
       status: 302,
       headers: {
-        Location: "/account?tracking=enabled",
-        "Set-Cookie": clearCookie("spotify_tracking_state"),
+        Location: "/account?stats=enabled",
+        "Set-Cookie": clearCookie("spotify_stats_state"),
       },
     });
   } catch (error) {
@@ -61,7 +61,7 @@ export async function GET(event: APIEvent) {
       status: 302,
       headers: {
         Location: failedLocation(error instanceof Error ? error.message : String(error)),
-        "Set-Cookie": clearCookie("spotify_tracking_state"),
+        "Set-Cookie": clearCookie("spotify_stats_state"),
       },
     });
   }

@@ -38,7 +38,6 @@ type PlayHistory = {
 };
 
 export function assertTrackingBindings() {
-  console.log("DEBUG", env, env.DB);
   if (!env.DB)
     throw new Error(
       "Missing Cloudflare D1 binding DB. Run this through wrangler dev/preview or deploy to Cloudflare.",
@@ -99,7 +98,7 @@ export function originFromRequest(request: Request) {
 }
 
 export function trackingRedirectUri(request: Request) {
-  return `${originFromRequest(request)}/api/account/tracking/callback`;
+  return `${originFromRequest(request)}/account/stats/callback`;
 }
 
 function basicAuth() {
@@ -248,6 +247,12 @@ export async function disableTracking(spotifyUserId: string) {
   await db(env.DB)
     .update(schema.spotifyTrackingUsers)
     .set({ enabled: 0, disabledAt: now, updatedAt: now })
+    .where(eq(schema.spotifyTrackingUsers.spotifyUserId, spotifyUserId));
+}
+
+export async function deleteAccountData(spotifyUserId: string) {
+  await db(env.DB)
+    .delete(schema.spotifyTrackingUsers)
     .where(eq(schema.spotifyTrackingUsers.spotifyUserId, spotifyUserId));
 }
 

@@ -10,7 +10,7 @@ export default function Page() {
 
   onMount(() => setHydrated(true));
 
-  const profile = createQuery(() => profileQueryOptions(authStore()));
+  const profile = createQuery(() => profileQueryOptions);
 
   const current = () => {
     const store = authStore();
@@ -63,7 +63,7 @@ export default function Page() {
                 </span>
               </div>
               <A
-                href="/favourites"
+                href="/favourites/tracks"
                 class="inline-block font-black text-sm uppercase px-6 py-3 tracking-wide transition hover:bg-[#1DB954] hover:text-black"
                 style="border: 4px solid #0a0a0a"
                 onMouseEnter={(e) => {

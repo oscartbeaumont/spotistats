@@ -1,4 +1,4 @@
-import { infiniteQueryOptions, queryOptions } from "@tanstack/solid-query";
+import { type InfiniteData, queryOptions } from "@tanstack/solid-query";
 import posthog from "posthog-js";
 import { isServer } from "solid-js/web";
 import {
@@ -54,13 +54,15 @@ export type SpotifyProfile = {
 
 export type SpotifyItem = {
   name: string;
-  type: "track" | "artist";
+  type: "track" | "artist" | "album";
   uri: string;
   external_urls: { spotify: string };
   images?: { url: string }[];
   artists?: { name: string }[];
   album?: { images: { url: string }[] };
 };
+
+type SavedAlbumItem = { album: SpotifyItem };
 
 export type Playlist = {
   id?: string;
@@ -278,12 +280,11 @@ export async function spotifyFetch<T>(
   }
 }
 
-export function profileQueryOptions(store = authStore()) {
-  return queryOptions({
-    queryKey: ["spotify", "profile"],
-    enabled: !isServer && store.status === "authenticated",
-    initialData: store.status === "authenticated" ? store.profile : undefined,
-    queryFn: async () => {
+export const profileQueryOptions = queryOptions({
+  queryKey: ["spotify", "profile"],
+  enabled: !isServer && authStore().status === "authenticated",
+  queryFn: async () => {
+      const store = authStore();
       const data = await spotifyFetch<SpotifyProfile>(
         "https://api.spotify.com/v1/me",
       );
@@ -305,26 +306,31 @@ export function profileQueryOptions(store = authStore()) {
       );
       return next;
     },
-  });
-}
+});
 
 export function favouritesQueryOptions(
-  kind: "tracks" | "artists",
-  timeRange: "long_term" | "medium_term" | "short_term",
+  kind: "tracks" | "albums",
+  range: "long" | "medium" | "short",
   enabled = true,
 ) {
-  return infiniteQueryOptions({
-    queryKey: ["spotify", "top", kind, timeRange],
+  const timeRange = `${range}_term` as "long_term" | "medium_term" | "short_term";
+  return {
+    queryKey: ["spotify", "favourites", kind, range],
     enabled: !isServer && authStore().status === "authenticated" && enabled,
-    initialPageParam: `https://api.spotify.com/v1/me/top/${kind}?limit=50&time_range=${timeRange}`,
-    placeholderData: (previous) => previous,
-    queryFn: ({ pageParam }) => spotifyFetch<SpotifyPage<SpotifyItem>>(pageParam as string),
-    getNextPageParam: (lastPage) => (lastPage as SpotifyPage<SpotifyItem>).next || undefined,
-  });
+    initialPageParam: kind === "tracks"
+      ? `https://api.spotify.com/v1/me/top/tracks?limit=50&time_range=${timeRange}`
+      : "https://api.spotify.com/v1/me/albums?limit=50",
+    placeholderData: (previous: InfiniteData<SpotifyPage<SpotifyItem>, string> | undefined) => previous,
+    queryFn: async ({ pageParam }: { pageParam: string }) => {
+      if (kind === "tracks") return spotifyFetch<SpotifyPage<SpotifyItem>>(pageParam as string);
+      const data = await spotifyFetch<SpotifyPage<SavedAlbumItem>>(pageParam as string);
+      return { ...data, items: data.items.map((item) => item.album) } satisfies SpotifyPage<SpotifyItem>;
+    },
+    getNextPageParam: (lastPage: SpotifyPage<SpotifyItem>) => lastPage.next || undefined,
+  };
 }
 
-export function playlistsQueryOptions() {
-  return queryOptions({
+export const playlistsQueryOptions = queryOptions({
     queryKey: ["spotify", "playlists"],
     enabled: !isServer && authStore().status === "authenticated",
     queryFn: async () => {
@@ -337,23 +343,26 @@ export function playlistsQueryOptions() {
       }
       return [{ name: "Liked Songs", public: true, images: [] }, ...value];
     },
-  });
-}
+});
 
-export function trackingStatusQueryOptions() {
-  return queryOptions({
-    queryKey: ["account", "tracking"],
+export const statsStatusQueryOptions = queryOptions({
+    queryKey: ["account", "stats"],
     enabled: !isServer && authStore().status === "authenticated",
+    refetchInterval: (query) => {
+      const data = query.state.data as TrackingStatus | undefined;
+      if (data?.enabled && data.recent.length === 0) return 3000;
+      return 20000;
+    },
     queryFn: async () => {
       const store = authStore();
       if (store.status !== "authenticated") throw new SpotifyUnauthenticatedError();
 
-      const res = await fetch("/api/account/tracking", {
+      const res = await fetch("/api/account/stats", {
         headers: { Authorization: store.accessToken },
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({
-          error: `Tracking status failed: ${res.status}`,
+          error: `Stats status failed: ${res.status}`,
         }))) as { error?: string };
         return {
           enabled: false,
@@ -361,14 +370,13 @@ export function trackingStatusQueryOptions() {
           disabledAt: null,
           lastPlayedAtMs: null,
           lastSuccessAt: null,
-          lastError: body.error ?? `Tracking status failed: ${res.status}`,
+          lastError: body.error ?? `Stats status failed: ${res.status}`,
           recent: [],
         } satisfies TrackingStatus;
       }
       return (await res.json()) as TrackingStatus;
     },
-  });
-}
+});
 
 export async function resetBrowserState() {
   if ("serviceWorker" in navigator) {
