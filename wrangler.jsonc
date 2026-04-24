@@ -25,12 +25,12 @@
     "producers": [
       {
         "binding": "SPOTIFY_SYNC_QUEUE",
-        "queue": "spotistats-spotify-sync",
+        "queue": "spotistats,
       },
     ],
     "consumers": [
       {
-        "queue": "spotistats-spotify-sync",
+        "queue": "spotistats",
         "max_batch_size": 10,
         "max_batch_timeout": 30,
       },
