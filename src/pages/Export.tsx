@@ -1,6 +1,6 @@
 import { Title } from "@solidjs/meta";
 import JSZip from "jszip";
-import { createMemo, createSignal, For, Loading, Show } from "solid-js";
+import { createMemo, createSignal, For, latest, Loading, Show } from "solid-js";
 
 import { downloadBlob, downloadTextFile, csvCell } from "~/lib/download";
 import { errorMessage } from "~/lib/errors";
@@ -31,6 +31,8 @@ export default function ExportPage() {
 
   const playlists = createMemo(() => runSpotify(getPlaylists()));
   const playlistItems = () => playlists();
+  /** Non-suspending read for event handlers and timers. */
+  const loadedPlaylists = () => latest(playlists) ?? [];
 
   async function downloadPage(
     fetchPage: (offset: number) => Promise<SpotifyPage<PlaylistTrack>>,
@@ -129,7 +131,7 @@ export default function ExportPage() {
   }
 
   async function backupAll() {
-    const all = playlistItems();
+    const all = loadedPlaylists();
     if (busy()) return alert("Please wait for the current download to complete.");
     setBusy(true);
     setProgress(0);
@@ -167,7 +169,7 @@ export default function ExportPage() {
   function moveSelection(delta: number) {
     const next = Math.max(
       0,
-      Math.min(selectedIndex() + delta, playlistItems().length - 1),
+      Math.min(selectedIndex() + delta, loadedPlaylists().length - 1),
     );
     setSelectedIndex(next);
     document
@@ -193,7 +195,7 @@ export default function ExportPage() {
   });
   createShortcut(["Enter"], (event) => {
     if (isEditableShortcutTarget(event)) return;
-    const selected = playlistItems()[selectedIndex()];
+    const selected = loadedPlaylists()[selectedIndex()];
     if (selected) void exportPlaylist(selected);
   });
   createShortcut(["b"], (event) => {

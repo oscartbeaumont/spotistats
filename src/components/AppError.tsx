@@ -1,9 +1,13 @@
-import { createSignal } from "solid-js";
+import { createSignal, onCleanup } from "solid-js";
 
 import { errorMessage } from "~/lib/errors";
 
 export function AppError(props: { error?: unknown; reset?: () => void }) {
   const [copied, setCopied] = createSignal(false);
+  let copiedTimer: number | undefined;
+  onCleanup(() => {
+    if (copiedTimer !== undefined) window.clearTimeout(copiedTimer);
+  });
   const errorText = () => {
     if (props.error instanceof Error) {
       return `${props.error.message}\n\n${props.error.stack ?? ""}`;
@@ -46,9 +50,13 @@ export function AppError(props: { error?: unknown; reset?: () => void }) {
         <button
           type="button"
           onClick={async () => {
-            await navigator.clipboard.writeText(errorText());
-            setCopied(true);
-            window.setTimeout(() => setCopied(false), 1500);
+            try {
+              await navigator.clipboard.writeText(errorText());
+              setCopied(true);
+              copiedTimer = window.setTimeout(() => setCopied(false), 1500);
+            } catch (error) {
+              console.error("Failed to copy error", error);
+            }
           }}
           class="border-4 border-[#0a0a0a] px-4 py-2 text-xs font-black uppercase tracking-[0.16em] hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
         >

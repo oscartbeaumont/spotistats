@@ -2,31 +2,40 @@ import { Title } from "@solidjs/meta";
 import { useLocation, useNavigate } from "@solidjs/router";
 import {
   action,
+  createEffect,
   createMemo,
   createSignal,
   Loading,
-  onSettled,
   refresh,
   Show,
+  untrack,
 } from "solid-js";
 
 import { accountApi } from "~/client/api";
+import { errorMessage } from "~/lib/errors";
 import { formatDate } from "~/lib/format";
 import { createShortcut, isEditableShortcutTarget } from "~/lib/shortcut";
 
 export default function AccountPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const reason = () => new URLSearchParams(location.search).get("reason");
+  // Snapshot the one-shot reason before the effect below clears the query.
+  const [reason] = createSignal(
+    untrack(() => new URLSearchParams(location.search).get("reason")),
+  );
 
   const stats = createMemo(() => accountApi.status());
 
-  onSettled(() => {
-    if (location.search) navigate("/account", { replace: true });
-  });
+  createEffect(
+    () => location.search,
+    (search) => {
+      if (search) navigate("/account", { replace: true });
+    },
+  );
 
   const [disabling, setDisabling] = createSignal(false);
   const [deleting, setDeleting] = createSignal(false);
+  const [actionError, setActionError] = createSignal<string | null>(null);
 
   const runDisable = action(function* () {
     yield accountApi.disable();
@@ -41,8 +50,11 @@ export default function AccountPage() {
   const disableStats = async () => {
     if (disabling()) return;
     setDisabling(true);
+    setActionError(null);
     try {
       await runDisable();
+    } catch (error) {
+      setActionError(errorMessage(error));
     } finally {
       setDisabling(false);
     }
@@ -58,8 +70,11 @@ export default function AccountPage() {
       return;
     }
     setDeleting(true);
+    setActionError(null);
     try {
       await runDelete();
+    } catch (error) {
+      setActionError(errorMessage(error));
     } finally {
       setDeleting(false);
     }
@@ -88,6 +103,14 @@ export default function AccountPage() {
         {(value) => (
           <pre class="overflow-auto p-4 text-xs mb-6 text-red-600 border-4 border-[#0a0a0a] bg-[#0a0a0a]">
             <samp>Failed to authenticate: {value()}</samp>
+          </pre>
+        )}
+      </Show>
+
+      <Show when={actionError()}>
+        {(value) => (
+          <pre class="overflow-auto p-4 text-xs mb-6 text-red-600 border-4 border-[#0a0a0a] bg-[#0a0a0a]">
+            <samp>Action failed: {value()}</samp>
           </pre>
         )}
       </Show>

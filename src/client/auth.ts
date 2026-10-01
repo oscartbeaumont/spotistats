@@ -1,4 +1,6 @@
-import { authStore, setAuthStore } from "./storage";
+import { untrack } from "solid-js";
+
+import { authStore, setAuthStore, type AuthStore } from "./storage";
 import { spotifyClientId, spotifyScopes } from "./spotify";
 
 /** Browser PKCE login and callback handling for the user session token. */
@@ -70,11 +72,12 @@ export function hasSpotifyCallbackCode() {
   return new URLSearchParams(window.location.search).has("code");
 }
 
-export async function consumeSpotifyCallback() {
+export async function consumeSpotifyCallback(
+  store: AuthStore = untrack(() => authStore()),
+) {
   const params = new URLSearchParams(window.location.search);
   const code = params.get("code");
   const returnedState = params.get("state");
-  const store = authStore();
 
   if (!code) return false;
 

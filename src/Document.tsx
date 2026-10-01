@@ -22,6 +22,8 @@ export default function Document(props: { children?: JSX.Element }) {
         <link rel="icon" href="/favicon.ico" />
         <link rel="apple-touch-icon" href="/assets/logo-256.png" />
         <link rel="manifest" href="/manifest.webmanifest" />
+        {/* Must run before the async client entry, which start mode injects here. */}
+        <HydrationScript />
       </head>
       <body>
         <noscript>
@@ -42,7 +44,6 @@ export default function Document(props: { children?: JSX.Element }) {
           </main>
         </noscript>
         {props.children}
-        <HydrationScript />
       </body>
     </html>
   );

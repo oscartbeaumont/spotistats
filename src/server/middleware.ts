@@ -2,13 +2,18 @@ import { Effect } from "effect";
 
 import { ServicesLive, apiHandler } from "./handler";
 import { statsCallback, statsLogin } from "./oauth";
+import { isPostHogPath, proxyPostHog } from "./posthog";
 
 /**
  * Start-mode middleware.
  *
- * The worker's JSON API and the stats OAuth redirects run here, inside Solid's
- * request scope and in the Workers runtime. Every other request falls through
- * to the page render.
+ * Routes handled here, in order:
+ * - `/account/stats/login` and `/account/stats/callback` — the stats OAuth flow.
+ * - `/api/*` — the Effect `HttpApi`.
+ * - `/ph_ed90f8/*` — the PostHog proxy.
+ *
+ * Every other request falls through to the page render. Keep this list in
+ * step with the routes the app expects the server to own.
  */
 export default async function middleware(
   request: Request,
@@ -25,6 +30,8 @@ export default async function middleware(
   }
 
   if (pathname.startsWith("/api/")) return apiHandler(request);
+
+  if (isPostHogPath(pathname)) return proxyPostHog(request);
 
   return next();
 }

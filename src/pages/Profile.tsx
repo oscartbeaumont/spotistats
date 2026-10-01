@@ -6,6 +6,7 @@ import {
   createSignal,
   For,
   isPending,
+  latest,
   Loading,
   onSettled,
   Show,
@@ -87,7 +88,7 @@ export default function ProfilePage() {
     setTick((value) => value + 1);
   });
   const refreshStats = async () => {
-    if (refreshing() || !stats().enabled) return;
+    if (refreshing() || !latest(stats)?.enabled) return;
     setRefreshing(true);
     try {
       await queueRefresh();
@@ -157,7 +158,9 @@ export default function ProfilePage() {
               </Show>
               <div
                 class={`grid gap-10 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,30rem)] transition-opacity ${
-                  isPending(profile) || isPending(currentlyPlaying)
+                  isPending(profile) ||
+                  isPending(currentlyPlaying) ||
+                  isPending(stats)
                     ? "opacity-45"
                     : "opacity-100"
                 }`}

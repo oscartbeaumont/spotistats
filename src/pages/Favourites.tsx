@@ -5,6 +5,7 @@ import {
   createMemo,
   createSignal,
   For,
+  isPending,
   latest,
   Loading,
   onSettled,
@@ -84,55 +85,103 @@ function FavouriteRow(props: {
 export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
   const navigate = useNavigate();
   const [range, setRange] = createSignal<Range>("short");
-  const [pageCount, setPageCount] = createSignal(1);
-  const [selectedIndex, setSelectedIndex] = createSignal(0);
+  const [rawSelected, setRawSelected] = createSignal(0);
   const [atBottom, setAtBottom] = createSignal(false);
   const [saveData, setSaveData] = createSignal(false);
+  const [extra, setExtra] = createSignal<SpotifyItem[]>([]);
+  const [hasMore, setHasMore] = createSignal(true);
+  const [loadingMore, setLoadingMore] = createSignal(false);
   let sentinel: HTMLDivElement | undefined;
+  let observer: IntersectionObserver | undefined;
 
-  const result = createMemo(async () => {
-    if (props.kind === "albums" && saveData()) return { items: [], hasMore: false };
-    const items: SpotifyItem[] = [];
-    let hasMore = false;
-    for (let index = 0; index < pageCount(); index += 1) {
-      const page =
-        props.kind === "tracks"
-          ? await runSpotify(getTopTracksPage(range(), index * 50))
-          : await runSpotify(getSavedAlbumsPage(index * 50));
-      items.push(...page.items);
-      hasMore = page.next !== null;
+  const fetchPage = (offset: number) =>
+    props.kind === "tracks"
+      ? runSpotify(getTopTracksPage(range(), offset))
+      : runSpotify(getSavedAlbumsPage(offset));
+
+  // The first page suspends, so `<Loading>` covers the initial load. Later
+  // pages append to `extra`, so a load never refetches the earlier pages.
+  const firstPage = createMemo(async () => {
+    if (props.kind === "albums" && saveData()) {
+      return { items: [] as SpotifyItem[], next: null };
     }
-    return { items, hasMore };
+    return fetchPage(0);
   });
+
+  const items = createMemo(() => [...firstPage().items, ...extra()]);
+
+  /**
+   * Non-suspending read for handlers, effects, and the scroll trigger.
+   * `latest` throws for a source that has never resolved, so guard on
+   * `isPending` first; after the first load it is always safe.
+   */
+  const loadedItems = (): SpotifyItem[] =>
+    isPending(items) ? [] : (latest(items) ?? []);
+
+  // Derived selection: the raw index is clamped to the loaded rows, so no
+  // effect has to write the signal back.
+  const selectedIndex = createMemo(() =>
+    Math.max(0, Math.min(rawSelected(), loadedItems().length - 1)),
+  );
+
+  const resetPaging = () => {
+    setExtra([]);
+    setHasMore(true);
+    setRawSelected(0);
+  };
+
+  const loadMore = async (offset: number) => {
+    if (loadingMore() || !hasMore()) return;
+    setLoadingMore(true);
+    try {
+      const page = await fetchPage(offset);
+      setExtra((previous) => [...previous, ...page.items]);
+      setHasMore(page.next !== null);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   onSettled(() => {
     setSaveData(hasSaveData());
-    const observer = new IntersectionObserver(
+    observer = new IntersectionObserver(
       (entries) => setAtBottom(entries.some((entry) => entry.isIntersecting)),
       { rootMargin: "500px" },
     );
+    // The sentinel may mount after this runs (the first page suspends), so the
+    // ref callback observes it as a fallback.
     if (sentinel) observer.observe(sentinel);
-    return () => observer.disconnect();
+    return () => observer?.disconnect();
   });
 
+  // Run when the first page settles, so `latest` is safe to read.
   createEffect(
-    () => ({ bottom: atBottom(), data: latest(result) }),
-    ({ bottom, data }) => {
-      if (bottom && data?.hasMore) setPageCount((count) => count + 1);
+    () => (isPending(firstPage) ? undefined : latest(firstPage)),
+    (page) => {
+      if (!page) return;
+      setHasMore(page.next !== null);
+      setExtra([]);
     },
   );
 
+  // Load the next page when the sentinel is in view and the first page is
+  // resolved. The offset is computed in the tracking scope so no `latest`
+  // read happens in the effect callback.
   createEffect(
-    () => ({
-      length: latest(result)?.items.length ?? 0,
-      selected: selectedIndex(),
-    }),
-    ({ length, selected }) => {
-      if (selected >= length) setSelectedIndex(Math.max(length - 1, 0));
+    () => {
+      const pending = isPending(items);
+      return {
+        pending,
+        bottom: atBottom(),
+        more: hasMore(),
+        loading: loadingMore(),
+        offset: pending ? 0 : (latest(items)?.length ?? 0),
+      };
+    },
+    ({ pending, bottom, more, loading, offset }) => {
+      if (!pending && bottom && more && !loading) void loadMore(offset);
     },
   );
-
-  const items = () => result().items;
 
   const itemUrl = (item: SpotifyItem) => {
     const store = authStore();
@@ -151,9 +200,9 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
   const moveSelection = (delta: number) => {
     const next = Math.max(
       0,
-      Math.min(selectedIndex() + delta, (latest(result)?.items.length ?? 1) - 1),
+      Math.min(selectedIndex() + delta, loadedItems().length - 1),
     );
-    setSelectedIndex(next);
+    setRawSelected(next);
     document
       .getElementById(`favourite-${next}`)
       ?.scrollIntoView({ block: "nearest" });
@@ -177,19 +226,18 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
   });
   createShortcut(["Enter"], (event) => {
     if (isEditableShortcutTarget(event)) return;
-    openItem(latest(result)?.items[selectedIndex()]);
+    openItem(loadedItems()[selectedIndex()]);
   });
   createShortcut(["t"], (event) => {
     if (isEditableShortcutTarget(event)) return;
     navigate(props.kind === "tracks" ? "/favourites/albums" : "/favourites/tracks");
-    setSelectedIndex(0);
+    resetPaging();
   });
   RANGES.forEach((value, index) => {
     createShortcut([String(index + 1)], (event) => {
       if (isEditableShortcutTarget(event)) return;
       setRange(value);
-      setPageCount(1);
-      setSelectedIndex(0);
+      resetPaging();
     });
   });
 
@@ -232,8 +280,7 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
             <button
               onClick={() => {
                 setRange(optionRange);
-                setPageCount(1);
-                setSelectedIndex(0);
+                resetPaging();
               }}
               class={`text-xs uppercase tracking-wide px-3 py-2 font-bold transition border-[3px] ${
                 range() === optionRange
@@ -268,14 +315,25 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
                 item={item}
                 index={index()}
                 selected={selectedIndex() === index()}
-                onFocus={() => setSelectedIndex(index())}
+                onFocus={() => setRawSelected(index())}
                 onOpen={() => openItem(item)}
               />
             )}
           </For>
+          <Show when={loadingMore()}>
+            <p class="py-6 text-xs uppercase tracking-[0.2em] text-[#aaa]">
+              LOADING MORE_
+            </p>
+          </Show>
         </Show>
       </Loading>
-      <div ref={sentinel} class="h-8" />
+      <div
+        ref={(el) => {
+          sentinel = el;
+          observer?.observe(el);
+        }}
+        class="h-8"
+      />
     </main>
   );
 }

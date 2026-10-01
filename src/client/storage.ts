@@ -57,9 +57,11 @@ export { authReady };
  * first client render identical to the server render. `bootstrapClient` calls
  * this on the client after hydration.
  */
-export function hydrateAuthStore() {
-  setAuthSignal(readAuth());
+export function hydrateAuthStore(): AuthStore {
+  const value = readAuth();
+  setAuthSignal(value);
   setAuthReady(true);
+  return value;
 }
 
 const persist = (value: AuthStore) => {
