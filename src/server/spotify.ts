@@ -80,6 +80,34 @@ const decode = <S extends Schema.ConstraintDecoder<unknown>>(
     ),
   );
 
+const readText = (
+  response: Response,
+  operation: string,
+): Effect.Effect<string, UpstreamError> =>
+  Effect.tryPromise({
+    try: () => response.text(),
+    catch: (cause) =>
+      new UpstreamError({
+        service: "spotify",
+        message: `${operation}: ${String(cause)}`,
+        status: response.status,
+      }),
+  });
+
+const readJson = (
+  response: Response,
+  operation: string,
+): Effect.Effect<unknown, UpstreamError> =>
+  Effect.tryPromise({
+    try: () => response.json(),
+    catch: (cause) =>
+      new UpstreamError({
+        service: "spotify",
+        message: `${operation}: ${String(cause)}`,
+        status: response.status,
+      }),
+  });
+
 const tokenRequest = (body: URLSearchParams) =>
   Effect.gen(function* () {
     const response = yield* Effect.tryPromise({
@@ -101,7 +129,7 @@ const tokenRequest = (body: URLSearchParams) =>
     });
 
     if (!response.ok) {
-      const detail = yield* Effect.promise(() => response.text());
+      const detail = yield* readText(response, "Failed to read Spotify token error");
       return yield* Effect.fail(
         new UpstreamError({
           service: "spotify",
@@ -111,7 +139,7 @@ const tokenRequest = (body: URLSearchParams) =>
       );
     }
 
-    const json = yield* Effect.promise(() => response.json());
+    const json = yield* readJson(response, "Failed to read Spotify token response");
     return yield* decode(SpotifyToken, json);
   });
 
@@ -152,7 +180,7 @@ const apiRequest = <S extends Schema.ConstraintDecoder<unknown>>(
     }
 
     if (!response.ok) {
-      const detail = yield* Effect.promise(() => response.text());
+      const detail = yield* readText(response, "Failed to read Spotify API error");
       return yield* Effect.fail(
         new UpstreamError({
           service: "spotify",
@@ -162,7 +190,7 @@ const apiRequest = <S extends Schema.ConstraintDecoder<unknown>>(
       );
     }
 
-    const json = yield* Effect.promise(() => response.json());
+    const json = yield* readJson(response, "Failed to read Spotify API response");
     return yield* decode(schema, json);
   });
 

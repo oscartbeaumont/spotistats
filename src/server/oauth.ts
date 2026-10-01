@@ -26,7 +26,12 @@ const parseCookie = (request: Request, name: string) => {
     .split(";")
     .map((part) => part.trim())
     .find((part) => part.startsWith(`${name}=`));
-  return value ? decodeURIComponent(value.slice(name.length + 1)) : null;
+  if (!value) return null;
+  try {
+    return decodeURIComponent(value.slice(name.length + 1));
+  } catch {
+    return null;
+  }
 };
 
 const randomState = () =>

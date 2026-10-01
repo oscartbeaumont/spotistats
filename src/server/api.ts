@@ -10,8 +10,9 @@ import { Tracking } from "./tracking";
  * Resolves the Spotify user behind a bearer token. A token Spotify rejects
  * becomes a declared 401, so the client can log the user out cleanly.
  */
-const currentUser = (authorization: string) =>
+const currentUser = (authorization: string | undefined) =>
   Effect.gen(function* () {
+    if (!authorization) return yield* Effect.fail(new HttpApiError.Unauthorized({}));
     const spotify = yield* Spotify;
     return yield* spotify.profile(authorization.replace(/^Bearer\s+/i, ""));
   }).pipe(

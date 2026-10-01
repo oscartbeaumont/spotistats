@@ -67,22 +67,22 @@ const del = HttpApiEndpoint.make("DELETE");
 
 export const AccountGroup = HttpApiGroup.make("account").add(
   HttpApiEndpoint.get("status", "/api/account/stats", {
-    headers: { authorization: Schema.String },
+    headers: { authorization: Schema.optional(Schema.String) },
     success: TrackingStatus,
     error: trackingErrors,
   }),
   HttpApiEndpoint.post("refresh", "/api/account/stats/refresh", {
-    headers: { authorization: Schema.String },
+    headers: { authorization: Schema.optional(Schema.String) },
     success: RefreshResult,
     error: trackingErrors,
   }),
   del("disable", "/api/account/stats", {
-    headers: { authorization: Schema.String },
+    headers: { authorization: Schema.optional(Schema.String) },
     success: TrackingStatus,
     error: trackingErrors,
   }),
   del("deleteData", "/api/account/stats/all", {
-    headers: { authorization: Schema.String },
+    headers: { authorization: Schema.optional(Schema.String) },
     success: TrackingStatus,
     error: trackingErrors,
   }),

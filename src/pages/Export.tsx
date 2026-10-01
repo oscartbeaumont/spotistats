@@ -3,6 +3,7 @@ import JSZip from "jszip";
 import { createMemo, createSignal, For, Loading, Show } from "solid-js";
 
 import { downloadBlob, downloadTextFile, csvCell } from "~/lib/download";
+import { errorMessage } from "~/lib/errors";
 import { createShortcut, isEditableShortcutTarget } from "~/lib/shortcut";
 import { authStore } from "~/client/storage";
 import {
@@ -24,6 +25,7 @@ const csvHeader =
 export default function ExportPage() {
   const [progress, setProgress] = createSignal(0);
   const [busy, setBusy] = createSignal(false);
+  const [exportError, setExportError] = createSignal<string | null>(null);
   const [selectedIndex, setSelectedIndex] = createSignal(0);
 
   const playlists = createMemo(() => getPlaylists());
@@ -111,10 +113,17 @@ export default function ExportPage() {
     if (busy()) return alert("Please wait for the current download to complete.");
     setBusy(true);
     setProgress(0);
-    const csv = await downloadPage(fetchFor(playlist));
-    downloadTextFile(`${playlist.name}.csv`, csv);
-    setBusy(false);
-    setProgress(0);
+    setExportError(null);
+    try {
+      const csv = await downloadPage(fetchFor(playlist));
+      downloadTextFile(`${playlist.name}.csv`, csv);
+    } catch (error) {
+      console.error("Spotify export failed", error);
+      setExportError(errorMessage(error));
+    } finally {
+      setBusy(false);
+      setProgress(0);
+    }
   }
 
   async function backupAll() {
@@ -122,27 +131,35 @@ export default function ExportPage() {
     if (busy()) return alert("Please wait for the current download to complete.");
     setBusy(true);
     setProgress(0);
-    const zip = new JSZip();
-    const totalProgress = 1 / Math.max(all.length, 1);
-    for (const playlist of all) {
-      if (playlist.name === "Liked Songs" || !playlist.id) continue;
-      try {
-        zip.file(
-          `${playlist.name}.csv`,
-          await downloadPage(fetchFor(playlist), totalProgress),
-        );
-      } catch (error) {
-        console.error(error);
+    setExportError(null);
+    try {
+      const zip = new JSZip();
+      const totalProgress = 1 / Math.max(all.length, 1);
+      for (const playlist of all) {
+        if (playlist.name === "Liked Songs" || !playlist.id) continue;
+        try {
+          zip.file(
+            `${playlist.name}.csv`,
+            await downloadPage(fetchFor(playlist), totalProgress),
+          );
+        } catch (error) {
+          console.error("Spotify export failed", error);
+          setExportError(errorMessage(error));
+        }
       }
+      const store = authStore();
+      zip.file(
+        "user.json",
+        JSON.stringify(store.status === "authenticated" ? store.profile : null),
+      );
+      downloadBlob("Music.zip", await zip.generateAsync({ type: "blob" }));
+    } catch (error) {
+      console.error("Spotify backup failed", error);
+      setExportError(errorMessage(error));
+    } finally {
+      setBusy(false);
+      setProgress(0);
     }
-    const store = authStore();
-    zip.file(
-      "user.json",
-      JSON.stringify(store.status === "authenticated" ? store.profile : null),
-    );
-    downloadBlob("Music.zip", await zip.generateAsync({ type: "blob" }));
-    setBusy(false);
-    setProgress(0);
   }
 
   function moveSelection(delta: number) {
@@ -206,6 +223,13 @@ export default function ExportPage() {
           value={progress()}
           max="1"
         />
+      </Show>
+      <Show when={exportError()}>
+        {(error) => (
+          <p class="mb-6 border-4 border-red-800 p-4 text-sm text-red-700">
+            Export failed: {error()}
+          </p>
+        )}
       </Show>
       <Loading fallback={<p class="text-sm uppercase tracking-widest text-[#999]">LOADING_</p>}>
         <For each={playlistItems()}>

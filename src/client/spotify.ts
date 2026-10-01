@@ -165,14 +165,22 @@ const spotifyFetch = async <S extends Schema.ConstraintDecoder<unknown>>(
 
   let lastStatus = 0;
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    const response = await fetch(url, {
-      cache: "no-store",
-      ...options,
-      headers: {
-        Authorization: store.accessToken,
-        ...(options?.headers ?? {}),
-      },
-    });
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        cache: "no-store",
+        ...options,
+        headers: {
+          Authorization: store.accessToken,
+          ...(options?.headers ?? {}),
+        },
+      });
+    } catch (error) {
+      throw new SpotifyApiError(0, {
+        error: "Spotify request failed",
+        detail: String(error),
+      });
+    }
 
     if (response.status === 401) {
       setAuthStore({ status: "empty" });
@@ -181,11 +189,26 @@ const spotifyFetch = async <S extends Schema.ConstraintDecoder<unknown>>(
 
     if (response.status === 204) return decodeSync(schema, null);
 
-    if (response.ok) return decodeSync(schema, await response.json());
+    if (response.ok) {
+      try {
+        return decodeSync(schema, await response.json());
+      } catch (error) {
+        if (error instanceof SpotifyApiError) throw error;
+        throw new SpotifyApiError(response.status, {
+          error: "Spotify response body could not be read",
+          detail: String(error),
+        });
+      }
+    }
 
     lastStatus = response.status;
     if (!RETRYABLE.includes(response.status)) {
-      const body = await response.json().catch(() => ({ status: response.status }));
+      let body: unknown;
+      try {
+        body = await response.json();
+      } catch (error) {
+        body = { status: response.status, detail: String(error) };
+      }
       throw new SpotifyApiError(response.status, body);
     }
 
