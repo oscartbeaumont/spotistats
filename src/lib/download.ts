@@ -1,4 +1,8 @@
-export function downloadTextFile(name: string, body: string, mime = "text/csv;charset=utf-8") {
+export function downloadTextFile(
+  name: string,
+  body: string,
+  mime = "text/csv;charset=utf-8",
+) {
   const href = `data:${mime},${encodeURIComponent(body)}`;
   const anchor = document.createElement("a");
   anchor.style.display = "none";
@@ -7,6 +11,15 @@ export function downloadTextFile(name: string, body: string, mime = "text/csv;ch
   document.body.appendChild(anchor);
   anchor.click();
   document.body.removeChild(anchor);
+}
+
+export function downloadBlob(name: string, blob: Blob) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = name;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
 
 export function csvCell(value: unknown) {

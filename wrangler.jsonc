@@ -1,45 +1,49 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "spotistats",
-  "main": "@solidjs/start/server/entry",
+  "main": "src/server/index.ts",
   "compatibility_date": "2026-04-24",
   "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/account/stats/*"]
+  },
   "route": {
     "pattern": "spotistats.otbeaumont.me",
-    "custom_domain": true,
+    "custom_domain": true
   },
   "observability": {
-    "enabled": true,
+    "enabled": true
   },
   "vars": {
-    "VITE_SPOTIFY_CLIENT_ID": "1107a25b98c041bb90c9063553e5f1a8",
+    "VITE_SPOTIFY_CLIENT_ID": "1107a25b98c041bb90c9063553e5f1a8"
   },
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "spotistats",
-      "database_id": "7529dabd-7b6d-42f6-ac94-ddc3db1332ab",
-    },
+      "database_id": "7529dabd-7b6d-42f6-ac94-ddc3db1332ab"
+    }
   ],
   "queues": {
     "producers": [
       {
         "binding": "SPOTIFY_SYNC_QUEUE",
-        "queue": "spotistats",
-      },
+        "queue": "spotistats"
+      }
     ],
     "consumers": [
       {
         "queue": "spotistats",
         "max_batch_size": 10,
-        "max_batch_timeout": 30,
-      },
-    ],
+        "max_batch_timeout": 30
+      }
+    ]
   },
   "triggers": {
-    "crons": ["*/15 * * * *"],
+    "crons": ["*/15 * * * *"]
   },
   "secrets": {
-    "required": ["SPOTIFY_CLIENT_SECRET"],
-  },
+    "required": ["SPOTIFY_CLIENT_SECRET"]
+  }
 }

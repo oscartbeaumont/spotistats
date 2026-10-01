@@ -10,7 +10,38 @@
 
 Previously [https://spotistats.js.org].
 
-This project is build using [Solid Start](https://start.solidjs.com), [TailwindCSS](https://tailwindcss.com) and is deployed to [Cloudflare](https://www.cloudflare.com).
+# Stack
+
+- [SolidJS 2](https://www.solidjs.com) with [`@solidjs/router`](https://docs.solidjs.com/solid-router) for the browser app.
+- [Effect 4](https://effect.website) for the worker. The API contract (`src/api`) is shared by both sides.
+- [Vite](https://vite.dev) with the [Cloudflare Vite plugin](https://developers.cloudflare.com/workers/vite-plugin/) for building and local development.
+- [TailwindCSS](https://tailwindcss.com) for styling.
+- [Cloudflare Workers](https://workers.cloudflare.com) for hosting, with D1, Queues and Cron Triggers.
+
+# How it is put together
+
+The browser app is a client-rendered single-page application. It talks to the
+worker only through the typed API in `src/api`.
+
+```
+src/
+  api/        Shared API contract (Effect Schema + HttpApi). Imported by both sides.
+  server/     Worker implementation: Effect services, HttpApi handlers, D1 and OAuth routes.
+  client/     Browser data access: API client, Spotify client, auth and storage.
+  pages/      Route components built with Solid 2 async primitives.
+  layout/     Shared page chrome.
+```
+
+The worker has two jobs:
+
+1. It serves `/api/*` from an Effect `HttpApi` that is implemented with
+   `HttpApiBuilder`. Every failure is a declared error type, so the browser
+   receives the same error types the server produces.
+2. It runs the listening-stats OAuth flow and the sync queue. Because the sync
+   needs a refresh token, the client secret and the token stay on the worker.
+
+Spotify requests from the browser are wrapped in `src/client/spotify.ts`. Every
+response is validated with Effect Schema and every failure is a declared error.
 
 # Usage
 
@@ -19,4 +50,21 @@ git clone https://github.com/oscartbeaumont/spotistats
 cd spotistats/
 pnpm i
 pnpm dev
+```
+
+# Checks
+
+```bash
+pnpm typecheck   # TypeScript, no emit
+pnpm build       # Type check, then build the client and the worker
+pnpm preview     # Run the production build with the Cloudflare Vite plugin
+```
+
+# Database
+
+Local migrations run against the local D1 database:
+
+```bash
+pnpm db:migrate:local
+pnpm db:migrate:remote
 ```
