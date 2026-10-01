@@ -38,7 +38,7 @@ export const runApi = <A, E>(effect: Effect.Effect<A, E, never>): Promise<A> =>
 
 const authorization = () => {
   const store = untrack(() => authStore());
-  if (store.status !== "authenticated") throw new Error("Not authenticated");
+  if (store.status !== "authenticated") throw new SpotifyUnauthenticatedError();
   return store.accessToken;
 };
 

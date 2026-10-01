@@ -146,10 +146,17 @@ const make = Effect.gen(function* () {
           updated_at = excluded.updated_at
       `.pipe(Effect.mapError(databaseError("Failed to reset sync state")));
 
+      // A failed enqueue is not fatal: the cron trigger will pick the user up.
       yield* Effect.tryPromise({
         try: () => env.SPOTIFY_SYNC_QUEUE.send({ spotifyUserId: profile.id }),
         catch: queueError("Failed to enqueue sync"),
-      });
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.sync(() =>
+            console.error("Failed to enqueue the initial sync", cause),
+          ),
+        ),
+      );
     });
 
   const disable = (spotifyUserId: string) =>
@@ -202,6 +209,27 @@ const make = Effect.gen(function* () {
         SET last_error = ${message}, next_sync_after = ${now + (retryAfterSeconds ?? 15 * 60) * 1000}, updated_at = ${now}
         WHERE spotify_user_id = ${spotifyUserId}
       `.pipe(Effect.mapError(databaseError("Failed to record sync failure")));
+    });
+
+  /**
+   * Stops syncing and marks the account as needing a new Spotify login. Used
+   * for permanent Spotify failures, such as a rejected or expired refresh
+   * token, where retrying can never succeed. Disabling the account makes the
+   * account page show the reconnect button again.
+   */
+  const requireReauth = (spotifyUserId: string, message: string) =>
+    Effect.gen(function* () {
+      const now = Date.now();
+      yield* sql`
+        UPDATE spotify_tracking_users
+        SET enabled = 0, disabled_at = ${now}, updated_at = ${now}
+        WHERE spotify_user_id = ${spotifyUserId}
+      `.pipe(Effect.mapError(databaseError("Failed to disable tracking")));
+      yield* sql`
+        UPDATE spotify_sync_state
+        SET last_error = ${message}, next_sync_after = ${now + 15 * 60 * 1000}, updated_at = ${now}
+        WHERE spotify_user_id = ${spotifyUserId}
+      `.pipe(Effect.mapError(databaseError("Failed to record the reauthentication requirement")));
     });
 
   const enqueueRefresh = (spotifyUserId: string) =>
@@ -284,12 +312,14 @@ const make = Effect.gen(function* () {
 
       const now = Date.now();
       let newest = state[0]?.lastPlayedAtMs ?? null;
+      let oldest: number | null = null;
 
       for (const item of items) {
         if (!item.track.id) continue;
         const playedAtMs = Date.parse(item.played_at);
         if (!Number.isFinite(playedAtMs)) continue;
         newest = Math.max(newest ?? 0, playedAtMs);
+        oldest = oldest === null ? playedAtMs : Math.min(oldest, playedAtMs);
         const image = item.track.album?.images?.[0]?.url ?? null;
         const artists = item.track.artists?.map((artist) => artist.name).join(", ") ?? "";
         const raw = JSON.stringify(item.track);
@@ -326,10 +356,19 @@ const make = Effect.gen(function* () {
         `.pipe(Effect.mapError(databaseError("Failed to insert listen")));
       }
 
+      // Spotify returns at most 50 plays, and only the recent window. If the
+      // page is full, more plays may have happened than the window can return,
+      // so advance only to the oldest fetched play: the next sync re-reads this
+      // window instead of skipping plays Spotify has already evicted.
+      const watermark =
+        items.length >= 50 && oldest !== null
+          ? oldest
+          : (newest ?? state[0]?.lastPlayedAtMs ?? null);
+
       yield* sql`
         UPDATE spotify_sync_state
         SET
-          last_played_at_ms = ${newest ?? state[0]?.lastPlayedAtMs ?? null},
+          last_played_at_ms = ${watermark},
           last_success_at = ${now},
           last_error = NULL,
           next_sync_after = ${now + 15 * 60 * 1000},
@@ -346,6 +385,7 @@ const make = Effect.gen(function* () {
     markRead,
     deleteData,
     recordSyncFailure,
+    requireReauth,
     enqueueRefresh,
     enqueueDue,
     sync,
@@ -366,6 +406,10 @@ export interface TrackingShape {
     spotifyUserId: string,
     message: string,
     retryAfterSeconds: number | null,
+  ) => Effect.Effect<void, UpstreamError>;
+  readonly requireReauth: (
+    spotifyUserId: string,
+    message: string,
   ) => Effect.Effect<void, UpstreamError>;
   readonly enqueueRefresh: (spotifyUserId: string) => Effect.Effect<boolean, UpstreamError>;
   readonly enqueueDue: (limit?: number) => Effect.Effect<number, UpstreamError>;

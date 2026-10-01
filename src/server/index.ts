@@ -19,6 +19,10 @@ const spotifyUserId = (body: unknown): string | null => {
   return typeof value === "string" ? value : null;
 };
 
+/** A Spotify status that will not succeed on retry. */
+const permanent = (status: number | null) =>
+  status === 400 || status === 401 || status === 403;
+
 export default {
   async fetch(request: Request): Promise<Response> {
     return handleRequest(request);
@@ -43,26 +47,35 @@ export default {
           if (!id) return Effect.void;
           return Effect.gen(function* () {
             const tracking = yield* Tracking;
-            yield* tracking.sync(id).pipe(
-              Effect.catchTag("SpotifyUnauthorized", () =>
-                tracking.recordSyncFailure(
-                  id,
-                  "Spotify refresh token was rejected",
-                  null,
+            yield* Effect.catchCause(
+              Effect.catchTags(tracking.sync(id), {
+                SpotifyUnauthorized: () =>
+                  tracking.requireReauth(
+                    id,
+                    "Spotify rejected the refresh token. Reconnect Spotify stats.",
+                  ),
+                UpstreamError: (error) =>
+                  permanent(error.status)
+                    ? tracking.requireReauth(
+                        id,
+                        `Spotify rejected the sync (${error.status}). Reconnect Spotify stats.`,
+                      )
+                    : tracking.recordSyncFailure(
+                        id,
+                        `${error.service}: ${error.message}`,
+                        error.status === 429 ? 60 : null,
+                      ),
+              }),
+              // A failure while recording the failure must not abort the batch.
+              (cause) =>
+                Effect.sync(() =>
+                  console.error(`Spotify sync failed for ${id}`, cause),
                 ),
-              ),
-              Effect.catchTag("UpstreamError", (error) =>
-                tracking.recordSyncFailure(
-                  id,
-                  `${error.service}: ${error.message}`,
-                  error.status === 429 ? 60 : null,
-                ),
-              ),
             );
           });
         },
         { concurrency: "unbounded" },
-      ).pipe(Effect.provide(ServicesLive), Effect.orDie),
+      ).pipe(Effect.provide(ServicesLive)),
     );
   },
 } satisfies ExportedHandler<Env>;
