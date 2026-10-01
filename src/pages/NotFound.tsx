@@ -9,7 +9,7 @@ export default function NotFoundPage() {
       </header>
       <main class="flex-1 flex items-center p-8 md:p-16">
         <div>
-          <div class="text-xs uppercase tracking-[0.2em] mb-4 text-[#999]">
+          <div class="text-xs uppercase tracking-[0.2em] mb-4 text-[#5c5c5c]">
             Error 404
           </div>
           <h1 class="text-5xl md:text-7xl font-black uppercase tracking-tighter leading-none mb-6">

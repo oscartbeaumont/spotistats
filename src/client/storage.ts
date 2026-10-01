@@ -10,7 +10,6 @@ const ProfileCache = Schema.Struct({
   email: Schema.optional(Schema.String),
   followers: Schema.optional(Schema.Number),
 });
-export type ProfileCache = typeof ProfileCache.Type;
 
 export const AuthStore = Schema.Union([
   Schema.Struct({ status: Schema.Literal("empty") }),

@@ -150,7 +150,10 @@ const AudioFeatures = Schema.Struct({
 });
 export type AudioFeatures = typeof AudioFeatures.Type;
 
-const Artist = Schema.Struct({ genres: Schema.Array(Schema.String) });
+const Artist = Schema.Struct({
+  id: Schema.String,
+  genres: Schema.Array(Schema.String),
+});
 export type SpotifyArtist = typeof Artist.Type;
 
 const retryable = (status: number) => [429, 500, 502, 503].includes(status);

@@ -63,7 +63,7 @@ function FavouriteRow(props: {
         props.selected ? "bg-[#0a0a0a] pl-2 text-[#f0ede8]" : ""
       }`}
     >
-      <span class="font-black text-lg w-8 shrink-0 text-[#ccc]">
+      <span class="font-black text-lg w-8 shrink-0 text-[#5c5c5c]">
         {props.index + 1}
       </span>
       <img
@@ -75,7 +75,7 @@ function FavouriteRow(props: {
         <p class="text-sm font-black uppercase tracking-tight truncate">
           {props.item.name}
         </p>
-        <p class="text-xs truncate mt-0.5 text-[#888]">
+        <p class="text-xs truncate mt-0.5 text-[#5c5c5c]">
           {subtitle()}
         </p>
       </div>
@@ -92,6 +92,7 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
   const [extra, setExtra] = createSignal<SpotifyItem[]>([]);
   const [hasMore, setHasMore] = createSignal(true);
   const [loadingMore, setLoadingMore] = createSignal(false);
+  const [generation, setGeneration] = createSignal(0);
   let sentinel: HTMLDivElement | undefined;
   let observer: IntersectionObserver | undefined;
 
@@ -133,9 +134,12 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
 
   const loadMore = async (offset: number) => {
     if (loadingMore() || !hasMore()) return;
+    const requestGeneration = generation();
     setLoadingMore(true);
     try {
       const page = await fetchPage(offset);
+      // A range or kind change while this was in flight owns the list now.
+      if (generation() !== requestGeneration) return;
       setExtra((previous) => [...previous, ...page.items]);
       setHasMore(page.next !== null);
     } finally {
@@ -160,6 +164,7 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
     () => (isPending(firstPage) ? undefined : latest(firstPage)),
     (page) => {
       if (!page) return;
+      setGeneration((value) => value + 1);
       setHasMore(page.next !== null);
       setExtra([]);
     },
@@ -235,13 +240,15 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
     navigate(props.kind === "tracks" ? "/favourites/albums" : "/favourites/tracks");
     resetPaging();
   });
-  RANGES.forEach((value, index) => {
-    createShortcut([String(index + 1)], (event) => {
-      if (isEditableShortcutTarget(event)) return;
-      setRange(value);
-      resetPaging();
+  if (props.kind === "tracks") {
+    RANGES.forEach((value, index) => {
+      createShortcut([String(index + 1)], (event) => {
+        if (isEditableShortcutTarget(event)) return;
+        setRange(value);
+        resetPaging();
+      });
     });
-  });
+  }
 
   const title = () => (props.kind === "tracks" ? "Top Tracks" : "Saved Albums");
 
@@ -268,45 +275,48 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
         >
           Albums
         </a>
-        <span class="mx-4 font-black text-[#ccc]">/</span>
-        <For
-          each={
-            [
-              ["short", "Month"],
-              ["medium", "6 Months"],
-              ["long", "All Time"],
-            ] as [Range, string][]
-          }
-        >
-          {([optionRange, label], index) => (
-            <button
-              onClick={() => {
-                setRange(optionRange);
-                resetPaging();
-              }}
-              class={`text-xs uppercase tracking-wide px-3 py-2 font-bold transition border-[3px] ${
-                range() === optionRange
-                  ? "border-[#1DB954] bg-[#1DB954] text-black"
-                  : "border-transparent text-[#999]"
-              }`}
-            >
-              {label} <span class="ml-1 text-[0.6rem] opacity-50">{index() + 1}</span>
-            </button>
-          )}
-        </For>
+        <Show when={props.kind === "tracks"}>
+          <span class="mx-4 font-black text-[#5c5c5c]">/</span>
+          <For
+            each={
+              [
+                ["short", "Month"],
+                ["medium", "6 Months"],
+                ["long", "All Time"],
+              ] as [Range, string][]
+            }
+          >
+            {([optionRange, label], index) => (
+              <button
+                onClick={() => {
+                  setRange(optionRange);
+                  resetPaging();
+                }}
+                class={`text-xs uppercase tracking-wide px-3 py-2 font-bold transition border-[3px] ${
+                  range() === optionRange
+                    ? "border-[#1DB954] bg-[#1DB954] text-black"
+                    : "border-transparent text-[#5c5c5c]"
+                }`}
+              >
+                {label}{" "}
+                <span class="ml-1 text-[0.6rem] opacity-50">{index() + 1}</span>
+              </button>
+            )}
+          </For>
+        </Show>
       </div>
-      <div class="mb-6 flex flex-wrap gap-2 text-[0.65rem] font-bold uppercase tracking-widest text-[#777]">
+      <div class="mb-6 flex flex-wrap gap-2 text-[0.65rem] font-bold uppercase tracking-widest text-[#5c5c5c]">
         <span>J/↓ Next</span>
         <span>K/↑ Previous</span>
         <span>Enter Open</span>
         <span>T Toggle Type</span>
         <span>1/2/3 Range</span>
       </div>
-      <Loading fallback={<p class="text-sm uppercase tracking-widest text-[#999]">LOADING_</p>}>
+      <Loading fallback={<p class="text-sm uppercase tracking-widest text-[#5c5c5c]">LOADING_</p>}>
         <Show
           when={items().length > 0}
           fallback={
-            <p class="py-8 text-sm font-bold uppercase tracking-widest text-[#999]">
+            <p class="py-8 text-sm font-bold uppercase tracking-widest text-[#5c5c5c]">
               NO FAVOURITES FOUND_
             </p>
           }
@@ -323,7 +333,7 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
             )}
           </For>
           <Show when={loadingMore()}>
-            <p class="py-6 text-xs uppercase tracking-[0.2em] text-[#aaa]">
+            <p class="py-6 text-xs uppercase tracking-[0.2em] text-[#5c5c5c]">
               LOADING MORE_
             </p>
           </Show>

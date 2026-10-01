@@ -94,7 +94,7 @@ export default function AccountPage() {
       <Title>Spotistats | Account</Title>
       <div class="flex flex-wrap items-baseline gap-6 mb-8 border-b-4 border-[#0a0a0a] pb-4">
         <h1 class="text-2xl font-black uppercase tracking-tight">Account</h1>
-        <span class="text-xs uppercase tracking-widest text-[#999]">
+        <span class="text-xs uppercase tracking-widest text-[#5c5c5c]">
           Stats Sync
         </span>
       </div>
@@ -115,11 +115,11 @@ export default function AccountPage() {
         )}
       </Show>
 
-      <Loading fallback={<p class="text-sm uppercase tracking-widest text-[#999]">LOADING_</p>}>
+      <Loading fallback={<p class="text-sm uppercase tracking-widest text-[#5c5c5c]">LOADING_</p>}>
         <section class="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(22rem,28rem)]">
           <div>
             <div class="mb-6 p-5 border-4 border-[#0a0a0a]">
-              <div class="text-xs uppercase tracking-[0.2em] mb-3 text-[#999]">
+              <div class="text-xs uppercase tracking-[0.2em] mb-3 text-[#5c5c5c]">
                 Listening Stats
               </div>
               <h2 class="text-4xl md:text-5xl font-black uppercase tracking-tighter leading-none mb-4">
@@ -161,7 +161,7 @@ export default function AccountPage() {
                     {stats().listenCount.toLocaleString()}
                   </p>
                 </div>
-                <p class="mb-6 text-xs leading-6 text-[#777]">
+                <p class="mb-6 text-xs leading-6 text-[#5c5c5c]">
                   Stats sync pauses automatically after 6 months without opening
                   the dashboard.
                 </p>

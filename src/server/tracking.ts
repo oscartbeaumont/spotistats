@@ -5,6 +5,7 @@ import { SqlClient } from "effect/sql/SqlClient";
 import { type TrackingStatus, UpstreamError } from "~/api";
 
 import { Spotify, SpotifyUnauthorized, type SpotifyProfile, type SpotifyToken } from "./spotify";
+import { nextWatermark } from "./watermark";
 
 /**
  * All persistence and sync logic for listening stats.
@@ -180,14 +181,15 @@ const make = Effect.gen(function* () {
   });
 
   const markRead = (spotifyUserId: string) =>
-    sql`
-      UPDATE spotify_tracking_users
-      SET last_read_at = ${Date.now()}, updated_at = ${Date.now()}
-      WHERE spotify_user_id = ${spotifyUserId}
-    `.pipe(
-      Effect.asVoid,
-      Effect.mapError(databaseError("Failed to mark stats read")),
-    );
+    Effect.gen(function* () {
+      const now = Date.now();
+      // The dashboard polls this route, so only write once an hour.
+      yield* sql`
+        UPDATE spotify_tracking_users
+        SET last_read_at = ${now}, updated_at = ${now}
+        WHERE spotify_user_id = ${spotifyUserId} AND last_read_at < ${now - 60 * 60 * 1000}
+      `.pipe(Effect.mapError(databaseError("Failed to mark stats read")));
+    });
 
   const deleteData = (spotifyUserId: string) =>
     sql`
@@ -311,15 +313,13 @@ const make = Effect.gen(function* () {
       );
 
       const now = Date.now();
-      let newest = state[0]?.lastPlayedAtMs ?? null;
-      let oldest: number | null = null;
+      const playedAtMsValues: number[] = [];
 
       for (const item of items) {
         if (!item.track.id) continue;
         const playedAtMs = Date.parse(item.played_at);
         if (!Number.isFinite(playedAtMs)) continue;
-        newest = Math.max(newest ?? 0, playedAtMs);
-        oldest = oldest === null ? playedAtMs : Math.min(oldest, playedAtMs);
+        playedAtMsValues.push(playedAtMs);
         const image = item.track.album?.images?.[0]?.url ?? null;
         const artists = item.track.artists?.map((artist) => artist.name).join(", ") ?? "";
         const raw = JSON.stringify(item.track);
@@ -356,14 +356,11 @@ const make = Effect.gen(function* () {
         `.pipe(Effect.mapError(databaseError("Failed to insert listen")));
       }
 
-      // Spotify returns at most 50 plays, and only the recent window. If the
-      // page is full, more plays may have happened than the window can return,
-      // so advance only to the oldest fetched play: the next sync re-reads this
-      // window instead of skipping plays Spotify has already evicted.
-      const watermark =
-        items.length >= 50 && oldest !== null
-          ? oldest
-          : (newest ?? state[0]?.lastPlayedAtMs ?? null);
+      const watermark = nextWatermark(
+        items.length,
+        playedAtMsValues,
+        state[0]?.lastPlayedAtMs ?? null,
+      );
 
       yield* sql`
         UPDATE spotify_sync_state

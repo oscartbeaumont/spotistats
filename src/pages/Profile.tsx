@@ -48,7 +48,10 @@ export default function ProfilePage() {
     tick();
     return fetchStatus();
   });
-  const currentlyPlaying = createMemo(() => runSpotify(getCurrentlyPlaying()));
+  const currentlyPlaying = createMemo(() => {
+    tick();
+    return runSpotify(getCurrentlyPlaying());
+  });
 
   onSettled(() => {
     const interval = setInterval(() => setTick((value) => value + 1), 10000);
@@ -110,11 +113,11 @@ export default function ProfilePage() {
   return (
     <main class="app-main flex-1 p-8 md:p-16">
       <Title>Spotistats</Title>
-      <Loading fallback={<p class="text-sm uppercase tracking-widest text-[#999]">LOADING_</p>}>
+      <Loading fallback={<p class="text-sm uppercase tracking-widest text-[#5c5c5c]">LOADING_</p>}>
         <Show
           when={profile()}
           fallback={
-            <p class="text-sm uppercase tracking-widest text-[#999]">LOADING_</p>
+            <p class="text-sm uppercase tracking-widest text-[#5c5c5c]">LOADING_</p>
           }
         >
           {(user) => (
@@ -175,7 +178,7 @@ export default function ProfilePage() {
                     />
                   </a>
                   <div>
-                    <div class="text-xs uppercase tracking-[0.2em] mb-3 text-[#999]">
+                    <div class="text-xs uppercase tracking-[0.2em] mb-3 text-[#5c5c5c]">
                       User Profile
                     </div>
                     <h1 class="text-4xl md:text-6xl font-black uppercase tracking-tighter leading-none mb-3">
@@ -203,7 +206,7 @@ export default function ProfilePage() {
                 <aside class="border-4 border-[#0a0a0a] p-5">
                   <div class="mb-5 flex items-start justify-between gap-4">
                     <div>
-                      <div class="mb-3 text-xs uppercase tracking-[0.2em] text-[#999]">
+                      <div class="mb-3 text-xs uppercase tracking-[0.2em] text-[#5c5c5c]">
                         Recently Listened
                       </div>
                       <p class="text-xs uppercase tracking-widest text-[#666]">
@@ -275,10 +278,10 @@ export default function ProfilePage() {
                                 <p class="truncate text-sm font-black uppercase tracking-tight">
                                   {item.name}
                                 </p>
-                                <p class="mt-0.5 truncate text-xs text-[#888]">
+                                <p class="mt-0.5 truncate text-xs text-[#5c5c5c]">
                                   {item.artistNames}
                                 </p>
-                                <p class="mt-1 text-[0.65rem] uppercase tracking-widest text-[#999]">
+                                <p class="mt-1 text-[0.65rem] uppercase tracking-widest text-[#5c5c5c]">
                                   {formatDate(item.playedAt)}
                                 </p>
                               </div>

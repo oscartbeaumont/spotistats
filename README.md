@@ -66,12 +66,25 @@ pnpm i
 pnpm dev
 ```
 
+# Secrets
+
+Listening-stats sync needs the Spotify app's client secret. Create `.dev.vars`
+in the project root (it is git-ignored):
+
+```bash
+SPOTIFY_CLIENT_SECRET=your-client-secret
+```
+
+The Spotify app must also have `http://127.0.0.1:5173/account/stats/callback`
+registered as a redirect URI.
+
 # Checks
 
 ```bash
 pnpm typecheck   # TypeScript, no emit
-pnpm build       # Type check, then build the client and the worker
-pnpm preview     # Run the production build with the Cloudflare Vite plugin
+pnpm cf-typegen  # Regenerate worker-configuration.d.ts from wrangler.jsonc
+pnpm build       # Regenerate types, type check, then build the client and the worker
+pnpm preview     # Build, then run the production build in workerd
 ```
 
 # Database
@@ -82,3 +95,6 @@ Local migrations run against the local D1 database:
 pnpm db:migrate:local
 pnpm db:migrate:remote
 ```
+
+Migrations are plain SQL files under `migrations/`. Add a new numbered file to
+change the schema.

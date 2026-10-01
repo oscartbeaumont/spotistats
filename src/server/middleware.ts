@@ -38,12 +38,20 @@ export default async function middleware(
 ): Promise<Response> {
   const pathname = new URL(request.url).pathname;
 
-  if (pathname === "/account/stats/login") return statsLogin(request);
+  if (pathname === "/account/stats/login") {
+    return request.method === "GET"
+      ? withSecurityHeaders(statsLogin(request))
+      : new Response("Method Not Allowed", { status: 405 });
+  }
 
   if (pathname === "/account/stats/callback") {
-    return Effect.runPromise(
+    if (request.method !== "GET") {
+      return new Response("Method Not Allowed", { status: 405 });
+    }
+    const response = await Effect.runPromise(
       statsCallback(request).pipe(Effect.provide(ServicesLive), Effect.orDie),
     );
+    return withSecurityHeaders(response);
   }
 
   if (pathname.startsWith("/api/")) {

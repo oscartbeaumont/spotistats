@@ -1,5 +1,6 @@
 import { useLocation, useNavigate } from "@solidjs/router";
 import { createEffect, Errored, Loading, Show } from "solid-js";
+import type { JSX } from "@solidjs/web";
 
 import { AppError } from "~/components/AppError";
 import { hasSpotifyCallbackCode, logout } from "~/client/auth";
@@ -9,14 +10,14 @@ import { createShortcut, isEditableShortcutTarget } from "~/lib/shortcut";
 
 function LoadingScreen() {
   return (
-    <main class="app-main p-8 md:p-16 text-sm uppercase tracking-widest text-[#999]">
+    <main class="app-main p-8 md:p-16 text-sm uppercase tracking-widest text-[#5c5c5c]">
       LOADING_
     </main>
   );
 }
 
 export function RootLayout(props: {
-  children?: import("@solidjs/web").JSX.Element;
+  children?: JSX.Element;
 }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -99,7 +100,7 @@ export function RootLayout(props: {
               logout();
               navigate("/login");
             }}
-            class="text-xs uppercase tracking-widest font-bold text-[#999] transition hover:underline"
+            class="text-xs uppercase tracking-widest font-bold text-[#5c5c5c] transition hover:underline"
           >
             Logout
           </button>

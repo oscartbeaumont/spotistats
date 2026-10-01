@@ -15,7 +15,6 @@ import {
   runSpotify,
   type Playlist,
   type PlaylistTrack,
-  type SpotifyArtist,
   type AudioFeatures,
   type SpotifyPage,
 } from "~/client/spotify";
@@ -69,11 +68,15 @@ export default function ExportPage() {
     );
 
     for (const page of pages) {
+      const artistById = new Map(page.artists.map((artist) => [artist.id, artist]));
       for (const [index, item] of page.items.entries()) {
         const track = item.track;
         if (!track) continue;
         const audio: AudioFeatures | undefined = page.audioFeatures[index];
-        const artist: SpotifyArtist | undefined = page.artists[index];
+        const primaryArtistId = track.artists[0]?.id;
+        const artist = primaryArtistId
+          ? artistById.get(primaryArtistId)
+          : undefined;
         csv +=
           [
             track.id,
@@ -215,7 +218,7 @@ export default function ExportPage() {
           Backup All <span class="ml-2 text-[0.6rem] opacity-50">B</span> →
         </button>
       </div>
-      <div class="mb-6 flex flex-wrap gap-2 text-[0.65rem] font-bold uppercase tracking-widest text-[#777]">
+      <div class="mb-6 flex flex-wrap gap-2 text-[0.65rem] font-bold uppercase tracking-widest text-[#5c5c5c]">
         <span>J/↓ Next</span>
         <span>K/↑ Previous</span>
         <span>Enter Export</span>
@@ -235,7 +238,7 @@ export default function ExportPage() {
           </p>
         )}
       </Show>
-      <Loading fallback={<p class="text-sm uppercase tracking-widest text-[#999]">LOADING_</p>}>
+      <Loading fallback={<p class="text-sm uppercase tracking-widest text-[#5c5c5c]">LOADING_</p>}>
         <For each={playlistItems()}>
           {(playlist, index) => (
             <button
@@ -256,18 +259,18 @@ export default function ExportPage() {
                 <p class="text-sm font-black uppercase tracking-tight truncate">
                   {playlist.name}
                 </p>
-                <p class="text-xs truncate mt-0.5 text-[#888]">
+                <p class="text-xs truncate mt-0.5 text-[#5c5c5c]">
                   {playlist.owner?.display_name}
                 </p>
               </div>
               <div class="flex gap-2 shrink-0">
                 {playlist.collaborative && (
-                  <span class="text-xs uppercase tracking-widest font-bold text-[#aaa]">
+                  <span class="text-xs uppercase tracking-widest font-bold text-[#5c5c5c]">
                     Collab
                   </span>
                 )}
                 {!playlist.public && !playlist.collaborative && (
-                  <span class="text-xs uppercase tracking-widest font-bold text-[#aaa]">
+                  <span class="text-xs uppercase tracking-widest font-bold text-[#5c5c5c]">
                     Private
                   </span>
                 )}

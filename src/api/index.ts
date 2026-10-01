@@ -15,7 +15,7 @@ import {
  * types on the client are derived from the same schemas the server encodes.
  */
 
-export const RecentListen = Schema.Struct({
+const RecentListen = Schema.Struct({
   playedAt: Schema.String,
   playedAtMs: Schema.Number,
   name: Schema.String,
@@ -24,7 +24,6 @@ export const RecentListen = Schema.Struct({
   imageUrl: Schema.NullOr(Schema.String),
   externalUrl: Schema.NullOr(Schema.String),
 });
-export type RecentListen = typeof RecentListen.Type;
 
 export const TrackingStatus = Schema.Struct({
   enabled: Schema.Boolean,

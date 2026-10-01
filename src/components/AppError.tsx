@@ -17,7 +17,7 @@ export function AppError(props: { error?: unknown; reset?: () => void }) {
 
   return (
     <main class="p-8 md:p-16 max-w-3xl">
-      <div class="text-xs uppercase tracking-[0.2em] mb-3 text-[#999]">
+      <div class="text-xs uppercase tracking-[0.2em] mb-3 text-[#5c5c5c]">
         System Error
       </div>
       <p class="text-sm mb-6 text-[#555]">

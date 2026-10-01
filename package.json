@@ -7,10 +7,11 @@
   },
   "scripts": {
     "dev": "vite dev",
-    "build": "tsc --noEmit && vite build",
-    "preview": "vite preview",
+    "build": "wrangler types && tsc --noEmit && vite build",
+    "preview": "pnpm run build && vite preview",
     "deploy": "pnpm run build && wrangler deploy",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "cf-typegen": "wrangler types",
     "db:migrate:local": "wrangler d1 migrations apply spotistats --local",
     "db:migrate:remote": "wrangler d1 migrations apply spotistats --remote"
@@ -33,6 +34,7 @@
     "tailwindcss": "^4.2.4",
     "typescript": "^6.0.3",
     "vite": "^8.0.16",
+    "vitest": "^5.0.3",
     "wrangler": "^4.84.1"
   }
 }

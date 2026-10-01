@@ -22,7 +22,7 @@ export default function LoginPage() {
         <span class="font-black text-xl tracking-tighter uppercase">
           SPOTISTATS
         </span>
-        <span class="text-xs uppercase tracking-widest text-[#999]">
+        <span class="text-xs uppercase tracking-widest text-[#5c5c5c]">
           Created by{" "}
           <a
             href="https://otbeaumont.me"
@@ -36,7 +36,7 @@ export default function LoginPage() {
       </header>
       <main class="flex-1 flex items-center p-8 md:p-16">
         <div class="max-w-lg">
-          <div class="text-xs uppercase tracking-[0.2em] mb-4 text-[#999]">
+          <div class="text-xs uppercase tracking-[0.2em] mb-4 text-[#5c5c5c]">
             Your Spotify, decoded
           </div>
           <h1 class="text-5xl md:text-7xl font-black uppercase tracking-tighter leading-none mb-6">
