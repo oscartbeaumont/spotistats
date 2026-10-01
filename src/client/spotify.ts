@@ -61,7 +61,7 @@ const Named = Schema.Struct({ name: Schema.String });
 
 export const SpotifyProfile = Schema.Struct({
   id: Schema.String,
-  display_name: Schema.String,
+  display_name: Schema.NullOr(Schema.String),
   email: Schema.optional(Schema.String),
   uri: Schema.String,
   external_urls: Schema.Struct({ spotify: Schema.String }),
@@ -95,7 +95,9 @@ export const Playlist = Schema.Struct({
   name: Schema.String,
   public: Schema.optional(Schema.Boolean),
   collaborative: Schema.optional(Schema.Boolean),
-  owner: Schema.optional(Schema.Struct({ display_name: Schema.String })),
+  owner: Schema.optional(
+    Schema.Struct({ display_name: Schema.NullOr(Schema.String) }),
+  ),
   images: Schema.Array(Image),
 });
 export type Playlist = typeof Playlist.Type;

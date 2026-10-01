@@ -143,7 +143,11 @@ export default function ExportPage() {
       const zip = new JSZip();
       const totalProgress = 1 / Math.max(all.length, 1);
       for (const playlist of all) {
-        if (playlist.name === "Liked Songs" || !playlist.id) continue;
+        // The Liked Songs entry is synthesised client-side without an id, so
+        // `fetchFor` reaches it via the liked-tracks endpoint; other id-less
+        // entries are malformed and skipped.
+        const isLikedSongs = playlist.name === "Liked Songs";
+        if (!isLikedSongs && !playlist.id) continue;
         try {
           zip.file(
             `${safeFileName(playlist.name)}.csv`,
@@ -226,6 +230,7 @@ export default function ExportPage() {
       </div>
       <Show when={busy()}>
         <progress
+          aria-label="Export progress"
           class="mb-6 h-4 w-full border-[3px] border-[#0a0a0a] accent-[#1DB954]"
           value={progress()}
           max="1"

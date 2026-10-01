@@ -62,8 +62,9 @@ export default function ProfilePage() {
     () => profile(),
     (data) => {
       if (!data) return;
+      const displayName = data.display_name ?? data.id;
       identifyUser(data.id, {
-        username: data.display_name,
+        username: displayName,
         email: data.email,
       });
       setAuthStore((current) =>
@@ -76,7 +77,7 @@ export default function ProfilePage() {
                   current.linkToUri && data.uri
                     ? data.uri
                     : data.external_urls.spotify,
-                displayName: data.display_name,
+                displayName,
                 email: data.email,
                 followers: data.followers.total,
               },
@@ -182,7 +183,7 @@ export default function ProfilePage() {
                       User Profile
                     </div>
                     <h1 class="text-4xl md:text-6xl font-black uppercase tracking-tighter leading-none mb-3">
-                      {user().display_name}
+                      {user().display_name ?? user().id}
                     </h1>
                     <p class="text-xs uppercase tracking-widest mb-3 text-[#666]">
                       {user().email}

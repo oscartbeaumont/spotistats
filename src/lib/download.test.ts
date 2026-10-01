@@ -6,6 +6,8 @@ describe("csvCell", () => {
   it("leaves ordinary values alone", () => {
     expect(csvCell("Midnight City")).toBe("Midnight City");
     expect(csvCell(123)).toBe("123");
+    expect(csvCell(-6)).toBe("-6");
+    expect(csvCell(-6.5)).toBe("-6.5");
   });
 
   it("quotes values with separators", () => {

@@ -12,17 +12,17 @@ import {
 } from "solid-js";
 
 import { accountApi } from "~/client/api";
-import { errorMessage } from "~/lib/errors";
+import { describeStatsReason, errorMessage } from "~/lib/errors";
 import { formatDate } from "~/lib/format";
 import { createShortcut, isEditableShortcutTarget } from "~/lib/shortcut";
 
 export default function AccountPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  // Snapshot the one-shot reason before the effect below clears the query.
-  const [reason] = createSignal(
-    untrack(() => new URLSearchParams(location.search).get("reason")),
-  );
+  // Snapshot the one-shot result before the effect below clears the query.
+  const snapshot = untrack(() => new URLSearchParams(location.search));
+  const [reason] = createSignal(snapshot.get("reason"));
+  const [statsResult] = createSignal(snapshot.get("stats"));
 
   const stats = createMemo(() => accountApi.status());
 
@@ -99,12 +99,18 @@ export default function AccountPage() {
         </span>
       </div>
 
-      <Show when={reason()}>
-        {(value) => (
-          <pre class="overflow-auto p-4 text-xs mb-6 text-red-600 border-4 border-[#0a0a0a] bg-[#0a0a0a]">
-            <samp>Failed to authenticate: {value()}</samp>
-          </pre>
-        )}
+      <Show when={statsResult() === "enabled"}>
+        <pre class="overflow-auto p-4 text-xs mb-6 border-4 border-[#0a0a0a] bg-[#1DB954] text-[#0a0a0a]">
+          <samp>
+            Listening stats connected. Your recent plays will sync shortly.
+          </samp>
+        </pre>
+      </Show>
+
+      <Show when={statsResult() === "failed"}>
+        <pre class="overflow-auto p-4 text-xs mb-6 text-red-600 border-4 border-[#0a0a0a] bg-[#0a0a0a]">
+          <samp>Failed to connect stats: {describeStatsReason(reason())}</samp>
+        </pre>
       </Show>
 
       <Show when={actionError()}>

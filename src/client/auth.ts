@@ -1,9 +1,17 @@
-import { untrack } from "solid-js";
+import { createSignal, untrack } from "solid-js";
 
 import { authStore, setAuthStore, type AuthStore } from "./storage";
 import { spotifyClientId, spotifyScopes } from "./spotify";
 
 /** Browser PKCE login and callback handling for the user session token. */
+
+/**
+ * The most recent login failure, shown on the sign-in page. A failed token
+ * exchange used to silently bounce the user back to an unexplained login
+ * screen, so every failure branch records a human-readable reason here.
+ */
+const [loginError, setLoginError] = createSignal<string | null>(null);
+export { loginError };
 
 const base64UrlEncode = (bytes: ArrayBuffer) =>
   btoa(String.fromCharCode(...new Uint8Array(bytes)))
@@ -48,6 +56,7 @@ export async function createLoginUrl(origin: string) {
   const token = crypto.randomUUID();
   const verifier = randomString(96);
   const redirectOrigin = spotifyRedirectOrigin(origin);
+  setLoginError(null);
   setAuthStore({
     status: "authenticating",
     stateToken: token,
@@ -84,6 +93,7 @@ export async function consumeSpotifyCallback(
   const cleanUrl = () => history.replaceState(null, "", window.location.pathname || "/");
 
   if (store.status !== "authenticating" || returnedState !== store.stateToken) {
+    setLoginError("Your sign-in session expired. Please try again.");
     setAuthStore({ status: "empty" });
     cleanUrl();
     return false;
@@ -106,6 +116,8 @@ export async function consumeSpotifyCallback(
     });
   } catch (error) {
     console.error("Spotify login network error:", error);
+    setLoginError("Could not reach Spotify. Check your connection and try again.");
+    setAuthStore({ status: "empty" });
     cleanUrl();
     return true;
   }
@@ -115,6 +127,7 @@ export async function consumeSpotifyCallback(
       "Spotify login failed:",
       await response.json().catch(() => ({ status: response.status })),
     );
+    setLoginError("Spotify rejected the sign-in. Please try again.");
     setAuthStore({ status: "empty" });
     cleanUrl();
     return true;
@@ -129,11 +142,13 @@ export async function consumeSpotifyCallback(
     token = value;
   } catch (error) {
     console.error("Spotify login response error:", error);
+    setLoginError("Spotify returned an unexpected sign-in response. Please try again.");
     setAuthStore({ status: "empty" });
     cleanUrl();
     return true;
   }
 
+  setLoginError(null);
   setAuthStore({
     status: "authenticated",
     accessToken: `${token.token_type} ${token.access_token}`,

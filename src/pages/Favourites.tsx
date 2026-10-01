@@ -310,7 +310,9 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
         <span>K/↑ Previous</span>
         <span>Enter Open</span>
         <span>T Toggle Type</span>
-        <span>1/2/3 Range</span>
+        <Show when={props.kind === "tracks"}>
+          <span>1/2/3 Range</span>
+        </Show>
       </div>
       <Loading fallback={<p class="text-sm uppercase tracking-widest text-[#5c5c5c]">LOADING_</p>}>
         <Show

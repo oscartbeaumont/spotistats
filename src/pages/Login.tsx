@@ -1,8 +1,8 @@
 import { Title } from "@solidjs/meta";
 import { useNavigate } from "@solidjs/router";
-import { createEffect } from "solid-js";
+import { createEffect, Show } from "solid-js";
 
-import { createLoginUrl } from "~/client/auth";
+import { createLoginUrl, loginError } from "~/client/auth";
 import { authReady, authStore } from "~/client/storage";
 
 export default function LoginPage() {
@@ -47,6 +47,14 @@ export default function LoginPage() {
             Only listening-stats sync needs our server, and you turn that on
             from your account page.
           </p>
+          <Show when={loginError()}>
+            <pre
+              role="alert"
+              class="mb-6 whitespace-pre-wrap break-words border-4 border-[#0a0a0a] bg-[#0a0a0a] p-3 text-xs font-bold text-red-500"
+            >
+              Sign-in failed: {loginError()}
+            </pre>
+          </Show>
           <button
             type="button"
             onClick={async () => {
