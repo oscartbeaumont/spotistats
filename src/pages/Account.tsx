@@ -1,6 +1,7 @@
 import { Title } from "@solidjs/meta";
 import { useLocation, useNavigate } from "@solidjs/router";
 import {
+  action,
   createMemo,
   createSignal,
   Loading,
@@ -10,20 +11,15 @@ import {
 } from "solid-js";
 
 import { accountApi } from "~/client/api";
-import type { TrackingStatus } from "~/api";
+import { formatDate } from "~/lib/format";
 import { createShortcut, isEditableShortcutTarget } from "~/lib/shortcut";
-
-function formatDate(value: number | string | null) {
-  if (!value) return "Never";
-  return new Date(value).toLocaleString();
-}
 
 export default function AccountPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const reason = () => new URLSearchParams(location.search).get("reason");
 
-  const stats = createMemo(() => accountApi.status() as Promise<TrackingStatus>);
+  const stats = createMemo(() => accountApi.status());
 
   onSettled(() => {
     if (location.search) navigate("/account", { replace: true });
@@ -32,12 +28,21 @@ export default function AccountPage() {
   const [disabling, setDisabling] = createSignal(false);
   const [deleting, setDeleting] = createSignal(false);
 
+  const runDisable = action(function* () {
+    yield accountApi.disable();
+    yield refresh(stats);
+  });
+
+  const runDelete = action(function* () {
+    yield accountApi.deleteData();
+    yield refresh(stats);
+  });
+
   const disableStats = async () => {
     if (disabling()) return;
     setDisabling(true);
     try {
-      await accountApi.disable();
-      await refresh(stats);
+      await runDisable();
     } finally {
       setDisabling(false);
     }
@@ -54,8 +59,7 @@ export default function AccountPage() {
     }
     setDeleting(true);
     try {
-      await accountApi.deleteData();
-      await refresh(stats);
+      await runDelete();
     } finally {
       setDeleting(false);
     }

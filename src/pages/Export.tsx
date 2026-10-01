@@ -12,6 +12,7 @@ import {
   getLikedTracksPage,
   getPlaylists,
   getPlaylistTracksPage,
+  runSpotify,
   type Playlist,
   type PlaylistTrack,
   type SpotifyArtist,
@@ -28,7 +29,7 @@ export default function ExportPage() {
   const [exportError, setExportError] = createSignal<string | null>(null);
   const [selectedIndex, setSelectedIndex] = createSignal(0);
 
-  const playlists = createMemo(() => getPlaylists());
+  const playlists = createMemo(() => runSpotify(getPlaylists()));
   const playlistItems = () => playlists();
 
   async function downloadPage(
@@ -49,18 +50,18 @@ export default function ExportPage() {
           .map((item) => item.track?.id)
           .filter((id): id is string => Boolean(id))
           .join(",");
-        const audioFeatures = await getAudioFeatures(ids);
+        const audioFeatures = await runSpotify(getAudioFeatures(ids));
         setProgress((value) => value + progressIncrement);
         const artistIds = items
           .map((item) => item.track?.artists[0]?.id)
           .filter((id): id is string => Boolean(id));
-        const artistsOne = await getArtists(artistIds.slice(0, 50).join(","));
-        const artistsTwo = await getArtists(artistIds.slice(50, 100).join(","));
+        const artistsOne = await runSpotify(getArtists(artistIds.slice(0, 50).join(",")));
+        const artistsTwo = await runSpotify(getArtists(artistIds.slice(50, 100).join(",")));
         setProgress((value) => value + progressIncrement);
         return {
           items,
           audioFeatures,
-          artists: [...artistsOne, ...artistsTwo] as SpotifyArtist[],
+          artists: [...artistsOne, ...artistsTwo],
         };
       }),
     );
@@ -106,8 +107,9 @@ export default function ExportPage() {
 
   const fetchFor = (playlist: Playlist) =>
     playlist.name === "Liked Songs"
-      ? getLikedTracksPage
-      : (offset: number) => getPlaylistTracksPage(playlist.id ?? "", offset);
+      ? (offset: number) => runSpotify(getLikedTracksPage(offset))
+      : (offset: number) =>
+          runSpotify(getPlaylistTracksPage(playlist.id ?? "", offset));
 
   async function exportPlaylist(playlist: Playlist) {
     if (busy()) return alert("Please wait for the current download to complete.");

@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Effect, Schedule, Schema } from "effect";
 import { untrack } from "solid-js";
 
 import { authStore, setAuthStore } from "./storage";
@@ -6,9 +6,10 @@ import { authStore, setAuthStore } from "./storage";
 /**
  * Browser-side typed client for the Spotify Web API.
  *
- * Responses are validated with Effect Schema and every failure is a declared
- * tagged error, so UI error boundaries can tell "session expired" apart from
- * "Spotify is having a bad day".
+ * Every call is an `Effect`. Responses are validated with Effect Schema,
+ * failures are declared tagged errors, and transient failures retry with a
+ * backoff schedule. `runSpotify` turns an effect into the promise the UI
+ * boundary awaits.
  */
 
 export const spotifyClientId = import.meta.env.VITE_SPOTIFY_CLIENT_ID;
@@ -23,24 +24,37 @@ export const spotifyScopes = [
   "user-read-currently-playing",
 ];
 
-export class SpotifyUnauthenticatedError extends Error {
-  readonly _tag = "SpotifyUnauthenticatedError";
+export class SpotifyUnauthenticatedError extends Schema.TaggedError<SpotifyUnauthenticatedError>()(
+  "SpotifyUnauthenticatedError",
+  { message: Schema.String },
+) {
   constructor() {
-    super("Spotistats: 401 Unauthorized");
-    this.name = "SpotifyUnauthenticatedError";
+    super({ message: "Spotistats: 401 Unauthorized" });
   }
 }
 
-export class SpotifyApiError extends Error {
-  readonly _tag = "SpotifyApiError";
-  constructor(
-    readonly status: number,
-    readonly body: unknown,
-  ) {
-    super(`Spotistats: ${status}`);
-    this.name = "SpotifyApiError";
+export class SpotifyApiError extends Schema.TaggedError<SpotifyApiError>()(
+  "SpotifyApiError",
+  { status: Schema.Number, body: Schema.Unknown, message: Schema.String },
+) {
+  constructor(readonly status: number, readonly body: unknown) {
+    super({ status, body, message: `Spotistats: ${status}` });
   }
 }
+
+export class SpotifyRequestError extends Schema.TaggedError<SpotifyRequestError>()(
+  "SpotifyRequestError",
+  { cause: Schema.Unknown, message: Schema.String },
+) {
+  constructor(readonly cause: unknown) {
+    super({ cause, message: "Spotistats: Spotify request failed" });
+  }
+}
+
+export type SpotifyError =
+  | SpotifyUnauthenticatedError
+  | SpotifyApiError
+  | SpotifyRequestError;
 
 const Image = Schema.Struct({ url: Schema.String });
 const Named = Schema.Struct({ name: Schema.String });
@@ -139,97 +153,94 @@ export type AudioFeatures = typeof AudioFeatures.Type;
 const Artist = Schema.Struct({ genres: Schema.Array(Schema.String) });
 export type SpotifyArtist = typeof Artist.Type;
 
-const decodeSync = <S extends Schema.ConstraintDecoder<unknown>>(
+const retryable = (status: number) => [429, 500, 502, 503].includes(status);
+
+const decode = <S extends Schema.ConstraintDecoder<unknown>>(
   schema: S,
   value: unknown,
-): S["Type"] => {
-  try {
-    return Schema.decodeUnknownSync(schema)(value);
-  } catch (error) {
-    throw new SpotifyApiError(200, {
-      error: "Spotify returned an unexpected response shape",
-      detail: String(error),
-    });
-  }
-};
+): Effect.Effect<S["Type"], SpotifyApiError> =>
+  Schema.decodeUnknownEffect(schema)(value).pipe(
+    Effect.mapError(
+      (error) =>
+        new SpotifyApiError(200, {
+          error: "Spotify returned an unexpected response shape",
+          detail: String(error),
+        }),
+    ),
+  );
 
-const RETRYABLE = [429, 500, 502, 503];
-
-const spotifyFetch = async <S extends Schema.ConstraintDecoder<unknown>>(
+const request = <S extends Schema.ConstraintDecoder<unknown>>(
   schema: S,
   url: string,
-  options?: RequestInit,
-): Promise<S["Type"]> => {
-  const store = untrack(() => authStore());
-  if (store.status !== "authenticated") throw new SpotifyUnauthenticatedError();
-
-  let lastStatus = 0;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    let response: Response;
-    try {
-      response = await fetch(url, {
-        cache: "no-store",
-        ...options,
-        headers: {
-          Authorization: store.accessToken,
-          ...(options?.headers ?? {}),
-        },
-      });
-    } catch (error) {
-      throw new SpotifyApiError(0, {
-        error: "Spotify request failed",
-        detail: String(error),
-      });
+): Effect.Effect<S["Type"], SpotifyError> =>
+  Effect.gen(function* () {
+    const store = untrack(() => authStore());
+    if (store.status !== "authenticated") {
+      return yield* Effect.fail(new SpotifyUnauthenticatedError());
     }
+
+    const response = yield* Effect.tryPromise({
+      try: () =>
+        fetch(url, {
+          cache: "no-store",
+          headers: { Authorization: store.accessToken },
+        }),
+      catch: (cause) => new SpotifyRequestError(cause),
+    });
 
     if (response.status === 401) {
       setAuthStore({ status: "empty" });
-      throw new SpotifyUnauthenticatedError();
+      return yield* Effect.fail(new SpotifyUnauthenticatedError());
     }
 
-    if (response.status === 204) return decodeSync(schema, null);
+    if (response.status === 204) return yield* decode(schema, null);
 
-    if (response.ok) {
-      try {
-        return decodeSync(schema, await response.json());
-      } catch (error) {
-        if (error instanceof SpotifyApiError) throw error;
-        throw new SpotifyApiError(response.status, {
+    if (!response.ok) {
+      const body = yield* Effect.tryPromise({
+        try: () => response.json(),
+        catch: (cause) =>
+          new SpotifyApiError(response.status, {
+            status: response.status,
+            detail: String(cause),
+          }),
+      }).pipe(Effect.catchTag("SpotifyApiError", (error) => Effect.succeed(error.body)));
+      return yield* Effect.fail(new SpotifyApiError(response.status, body));
+    }
+
+    const json = yield* Effect.tryPromise({
+      try: () => response.json(),
+      catch: (cause) =>
+        new SpotifyApiError(response.status, {
           error: "Spotify response body could not be read",
-          detail: String(error),
-        });
-      }
-    }
+          detail: String(cause),
+        }),
+    });
+    return yield* decode(schema, json);
+  }).pipe(
+    Effect.retry({
+      schedule: Schedule.exponential("500 millis"),
+      times: 2,
+      while: (error) =>
+        error instanceof SpotifyRequestError ||
+        (error instanceof SpotifyApiError && retryable(error.status)),
+    }),
+  );
 
-    lastStatus = response.status;
-    if (!RETRYABLE.includes(response.status)) {
-      let body: unknown;
-      try {
-        body = await response.json();
-      } catch (error) {
-        body = { status: response.status, detail: String(error) };
-      }
-      throw new SpotifyApiError(response.status, body);
-    }
-
-    const retryAfter = Number(response.headers.get("retry-after") ?? "1") + 1;
-    await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000));
-  }
-
-  throw new SpotifyApiError(lastStatus, { status: lastStatus });
-};
+/** Runs a Spotify effect as the promise a Solid boundary awaits. */
+export const runSpotify = <A, E>(effect: Effect.Effect<A, E>): Promise<A> =>
+  Effect.runPromise(effect);
 
 export const getProfile = () =>
-  spotifyFetch(SpotifyProfile, "https://api.spotify.com/v1/me");
+  request(SpotifyProfile, "https://api.spotify.com/v1/me");
 
 export const getTopTracksPage = (range: "long" | "medium" | "short", offset = 0) =>
-  spotifyFetch(
+  request(
     page(SpotifyItem),
     `https://api.spotify.com/v1/me/top/tracks?limit=50&offset=${offset}&time_range=${range}_term`,
   );
 
 export const getSavedAlbumsPage = (offset = 0) =>
-  spotifyFetch(
+  request(
     Schema.Struct({
       items: Schema.Array(Schema.Struct({ album: SpotifyItem })),
       next: Schema.NullOr(Schema.String),
@@ -238,51 +249,50 @@ export const getSavedAlbumsPage = (offset = 0) =>
       offset: Schema.Number,
     }),
     `https://api.spotify.com/v1/me/albums?limit=50&offset=${offset}`,
-  ).then((data) => ({ ...data, items: data.items.map((entry) => entry.album) }));
+  ).pipe(Effect.map((data) => ({ ...data, items: data.items.map((entry) => entry.album) })));
 
-export const getPlaylists = async () => {
-  const schema = Schema.Struct({
-    items: Schema.Array(Playlist),
-    next: Schema.NullOr(Schema.String),
+const playlistPage = Schema.Struct({
+  items: Schema.Array(Playlist),
+  next: Schema.NullOr(Schema.String),
+});
+
+export const getPlaylists = () =>
+  Effect.gen(function* () {
+    let url: string | null = "https://api.spotify.com/v1/me/playlists?limit=50";
+    const value: Playlist[] = [];
+    while (url) {
+      const data: { readonly items: ReadonlyArray<Playlist>; readonly next: string | null } =
+        yield* request(playlistPage, url);
+      value.push(...data.items);
+      url = data.next;
+    }
+    return [{ name: "Liked Songs", public: true, images: [] }, ...value];
   });
-  let url: string | null = "https://api.spotify.com/v1/me/playlists?limit=50";
-  let value: Playlist[] = [];
-  while (url) {
-    const data: { readonly items: ReadonlyArray<Playlist>; readonly next: string | null } =
-      await spotifyFetch(schema, url);
-    value = [...value, ...data.items];
-    url = data.next;
-  }
-  return [{ name: "Liked Songs", public: true, images: [] }, ...value];
-};
 
 export const getCurrentlyPlaying = () =>
-  spotifyFetch(Schema.NullOr(CurrentlyPlaying), "https://api.spotify.com/v1/me/player/currently-playing");
+  request(Schema.NullOr(CurrentlyPlaying), "https://api.spotify.com/v1/me/player/currently-playing");
 
 export const getLikedTracksPage = (offset = 0) =>
-  spotifyFetch(
-    page(PlaylistTrack),
-    `https://api.spotify.com/v1/me/tracks?limit=50&offset=${offset}`,
-  );
+  request(page(PlaylistTrack), `https://api.spotify.com/v1/me/tracks?limit=50&offset=${offset}`);
 
 export const getPlaylistTracksPage = (playlistId: string, offset = 0) =>
-  spotifyFetch(
+  request(
     page(PlaylistTrack),
     `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100&offset=${offset}`,
   );
 
 export const getAudioFeatures = (ids: string) =>
   ids
-    ? spotifyFetch(
+    ? request(
         Schema.Struct({ audio_features: Schema.Array(AudioFeatures) }),
         `https://api.spotify.com/v1/audio-features?ids=${ids}`,
-      ).then((data) => data.audio_features)
-    : Promise.resolve([] as ReadonlyArray<AudioFeatures>);
+      ).pipe(Effect.map((data) => data.audio_features))
+    : Effect.succeed<ReadonlyArray<AudioFeatures>>([]);
 
 export const getArtists = (ids: string) =>
   ids
-    ? spotifyFetch(
+    ? request(
         Schema.Struct({ artists: Schema.Array(Artist) }),
         `https://api.spotify.com/v1/artists?ids=${ids}`,
-      ).then((data) => data.artists)
-    : Promise.resolve([] as ReadonlyArray<SpotifyArtist>);
+      ).pipe(Effect.map((data) => data.artists))
+    : Effect.succeed<ReadonlyArray<SpotifyArtist>>([]);

@@ -1,51 +1,49 @@
+import { Schema } from "effect";
 import { createSignal } from "solid-js";
 
-export type ProfileCache = {
-  icon?: string;
-  url?: string;
-  displayName?: string;
-  email?: string;
-  followers?: number;
-};
+/** Persisted Spotify session, validated on read. */
 
-type EmptyAuthStore = { status: "empty" };
+const ProfileCache = Schema.Struct({
+  icon: Schema.optional(Schema.String),
+  url: Schema.optional(Schema.String),
+  displayName: Schema.optional(Schema.String),
+  email: Schema.optional(Schema.String),
+  followers: Schema.optional(Schema.Number),
+});
+export type ProfileCache = typeof ProfileCache.Type;
 
-type AuthenticatingAuthStore = {
-  status: "authenticating";
-  stateToken: string;
-  codeVerifier: string;
-  linkToUri: boolean;
-};
-
-type AuthenticatedAuthStore = {
-  status: "authenticated";
-  accessToken: string;
-  linkToUri: boolean;
-  profile?: ProfileCache;
-};
-
-export type AuthStore =
-  | EmptyAuthStore
-  | AuthenticatingAuthStore
-  | AuthenticatedAuthStore;
+export const AuthStore = Schema.Union([
+  Schema.Struct({ status: Schema.Literal("empty") }),
+  Schema.Struct({
+    status: Schema.Literal("authenticating"),
+    stateToken: Schema.String,
+    codeVerifier: Schema.String,
+    linkToUri: Schema.Boolean,
+  }),
+  Schema.Struct({
+    status: Schema.Literal("authenticated"),
+    accessToken: Schema.String,
+    linkToUri: Schema.Boolean,
+    profile: Schema.optional(ProfileCache),
+  }),
+]);
+export type AuthStore = typeof AuthStore.Type;
 
 const storageKey = "auth";
+const empty: AuthStore = { status: "empty" };
 
 const readAuth = (): AuthStore => {
-  if (typeof localStorage === "undefined") return { status: "empty" };
+  if (typeof localStorage === "undefined") return empty;
   try {
     const raw = localStorage.getItem(storageKey);
-    if (!raw) return { status: "empty" };
-    const parsed = JSON.parse(raw) as AuthStore;
-    return parsed.status ? parsed : { status: "empty" };
+    if (!raw) return empty;
+    return Schema.decodeUnknownSync(AuthStore)(JSON.parse(raw));
   } catch {
-    return { status: "empty" };
+    return empty;
   }
 };
 
-const [authStore, setAuthSignal] = createSignal<AuthStore>({
-  status: "empty",
-});
+const [authStore, setAuthSignal] = createSignal<AuthStore>(empty);
 
 /** Whether the client has loaded the persisted session yet. */
 const [authReady, setAuthReady] = createSignal(false);
@@ -56,8 +54,8 @@ export { authReady };
  * Loads the persisted session.
  *
  * The server has no `localStorage`, so both sides start empty to keep the
- * first client render identical to the server render. `App` calls this on the
- * client after hydration.
+ * first client render identical to the server render. `bootstrapClient` calls
+ * this on the client after hydration.
  */
 export function hydrateAuthStore() {
   setAuthSignal(readAuth());

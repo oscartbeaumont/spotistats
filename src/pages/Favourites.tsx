@@ -14,6 +14,7 @@ import {
 import {
   getSavedAlbumsPage,
   getTopTracksPage,
+  runSpotify,
   type SpotifyItem,
 } from "~/client/spotify";
 import { authStore } from "~/client/storage";
@@ -21,11 +22,17 @@ import { createShortcut, isEditableShortcutTarget } from "~/lib/shortcut";
 
 type Range = "long" | "medium" | "short";
 
+const RANGES: readonly Range[] = ["short", "medium", "long"];
+
 const hasSaveData = () => {
-  const connection = (
-    navigator as Navigator & { connection?: { saveData?: boolean } }
-  ).connection;
-  return connection?.saveData === true;
+  if (!("connection" in navigator)) return false;
+  const connection = navigator.connection;
+  return (
+    typeof connection === "object" &&
+    connection !== null &&
+    "saveData" in connection &&
+    connection.saveData === true
+  );
 };
 
 function FavouriteRow(props: {
@@ -90,8 +97,8 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
     for (let index = 0; index < pageCount(); index += 1) {
       const page =
         props.kind === "tracks"
-          ? await getTopTracksPage(range(), index * 50)
-          : await getSavedAlbumsPage(index * 50);
+          ? await runSpotify(getTopTracksPage(range(), index * 50))
+          : await runSpotify(getSavedAlbumsPage(index * 50));
       items.push(...page.items);
       hasMore = page.next !== null;
     }
@@ -177,7 +184,7 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
     navigate(props.kind === "tracks" ? "/favourites/albums" : "/favourites/tracks");
     setSelectedIndex(0);
   });
-  (["short", "medium", "long"] as Range[]).forEach((value, index) => {
+  RANGES.forEach((value, index) => {
     createShortcut([String(index + 1)], (event) => {
       if (isEditableShortcutTarget(event)) return;
       setRange(value);

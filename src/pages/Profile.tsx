@@ -1,18 +1,24 @@
 import { Title } from "@solidjs/meta";
-import { createEffect, createMemo, createSignal, For, isPending, Loading, onSettled, Show } from "solid-js";
+import {
+  action,
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  isPending,
+  Loading,
+  onSettled,
+  Show,
+} from "solid-js";
 
 import { accountApi } from "~/client/api";
 import { identifyUser } from "~/client/analytics";
-import { getCurrentlyPlaying, getProfile } from "~/client/spotify";
+import { getCurrentlyPlaying, getProfile, runSpotify } from "~/client/spotify";
 import { setAuthStore } from "~/client/storage";
+import { formatDate } from "~/lib/format";
 import { createShortcut, isEditableShortcutTarget } from "~/lib/shortcut";
 import { errorMessage } from "~/lib/errors";
 import type { TrackingStatus } from "~/api";
-
-function formatDate(value: number | string | null) {
-  if (!value) return "Never";
-  return new Date(value).toLocaleString();
-}
 
 const fetchStatus = async (): Promise<TrackingStatus> => {
   try {
@@ -35,12 +41,12 @@ const fetchStatus = async (): Promise<TrackingStatus> => {
 export default function ProfilePage() {
   const [tick, setTick] = createSignal(0);
 
-  const profile = createMemo(() => getProfile());
+  const profile = createMemo(() => runSpotify(getProfile()));
   const stats = createMemo(() => {
     tick();
     return fetchStatus();
   });
-  const currentlyPlaying = createMemo(() => getCurrentlyPlaying());
+  const currentlyPlaying = createMemo(() => runSpotify(getCurrentlyPlaying()));
 
   onSettled(() => {
     const interval = setInterval(() => setTick((value) => value + 1), 10000);
@@ -76,12 +82,15 @@ export default function ProfilePage() {
   );
 
   const [refreshing, setRefreshing] = createSignal(false);
+  const queueRefresh = action(function* () {
+    yield accountApi.refresh();
+    setTick((value) => value + 1);
+  });
   const refreshStats = async () => {
     if (refreshing() || !stats().enabled) return;
     setRefreshing(true);
     try {
-      await accountApi.refresh();
-      setTick((value) => value + 1);
+      await queueRefresh();
     } finally {
       setRefreshing(false);
     }
