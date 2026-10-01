@@ -2,7 +2,7 @@ import { Title } from "@solidjs/meta";
 import JSZip from "jszip";
 import { createMemo, createSignal, For, latest, Loading, Show } from "solid-js";
 
-import { downloadBlob, downloadTextFile, csvCell } from "~/lib/download";
+import { downloadBlob, downloadTextFile, csvCell, safeFileName } from "~/lib/download";
 import { errorMessage } from "~/lib/errors";
 import { createShortcut, isEditableShortcutTarget } from "~/lib/shortcut";
 import { authStore } from "~/client/storage";
@@ -120,7 +120,7 @@ export default function ExportPage() {
     setExportError(null);
     try {
       const csv = await downloadPage(fetchFor(playlist));
-      downloadTextFile(`${playlist.name}.csv`, csv);
+      downloadTextFile(`${safeFileName(playlist.name)}.csv`, csv);
     } catch (error) {
       console.error("Spotify export failed", error);
       setExportError(errorMessage(error));
@@ -143,7 +143,7 @@ export default function ExportPage() {
         if (playlist.name === "Liked Songs" || !playlist.id) continue;
         try {
           zip.file(
-            `${playlist.name}.csv`,
+            `${safeFileName(playlist.name)}.csv`,
             await downloadPage(fetchFor(playlist), totalProgress),
           );
         } catch (error) {

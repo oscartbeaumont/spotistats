@@ -100,7 +100,7 @@ export function statsCallback(
     const tracking = yield* Tracking;
 
     const spotifyError = url.searchParams.get("error");
-    if (spotifyError) return failed(spotifyError);
+    if (spotifyError) return failed("spotify_denied");
 
     const code = url.searchParams.get("code");
     const state = url.searchParams.get("state");
@@ -128,14 +128,10 @@ export function statsCallback(
       },
     });
   }).pipe(
-    Effect.catch((error) =>
-      Effect.succeed(
-        failed(
-          typeof error === "object" && error !== null && "message" in error
-            ? String((error as { message: unknown }).message)
-            : String(error),
-        ),
-      ),
+    Effect.catchCause((cause) =>
+      Effect.sync(() =>
+        console.error("Spotify stats callback failed", cause),
+      ).pipe(Effect.as(failed("internal_error"))),
     ),
   );
 }

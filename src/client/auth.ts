@@ -45,7 +45,7 @@ const isSpotifyToken = (
   value.access_token.length > 0;
 
 export async function createLoginUrl(origin: string) {
-  const token = Math.random().toString(36).slice(2);
+  const token = crypto.randomUUID();
   const verifier = randomString(96);
   const redirectOrigin = spotifyRedirectOrigin(origin);
   setAuthStore({

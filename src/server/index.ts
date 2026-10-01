@@ -74,7 +74,7 @@ export default {
             );
           });
         },
-        { concurrency: "unbounded" },
+        { concurrency: 10 },
       ).pipe(Effect.provide(ServicesLive)),
     );
   },

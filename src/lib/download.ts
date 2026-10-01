@@ -22,8 +22,23 @@ export function downloadBlob(name: string, blob: Blob) {
   URL.revokeObjectURL(url);
 }
 
+/**
+ * Neutralises spreadsheet formula injection. A cell that starts with one of
+ * the formula triggers is prefixed with an apostrophe so Excel, Sheets, and
+ * friends treat it as text.
+ */
 export function csvCell(value: unknown) {
   if (value === null || value === undefined) return "";
   const text = String(value);
-  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  const safe = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+  return /[",\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+}
+
+/** Makes an untrusted name safe to use as a single file name. */
+export function safeFileName(name: string) {
+  const cleaned = name
+    .replace(/[\\/:*?"<>|\u0000-\u001f]+/g, "_")
+    .replace(/^\.+/, "")
+    .trim();
+  return cleaned || "untitled";
 }

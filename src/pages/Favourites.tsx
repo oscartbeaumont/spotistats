@@ -20,6 +20,7 @@ import {
 } from "~/client/spotify";
 import { authStore } from "~/client/storage";
 import { createShortcut, isEditableShortcutTarget } from "~/lib/shortcut";
+import { externalHref, spotifyUri } from "~/lib/url";
 
 type Range = "long" | "medium" | "short";
 
@@ -186,13 +187,14 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
   const itemUrl = (item: SpotifyItem) => {
     const store = authStore();
     return store.status === "authenticated" && store.linkToUri
-      ? item.uri
-      : item.external_urls.spotify;
+      ? (spotifyUri(item.uri) ?? externalHref(item.external_urls.spotify))
+      : externalHref(item.external_urls.spotify);
   };
 
   const openItem = (item: SpotifyItem | undefined) => {
     if (!item) return;
     const url = itemUrl(item);
+    if (!url) return;
     if (url.startsWith("spotify:")) window.location.href = url;
     else window.open(url, "_blank", "noopener");
   };

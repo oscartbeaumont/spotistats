@@ -19,6 +19,7 @@ import { setAuthStore } from "~/client/storage";
 import { formatDate } from "~/lib/format";
 import { createShortcut, isEditableShortcutTarget } from "~/lib/shortcut";
 import { errorMessage } from "~/lib/errors";
+import { externalHref } from "~/lib/url";
 import type { TrackingStatus } from "~/api";
 
 const fetchStatus = async (): Promise<TrackingStatus> => {
@@ -123,7 +124,7 @@ export default function ProfilePage() {
               >
                 {(track) => (
                   <a
-                    href={track().external_urls.spotify}
+                    href={externalHref(track().external_urls.spotify)}
                     target="_blank"
                     rel="noopener"
                     class="group flex items-center gap-4 border-4 border-[#0a0a0a] bg-[#1DB954] p-4 text-[#0a0a0a] shadow-[8px_8px_0_#0a0a0a] transition hover:-translate-y-0.5 hover:shadow-[10px_10px_0_#0a0a0a]"
@@ -166,7 +167,7 @@ export default function ProfilePage() {
                 }`}
               >
                 <section class="flex flex-col md:flex-row gap-10 items-start">
-                  <a href={user().external_urls.spotify} target="_blank" rel="noopener">
+                  <a href={externalHref(user().external_urls.spotify)} target="_blank" rel="noopener">
                     <img
                       src={user().images[0]?.url ?? "/assets/placeholder.svg"}
                       alt={user().display_name ?? "Profile"}
@@ -260,7 +261,7 @@ export default function ProfilePage() {
                         <For each={stats().recent}>
                           {(item) => (
                             <a
-                              href={item.externalUrl ?? "#"}
+                              href={externalHref(item.externalUrl) ?? "#"}
                               target="_blank"
                               rel="noopener"
                               class="flex items-center gap-4 border-b-[3px] border-[#0a0a0a] py-3 text-left transition hover:bg-[#0a0a0a] hover:text-[#f0ede8]"

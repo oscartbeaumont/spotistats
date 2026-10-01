@@ -15,6 +15,23 @@ import { isPostHogPath, proxyPostHog } from "./posthog";
  * Every other request falls through to the page render. Keep this list in
  * step with the routes the app expects the server to own.
  */
+
+/** Headers on `Response` can be immutable; never let that break a request. */
+function setHeader(response: Response, name: string, value: string) {
+  try {
+    response.headers.set(name, value);
+  } catch {
+    // Immutable response headers are left as they are.
+  }
+}
+
+function withSecurityHeaders(response: Response): Response {
+  setHeader(response, "X-Content-Type-Options", "nosniff");
+  setHeader(response, "Referrer-Policy", "strict-origin-when-cross-origin");
+  setHeader(response, "X-Frame-Options", "DENY");
+  return response;
+}
+
 export default async function middleware(
   request: Request,
   next: () => Promise<Response>,
@@ -29,9 +46,13 @@ export default async function middleware(
     );
   }
 
-  if (pathname.startsWith("/api/")) return apiHandler(request);
+  if (pathname.startsWith("/api/")) {
+    const response = await apiHandler(request);
+    setHeader(response, "Cache-Control", "no-store");
+    return withSecurityHeaders(response);
+  }
 
   if (isPostHogPath(pathname)) return proxyPostHog(request);
 
-  return next();
+  return withSecurityHeaders(await next());
 }
