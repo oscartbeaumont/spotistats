@@ -1,9 +1,27 @@
 import { Meta, Title } from "@solidjs/meta";
+import { onSettled } from "solid-js";
 
+import { consumeSpotifyCallback } from "./client/auth";
+import { initAnalytics } from "./client/analytics";
+import { hydrateAuthStore } from "./client/storage";
 import { RootLayout } from "./layout/RootLayout";
 import { Router } from "./router";
+import "./app.css";
 
+/**
+ * The app root.
+ *
+ * Start mode renders this on the server and hydrates it on the client. The
+ * session lives in `localStorage`, which the server cannot read, so both sides
+ * start empty and the client loads the session after hydration.
+ */
 export default function App() {
+  onSettled(() => {
+    hydrateAuthStore();
+    initAnalytics();
+    void consumeSpotifyCallback();
+  });
+
   return (
     <>
       <Title>Spotistats</Title>

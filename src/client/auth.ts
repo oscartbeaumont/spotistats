@@ -30,6 +30,18 @@ const spotifyRedirectOrigin = (origin: string) => {
   return url.origin;
 };
 
+const isSpotifyToken = (
+  value: unknown,
+): value is { token_type: string; access_token: string } =>
+  typeof value === "object" &&
+  value !== null &&
+  "token_type" in value &&
+  typeof value.token_type === "string" &&
+  value.token_type.length > 0 &&
+  "access_token" in value &&
+  typeof value.access_token === "string" &&
+  value.access_token.length > 0;
+
 export async function createLoginUrl(origin: string) {
   const token = Math.random().toString(36).slice(2);
   const verifier = randomString(96);
@@ -52,6 +64,10 @@ export async function createLoginUrl(origin: string) {
   });
 
   return `https://accounts.spotify.com/authorize?${params.toString()}`;
+}
+
+export function hasSpotifyCallbackCode() {
+  return new URLSearchParams(window.location.search).has("code");
 }
 
 export async function consumeSpotifyCallback() {
@@ -101,10 +117,20 @@ export async function consumeSpotifyCallback() {
     return true;
   }
 
-  const token = (await response.json()) as {
-    token_type: string;
-    access_token: string;
-  };
+  let token: { token_type: string; access_token: string };
+  try {
+    const value: unknown = await response.json();
+    if (!isSpotifyToken(value)) {
+      throw new Error("Spotify returned an invalid token response");
+    }
+    token = value;
+  } catch (error) {
+    console.error("Spotify login response error:", error);
+    setAuthStore({ status: "empty" });
+    cleanUrl();
+    return true;
+  }
+
   setAuthStore({
     status: "authenticated",
     accessToken: `${token.token_type} ${token.access_token}`,

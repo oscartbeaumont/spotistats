@@ -18,5 +18,22 @@ export default defineConfig({
   server: {
     host: "127.0.0.1",
   },
-  plugins: [solid(), cloudflare(), tailwindcss()],
+  plugins: [
+    // Start mode with SSR. The plugin owns the client entry, the document
+    // shell and the server render. `external` hands the Worker entry to us,
+    // because the worker also runs the sync queue and the cron trigger.
+    solid({
+      ssr: true,
+      start: {
+        external: true,
+        app: "./src/App.tsx",
+        document: "./src/Document.tsx",
+        middleware: "./src/server/middleware.ts",
+      },
+    }),
+    // Map the Worker to Solid's `ssr` environment so the server render and the
+    // Effect API run in workerd, with the D1 and queue bindings.
+    cloudflare({ viteEnvironment: { name: "ssr" } }),
+    tailwindcss(),
+  ],
 });

@@ -43,7 +43,26 @@ const readAuth = (): AuthStore => {
   }
 };
 
-const [authStore, setAuthSignal] = createSignal<AuthStore>(readAuth());
+const [authStore, setAuthSignal] = createSignal<AuthStore>({
+  status: "empty",
+});
+
+/** Whether the client has loaded the persisted session yet. */
+const [authReady, setAuthReady] = createSignal(false);
+
+export { authReady };
+
+/**
+ * Loads the persisted session.
+ *
+ * The server has no `localStorage`, so both sides start empty to keep the
+ * first client render identical to the server render. `App` calls this on the
+ * client after hydration.
+ */
+export function hydrateAuthStore() {
+  setAuthSignal(readAuth());
+  setAuthReady(true);
+}
 
 const persist = (value: AuthStore) => {
   if (typeof localStorage === "undefined") return;

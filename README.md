@@ -13,6 +13,7 @@ Previously [https://spotistats.js.org].
 # Stack
 
 - [SolidJS 2](https://www.solidjs.com) with [`@solidjs/router`](https://docs.solidjs.com/solid-router) for the browser app.
+- [`@solidjs/vite-plugin`](https://www.npmjs.com/package/@solidjs/vite-plugin) start mode for the entries, the document shell and server rendering. SolidStart is no longer used.
 - [Effect 4](https://effect.website) for the worker. The API contract (`src/api`) is shared by both sides.
 - [Vite](https://vite.dev) with the [Cloudflare Vite plugin](https://developers.cloudflare.com/workers/vite-plugin/) for building and local development.
 - [TailwindCSS](https://tailwindcss.com) for styling.
@@ -20,17 +21,30 @@ Previously [https://spotistats.js.org].
 
 # How it is put together
 
-The browser app is a client-rendered single-page application. It talks to the
-worker only through the typed API in `src/api`.
+Start mode generates the client entry and the server entry from `src/App.tsx`
+and `src/Document.tsx`. There is no `index.html` and no mount file. The browser
+app talks to the worker only through the typed API in `src/api`.
+
+The Spotify session lives in `localStorage`, so the server cannot read it. The
+server renders the sign-in page; the client loads the session after hydration
+and renders the matching view. This keeps server output and client hydration in
+step.
 
 ```
 src/
+  App.tsx     App root: head tags and the router.
+  Document.tsx HTML shell: site-wide head tags and the hydration script.
   api/        Shared API contract (Effect Schema + HttpApi). Imported by both sides.
-  server/     Worker implementation: Effect services, HttpApi handlers, D1 and OAuth routes.
+  server/     Worker: Effect services, HttpApi handlers, D1, OAuth, queue and cron.
   client/     Browser data access: API client, Spotify client, auth and storage.
-  pages/      Route components built with Solid 2 async primitives.
+  pages/      Route components, loaded on demand with `lazy`.
   layout/     Shared page chrome.
 ```
+
+The worker entry is `src/server/index.ts`. It imports the start-mode SSR handler
+from `virtual:solid-ssr-handler`, so `src/server/middleware.ts` serves `/api/*`
+and the stats OAuth routes inside the request scope. The worker adds the queue
+consumer and the cron trigger, which the generated handler alone cannot carry.
 
 The worker has two jobs:
 

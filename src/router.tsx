@@ -1,14 +1,29 @@
 import { createRouter } from "@solidjs/router";
+import { lazy } from "solid-js";
 
-import AccountPage from "./pages/Account";
-import ExportPage from "./pages/Export";
-import { FavouritesPage } from "./pages/Favourites";
 import LoginPage from "./pages/Login";
-import NotFoundPage from "./pages/NotFound";
-import ProfilePage from "./pages/Profile";
 
-const FavouritesTracks = () => <FavouritesPage kind="tracks" />;
-const FavouritesAlbums = () => <FavouritesPage kind="albums" />;
+/**
+ * Routes are loaded on demand. Only the route for the current URL enters the
+ * server render and the first client chunk, so heavy pages (export, analytics)
+ * stay out of the initial graph. The login page is eager because the layout
+ * renders it for every signed-out request.
+ */
+
+const ProfilePage = lazy(() => import("./pages/Profile"));
+const FavouritesTracks = lazy(() =>
+  import("./pages/Favourites").then((module) => ({
+    default: () => <module.FavouritesPage kind="tracks" />,
+  })),
+);
+const FavouritesAlbums = lazy(() =>
+  import("./pages/Favourites").then((module) => ({
+    default: () => <module.FavouritesPage kind="albums" />,
+  })),
+);
+const ExportPage = lazy(() => import("./pages/Export"));
+const AccountPage = lazy(() => import("./pages/Account"));
+const NotFoundPage = lazy(() => import("./pages/NotFound"));
 
 export const Router = createRouter({
   routes: [

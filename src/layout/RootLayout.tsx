@@ -2,8 +2,9 @@ import { useLocation, useNavigate } from "@solidjs/router";
 import { createEffect, Errored, Loading, Show } from "solid-js";
 
 import { AppError } from "~/components/AppError";
-import { logout } from "~/client/auth";
-import { authStore } from "~/client/storage";
+import { hasSpotifyCallbackCode, logout } from "~/client/auth";
+import { authReady, authStore } from "~/client/storage";
+import LoginPage from "~/pages/Login";
 import { createShortcut, isEditableShortcutTarget } from "~/lib/shortcut";
 
 function LoadingScreen() {
@@ -21,8 +22,16 @@ export function RootLayout(props: {
   const navigate = useNavigate();
 
   createEffect(
-    () => ({ path: location.pathname, status: authStore().status }),
-    ({ path, status }) => {
+    () => ({
+      path: location.pathname,
+      status: authStore().status,
+      ready: authReady(),
+    }),
+    ({ path, status, ready }) => {
+      // Wait for the client to load the session before redirecting.
+      if (!ready) return;
+      // A Spotify login callback owns the URL until it is consumed.
+      if (typeof window !== "undefined" && hasSpotifyCallbackCode()) return;
       if (status !== "authenticated" && path !== "/login") {
         navigate("/login", { replace: true });
       }
@@ -62,8 +71,11 @@ export function RootLayout(props: {
   createShortcut(["Meta", "4"], go("/account"));
 
   return (
-    <div>
-      <Show when={authStore().status === "authenticated"}>
+    <Show
+      when={authStore().status === "authenticated"}
+      fallback={<LoginPage />}
+    >
+      <div>
         <header class="fixed left-0 right-0 top-0 z-50 flex items-center justify-between border-b-4 border-[#0a0a0a] bg-[#f0ede8] p-4 sm:p-5">
           <span class="font-black text-xl tracking-tighter uppercase select-none">
             SPOTISTATS
@@ -92,10 +104,10 @@ export function RootLayout(props: {
             Logout
           </button>
         </header>
-      </Show>
-      <Errored fallback={(error, reset) => <AppError error={error()} reset={reset} />}>
-        <Loading fallback={<LoadingScreen />}>{props.children}</Loading>
-      </Errored>
-    </div>
+        <Errored fallback={(error, reset) => <AppError error={error()} reset={reset} />}>
+          <Loading fallback={<LoadingScreen />}>{props.children}</Loading>
+        </Errored>
+      </div>
+    </Show>
   );
 }

@@ -1,16 +1,19 @@
 import { Title } from "@solidjs/meta";
 import { useNavigate } from "@solidjs/router";
-import { onSettled } from "solid-js";
+import { createEffect } from "solid-js";
 
 import { createLoginUrl } from "~/client/auth";
-import { authStore } from "~/client/storage";
+import { authReady, authStore } from "~/client/storage";
 
 export default function LoginPage() {
   const navigate = useNavigate();
 
-  onSettled(() => {
-    if (authStore().status === "authenticated") navigate("/", { replace: true });
-  });
+  createEffect(
+    () => ({ ready: authReady(), status: authStore().status }),
+    ({ ready, status }) => {
+      if (ready && status === "authenticated") navigate("/", { replace: true });
+    },
+  );
 
   return (
     <div class="min-h-screen flex flex-col">

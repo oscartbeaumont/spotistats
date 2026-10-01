@@ -116,9 +116,12 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
   );
 
   createEffect(
-    () => latest(result)?.items.length ?? 0,
-    (length) => {
-      if (selectedIndex() >= length) setSelectedIndex(Math.max(length - 1, 0));
+    () => ({
+      length: latest(result)?.items.length ?? 0,
+      selected: selectedIndex(),
+    }),
+    ({ length, selected }) => {
+      if (selected >= length) setSelectedIndex(Math.max(length - 1, 0));
     },
   );
 

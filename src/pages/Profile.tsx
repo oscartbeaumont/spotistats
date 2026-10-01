@@ -1,8 +1,8 @@
 import { Title } from "@solidjs/meta";
 import { createEffect, createMemo, createSignal, For, isPending, Loading, onSettled, Show } from "solid-js";
-import posthog from "posthog-js";
 
 import { accountApi } from "~/client/api";
+import { identifyUser } from "~/client/analytics";
 import { getCurrentlyPlaying, getProfile } from "~/client/spotify";
 import { setAuthStore } from "~/client/storage";
 import { createShortcut, isEditableShortcutTarget } from "~/lib/shortcut";
@@ -51,7 +51,7 @@ export default function ProfilePage() {
     () => profile(),
     (data) => {
       if (!data) return;
-      posthog.identify(data.id, {
+      identifyUser(data.id, {
         username: data.display_name,
         email: data.email,
       });

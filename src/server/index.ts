@@ -1,36 +1,16 @@
-import { Effect, Layer } from "effect";
-import { HttpRouter, HttpServer } from "effect/http";
-import { HttpApiBuilder } from "effect/http-api";
+import { Effect } from "effect";
+import { handleRequest } from "virtual:solid-ssr-handler";
 
-import { Api } from "~/api";
-
-import { AccountGroupLive } from "./api";
-import { DatabaseLive } from "./db";
-import { statsCallback, statsLogin } from "./oauth";
-import { SpotifyLive } from "./spotify";
-import { Tracking, TrackingLive } from "./tracking";
+import { ServicesLive } from "./handler";
+import { Tracking } from "./tracking";
 
 /**
- * The worker entry point.
+ * The Cloudflare Worker entry.
  *
- * `/api/*` is served by the shared Effect `HttpApi`; the stats OAuth redirect
- * routes are plain fetch handlers. Everything else is a static asset or the
- * SPA fallback, which the Cloudflare runtime serves before this worker runs.
+ * Start mode owns the page render through `virtual:solid-ssr-handler`, which
+ * also runs `start.middleware` (the JSON API and the stats OAuth routes). The
+ * worker adds the queue consumer and the cron trigger.
  */
-
-const PlatformLive = Layer.merge(DatabaseLive, SpotifyLive);
-const ServicesLive = Layer.mergeAll(
-  PlatformLive,
-  TrackingLive.pipe(Layer.provide(PlatformLive)),
-);
-
-const AppLive = HttpApiBuilder.layer(Api).pipe(
-  Layer.provideMerge(AccountGroupLive),
-  Layer.provideMerge(ServicesLive),
-  Layer.provideMerge(HttpServer.layerServices),
-);
-
-const { handler } = HttpRouter.toWebHandler(AppLive, { disableLogger: false });
 
 const spotifyUserId = (body: unknown): string | null => {
   if (typeof body !== "object" || body === null) return null;
@@ -41,19 +21,7 @@ const spotifyUserId = (body: unknown): string | null => {
 
 export default {
   async fetch(request: Request): Promise<Response> {
-    const pathname = new URL(request.url).pathname;
-
-    if (pathname === "/account/stats/login") return statsLogin(request);
-
-    if (pathname === "/account/stats/callback") {
-      return Effect.runPromise(
-        statsCallback(request).pipe(Effect.provide(ServicesLive), Effect.orDie),
-      );
-    }
-
-    if (pathname.startsWith("/api/")) return handler(request);
-
-    return new Response("Not Found", { status: 404 });
+    return handleRequest(request);
   },
 
   async scheduled(): Promise<void> {
