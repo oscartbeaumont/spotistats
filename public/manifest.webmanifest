@@ -4,7 +4,7 @@
     "description": "Spotistats is a tool designed to analyse and backup your music on Spotify!",
     "start_url": "/",
     "display": "standalone",
-    "background_color": "#191414",
+    "background_color": "#f0ede8",
     "theme_color": "#1DB954",
     "orientation": "portrait",
     "icons": [
