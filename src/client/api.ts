@@ -22,19 +22,27 @@ const client = Effect.runSync(
   HttpApiClient.make(Api, { baseUrl }).pipe(Effect.provide(fetchHttpClientLayer)),
 );
 
-export const runApi = <A, E>(effect: Effect.Effect<A, E, never>): Promise<A> =>
-  Effect.runPromise(effect).catch((error: unknown) => {
+export const runApi = <A, E>(effect: Effect.Effect<A, E, never>): Promise<A> => {
+  const session = untrack(() => authStore());
+  return Effect.runPromise(effect).catch((error: unknown) => {
     if (
       typeof error === "object" &&
       error !== null &&
       "_tag" in error &&
       error._tag === "Unauthorized"
     ) {
-      setAuthStore({ status: "empty" });
+      setAuthStore((current) =>
+        session.status === "authenticated" &&
+        current.status === "authenticated" &&
+        current.accessToken === session.accessToken
+          ? { status: "empty" }
+          : current,
+      );
       throw new SpotifyUnauthenticatedError();
     }
     throw error;
   });
+};
 
 const authorization = () => {
   const store = untrack(() => authStore());

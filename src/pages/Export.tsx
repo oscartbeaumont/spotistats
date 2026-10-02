@@ -2,16 +2,16 @@ import { Title } from "@solidjs/meta";
 import JSZip from "jszip";
 import { createMemo, createSignal, For, isPending, latest, Loading, Show } from "solid-js";
 
-import { downloadBlob, downloadTextFile, csvCell, safeFileName } from "~/lib/download";
+import { downloadBlob, downloadTextFile, csvCell, safeFileName, playlistArchiveName } from "~/lib/download";
 import { errorMessage } from "~/lib/errors";
 import { createShortcut, isEditableShortcutTarget } from "~/lib/shortcut";
 import { authStore } from "~/client/storage";
 import {
   getArtists,
   getAudioFeatures,
-  getLikedTracksPage,
+  getExportTracksPage,
   getPlaylists,
-  getPlaylistTracksPage,
+  isLikedSongs,
   runSpotify,
   type Playlist,
   type PlaylistTrack,
@@ -116,10 +116,7 @@ export default function ExportPage() {
   }
 
   const fetchFor = (playlist: Playlist) =>
-    playlist.name === "Liked Songs"
-      ? (offset: number) => runSpotify(getLikedTracksPage(offset))
-      : (offset: number) =>
-          runSpotify(getPlaylistTracksPage(playlist.id ?? "", offset));
+    (offset: number) => runSpotify(getExportTracksPage(playlist, offset));
 
   async function exportPlaylist(playlist: Playlist) {
     if (busy()) return alert("Please wait for the current download to complete.");
@@ -151,11 +148,10 @@ export default function ExportPage() {
         // The Liked Songs entry is synthesised client-side without an id, so
         // `fetchFor` reaches it via the liked-tracks endpoint; other id-less
         // entries are malformed and skipped.
-        const isLikedSongs = playlist.name === "Liked Songs";
-        if (!isLikedSongs && !playlist.id) continue;
+        if (!isLikedSongs(playlist) && !playlist.id) continue;
         try {
           zip.file(
-            `${safeFileName(playlist.name)}.csv`,
+            playlistArchiveName(playlist.name, (name) => zip.file(name) !== null),
             await downloadPage(fetchFor(playlist), totalProgress),
           );
         } catch (error) {

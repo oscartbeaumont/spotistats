@@ -43,3 +43,12 @@ export function safeFileName(name: string) {
     .trim();
   return cleaned || "untitled";
 }
+
+/** Selects a CSV archive entry without replacing an earlier playlist. */
+export function playlistArchiveName(name: string, exists: (name: string) => boolean) {
+  const base = safeFileName(name);
+  let candidate = `${base}.csv`;
+  let suffix = 2;
+  while (exists(candidate)) candidate = `${base} (${suffix++}).csv`;
+  return candidate;
+}

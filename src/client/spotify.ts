@@ -118,15 +118,15 @@ const Track = Schema.Struct({
   is_local: Schema.Boolean,
   name: Schema.String,
   album: Schema.Struct({ name: Schema.String, release_date: Schema.String }),
-  artists: Schema.Array(Schema.Struct({ id: Schema.String, name: Schema.String })),
+  artists: Schema.Array(Schema.Struct({ id: Schema.NullOr(Schema.String), name: Schema.String })),
   duration_ms: Schema.Number,
   popularity: Schema.optional(Schema.NullOr(Schema.Number)),
 });
 
 export const PlaylistTrack = Schema.Struct({
-  added_by: Schema.optional(Schema.Struct({ id: Schema.String })),
-  added_at: Schema.String,
-  track: Schema.optional(Track),
+  added_by: Schema.optional(Schema.NullOr(Schema.Struct({ id: Schema.String }))),
+  added_at: Schema.NullOr(Schema.String),
+  track: Schema.optional(Schema.NullOr(Track)),
 });
 export type PlaylistTrack = typeof PlaylistTrack.Type;
 
@@ -196,7 +196,13 @@ const request = <S extends Schema.ConstraintDecoder<unknown>>(
     });
 
     if (response.status === 401) {
-      setAuthStore({ status: "empty" });
+      // An in-flight request can outlive logout/login. Only clear the session
+      // that supplied this request's rejected token, not a newer session.
+      setAuthStore((current) =>
+        current.status === "authenticated" && current.accessToken === store.accessToken
+          ? { status: "empty" }
+          : current,
+      );
       return yield* Effect.fail(new SpotifyUnauthenticatedError());
     }
 
@@ -287,6 +293,15 @@ export const getPlaylistTracksPage = (playlistId: string, offset = 0) =>
     page(PlaylistTrack),
     `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100&offset=${offset}`,
   );
+
+/** Only the synthetic library entry has no playlist ID. */
+export const isLikedSongs = (playlist: Playlist) =>
+  playlist.id === undefined && playlist.name === "Liked Songs";
+
+export const getExportTracksPage = (playlist: Playlist, offset = 0) =>
+  isLikedSongs(playlist)
+    ? getLikedTracksPage(offset)
+    : getPlaylistTracksPage(playlist.id ?? "", offset);
 
 export const getAudioFeatures = (ids: string) =>
   ids

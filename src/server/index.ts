@@ -66,11 +66,13 @@ export default {
                         error.status === 429 ? 60 : null,
                       ),
               }),
-              // A failure while recording the failure must not abort the batch.
+              // A failure while recording the failure must not abort the batch
+              // or silently acknowledge a message with no persisted retry.
               (cause) =>
-                Effect.sync(() =>
-                  console.error(`Spotify sync failed for ${id}`, cause),
-                ),
+                Effect.sync(() => {
+                  console.error(`Spotify sync failed for ${id}`, cause);
+                  message.retry();
+                }),
             );
           });
         },
