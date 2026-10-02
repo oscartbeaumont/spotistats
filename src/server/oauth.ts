@@ -57,6 +57,17 @@ const failed = (reason: string) =>
     },
   });
 
+/** Keeps the server log readable: the raw Cause nests the error too deep. */
+const describeCause = (cause: unknown): string => {
+  try {
+    return JSON.stringify(cause, (_key, value) =>
+      value instanceof Error ? { name: value.name, message: value.message } : value,
+    );
+  } catch {
+    return String(cause);
+  }
+};
+
 export function statsLogin(request: Request): Response {
   const requestUrl = new URL(request.url);
   const normalizedOrigin = originFromRequest(request);
@@ -128,10 +139,16 @@ export function statsCallback(
       },
     });
   }).pipe(
-    Effect.catchCause((cause) =>
-      Effect.sync(() =>
-        console.error("Spotify stats callback failed", cause),
-      ).pipe(Effect.as(failed("internal_error"))),
-    ),
+    Effect.catchCause((cause) => {
+      const detail = describeCause(cause);
+      // Spotify reports bad client credentials as `invalid_client`; surface it
+      // as a distinct reason so the account page can point at the secret.
+      const reason = detail.includes("invalid_client")
+        ? "spotify_credentials"
+        : "internal_error";
+      return Effect.sync(() =>
+        console.error("Spotify stats callback failed", detail),
+      ).pipe(Effect.as(failed(reason)));
+    }),
   );
 }

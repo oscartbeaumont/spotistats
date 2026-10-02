@@ -10,6 +10,7 @@ import {
   Loading,
   onSettled,
   Show,
+  untrack,
 } from "solid-js";
 
 import {
@@ -114,11 +115,17 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
 
   /**
    * Non-suspending read for handlers, effects, and the scroll trigger.
-   * `latest` throws for a source that has never resolved, so guard on
-   * `isPending` first; after the first load it is always safe.
+   * `latest` throws for a source that has never resolved, and `isPending`
+   * itself re-throws in a tracking context for such a source, so both are
+   * guarded: "not ready yet" reads as an empty list.
    */
-  const loadedItems = (): SpotifyItem[] =>
-    isPending(items) ? [] : (latest(items) ?? []);
+  const loadedItems = (): SpotifyItem[] => {
+    try {
+      return isPending(items) ? [] : (latest(items) ?? []);
+    } catch {
+      return [];
+    }
+  };
 
   // Derived selection: the raw index is clamped to the loaded rows, so no
   // effect has to write the signal back.
@@ -185,7 +192,10 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
       };
     },
     ({ pending, bottom, more, loading, offset }) => {
-      if (!pending && bottom && more && !loading) void loadMore(offset);
+      // `loadMore` re-checks its guards and reads `range()` imperatively. Those
+      // are one-shot reads, so untrack them: reading them in the apply phase
+      // would (correctly) be reported as untracked.
+      if (!pending && bottom && more && !loading) untrack(() => loadMore(offset));
     },
   );
 

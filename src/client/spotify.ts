@@ -66,7 +66,8 @@ export const SpotifyProfile = Schema.Struct({
   uri: Schema.String,
   external_urls: Schema.Struct({ spotify: Schema.String }),
   followers: Schema.Struct({ total: Schema.Number }),
-  images: Schema.Array(Image),
+  // Spotify returns `null` rather than an empty array for some accounts.
+  images: Schema.optional(Schema.NullOr(Schema.Array(Image))),
 });
 
 export const SpotifyItem = Schema.Struct({
@@ -74,10 +75,10 @@ export const SpotifyItem = Schema.Struct({
   type: Schema.optional(Schema.String),
   uri: Schema.String,
   external_urls: Schema.Struct({ spotify: Schema.String }),
-  images: Schema.optional(Schema.Array(Image)),
+  images: Schema.optional(Schema.NullOr(Schema.Array(Image))),
   artists: Schema.optional(Schema.Array(Named)),
   album: Schema.optional(
-    Schema.Struct({ images: Schema.optional(Schema.Array(Image)) }),
+    Schema.Struct({ images: Schema.optional(Schema.NullOr(Schema.Array(Image))) }),
   ),
 });
 export type SpotifyItem = typeof SpotifyItem.Type;
@@ -91,14 +92,14 @@ export const CurrentlyPlaying = Schema.Struct({
 export type CurrentlyPlaying = typeof CurrentlyPlaying.Type;
 
 export const Playlist = Schema.Struct({
-  id: Schema.optional(Schema.String),
+  id: Schema.optional(Schema.NullOr(Schema.String)),
   name: Schema.String,
-  public: Schema.optional(Schema.Boolean),
-  collaborative: Schema.optional(Schema.Boolean),
+  public: Schema.optional(Schema.NullOr(Schema.Boolean)),
+  collaborative: Schema.optional(Schema.NullOr(Schema.Boolean)),
   owner: Schema.optional(
     Schema.Struct({ display_name: Schema.NullOr(Schema.String) }),
   ),
-  images: Schema.Array(Image),
+  images: Schema.optional(Schema.NullOr(Schema.Array(Image))),
 });
 export type Playlist = typeof Playlist.Type;
 
@@ -112,13 +113,14 @@ const page = <S extends Schema.Constraint>(item: S) =>
   });
 
 const Track = Schema.Struct({
-  id: Schema.String,
+  // Local files have no Spotify id.
+  id: Schema.NullOr(Schema.String),
   is_local: Schema.Boolean,
   name: Schema.String,
   album: Schema.Struct({ name: Schema.String, release_date: Schema.String }),
   artists: Schema.Array(Schema.Struct({ id: Schema.String, name: Schema.String })),
   duration_ms: Schema.Number,
-  popularity: Schema.Number,
+  popularity: Schema.optional(Schema.NullOr(Schema.Number)),
 });
 
 export const PlaylistTrack = Schema.Struct({
@@ -289,15 +291,22 @@ export const getPlaylistTracksPage = (playlistId: string, offset = 0) =>
 export const getAudioFeatures = (ids: string) =>
   ids
     ? request(
-        Schema.Struct({ audio_features: Schema.Array(AudioFeatures) }),
+        // Spotify returns `null` entries for tracks without audio features, and
+        // the entries stay positionally aligned with the requested ids.
+        Schema.Struct({ audio_features: Schema.Array(Schema.NullOr(AudioFeatures)) }),
         `https://api.spotify.com/v1/audio-features?ids=${ids}`,
       ).pipe(Effect.map((data) => data.audio_features))
-    : Effect.succeed<ReadonlyArray<AudioFeatures>>([]);
+    : Effect.succeed<ReadonlyArray<AudioFeatures | null>>([]);
 
 export const getArtists = (ids: string) =>
   ids
     ? request(
-        Schema.Struct({ artists: Schema.Array(Artist) }),
+        // Invalid ids come back as `null`; drop them so callers see only artists.
+        Schema.Struct({ artists: Schema.Array(Schema.NullOr(Artist)) }),
         `https://api.spotify.com/v1/artists?ids=${ids}`,
-      ).pipe(Effect.map((data) => data.artists))
+      ).pipe(
+        Effect.map((data) =>
+          data.artists.filter((artist): artist is SpotifyArtist => artist !== null),
+        ),
+      )
     : Effect.succeed<ReadonlyArray<SpotifyArtist>>([]);

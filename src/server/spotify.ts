@@ -26,7 +26,7 @@ export const SpotifyProfile = Schema.Struct({
   uri: Schema.String,
   external_urls: Schema.Struct({ spotify: Schema.String }),
   followers: Schema.Struct({ total: Schema.Number }),
-  images: Schema.Array(Schema.Struct({ url: Schema.String })),
+  images: Schema.optional(Schema.NullOr(Schema.Array(Schema.Struct({ url: Schema.String })))),
 });
 export type SpotifyProfile = typeof SpotifyProfile.Type;
 

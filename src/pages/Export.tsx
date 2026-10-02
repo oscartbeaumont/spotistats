@@ -1,6 +1,6 @@
 import { Title } from "@solidjs/meta";
 import JSZip from "jszip";
-import { createMemo, createSignal, For, latest, Loading, Show } from "solid-js";
+import { createMemo, createSignal, For, isPending, latest, Loading, Show } from "solid-js";
 
 import { downloadBlob, downloadTextFile, csvCell, safeFileName } from "~/lib/download";
 import { errorMessage } from "~/lib/errors";
@@ -15,7 +15,6 @@ import {
   runSpotify,
   type Playlist,
   type PlaylistTrack,
-  type AudioFeatures,
   type SpotifyPage,
 } from "~/client/spotify";
 
@@ -30,8 +29,14 @@ export default function ExportPage() {
 
   const playlists = createMemo(() => runSpotify(getPlaylists()));
   const playlistItems = () => playlists();
-  /** Non-suspending read for event handlers and timers. */
-  const loadedPlaylists = () => latest(playlists) ?? [];
+  /** Non-suspending read for handlers, effects, and the progress timer. */
+  const loadedPlaylists = (): readonly Playlist[] => {
+    try {
+      return isPending(playlists) ? [] : (latest(playlists) ?? []);
+    } catch {
+      return [];
+    }
+  };
 
   async function downloadPage(
     fetchPage: (offset: number) => Promise<SpotifyPage<PlaylistTrack>>,
@@ -72,7 +77,7 @@ export default function ExportPage() {
       for (const [index, item] of page.items.entries()) {
         const track = item.track;
         if (!track) continue;
-        const audio: AudioFeatures | undefined = page.audioFeatures[index];
+        const audio = page.audioFeatures[index];
         const primaryArtistId = track.artists[0]?.id;
         const artist = primaryArtistId
           ? artistById.get(primaryArtistId)

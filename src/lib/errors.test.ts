@@ -6,6 +6,7 @@ describe("describeStatsReason", () => {
   it("maps known callback reasons to sentences", () => {
     expect(describeStatsReason("spotify_denied")).toContain("cancelled");
     expect(describeStatsReason("missing_state_cookie")).toContain("cookie");
+    expect(describeStatsReason("spotify_credentials")).toContain("client secret");
   });
 
   it("falls back for an unknown or missing reason", () => {

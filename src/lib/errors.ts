@@ -23,6 +23,8 @@ const statsReasons: Record<string, string> = {
     "your browser did not keep the sign-in cookie — enable cookies and try again",
   state_mismatch: "the sign-in response did not match this session",
   internal_error: "the server could not complete the Spotify sign-in",
+  spotify_credentials:
+    "Spotify rejected the server's credentials — the client secret needs updating",
 };
 
 export function describeStatsReason(reason: string | null): string {

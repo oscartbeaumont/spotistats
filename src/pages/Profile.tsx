@@ -72,7 +72,7 @@ export default function ProfilePage() {
           ? {
               ...current,
               profile: {
-                icon: data.images[0]?.url,
+                icon: data.images?.[0]?.url,
                 url:
                   current.linkToUri && data.uri
                     ? data.uri
@@ -173,7 +173,7 @@ export default function ProfilePage() {
                 <section class="flex flex-col md:flex-row gap-10 items-start">
                   <a href={externalHref(user().external_urls.spotify)} target="_blank" rel="noopener">
                     <img
-                      src={user().images[0]?.url ?? "/assets/placeholder.svg"}
+                      src={user().images?.[0]?.url ?? "/assets/placeholder.svg"}
                       alt={user().display_name ?? "Profile"}
                       class="h-36 w-36 object-cover border-4 border-[#0a0a0a]"
                     />
