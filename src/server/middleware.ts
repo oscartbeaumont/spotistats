@@ -16,6 +16,15 @@ import { isPostHogPath, proxyPostHog } from "./posthog";
  * step with the routes the app expects the server to own.
  */
 
+/**
+ * The app used to be reachable from more than one host. The session lives in
+ * `localStorage`, which is scoped to an origin, so a browser that signed in on
+ * one host looked signed out on the other. Visitors are moved to the host the
+ * worker is deployed on so that cannot happen.
+ */
+const canonicalHost = "spotistats.otbeaumont.me";
+const legacyHosts = new Set(["spotistats.js.org", "www.spotistats.js.org"]);
+
 /** Headers on `Response` can be immutable; never let that break a request. */
 function setHeader(response: Response, name: string, value: string) {
   try {
@@ -36,7 +45,19 @@ export default async function middleware(
   request: Request,
   next: () => Promise<Response>,
 ): Promise<Response> {
-  const pathname = new URL(request.url).pathname;
+  const url = new URL(request.url);
+  const pathname = url.pathname;
+
+  if (legacyHosts.has(url.hostname)) {
+    const target = new URL(request.url);
+    target.protocol = "https:";
+    target.hostname = canonicalHost;
+    target.port = "";
+    return new Response(null, {
+      status: 301,
+      headers: { Location: target.toString() },
+    });
+  }
 
   if (pathname === "/account/stats/login") {
     return request.method === "GET"
@@ -62,5 +83,15 @@ export default async function middleware(
 
   if (isPostHogPath(pathname)) return proxyPostHog(request);
 
-  return withSecurityHeaders(await next());
+  const response = withSecurityHeaders(await next());
+
+  // The document names the hashed chunks for this build, so serving a stale
+  // copy after a deploy points the browser at files that no longer exist —
+  // which is what "Importing a module script failed." looks like from the
+  // outside. Hashed assets stay immutable; the document must not be reused.
+  if (response.headers.get("content-type")?.includes("text/html")) {
+    setHeader(response, "Cache-Control", "no-store, must-revalidate");
+  }
+
+  return response;
 }

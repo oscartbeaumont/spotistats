@@ -2,7 +2,7 @@ import { Title } from "@solidjs/meta";
 import { useNavigate } from "@solidjs/router";
 import { createEffect, Show } from "solid-js";
 
-import { createLoginUrl, loginError } from "~/client/auth";
+import { createLoginUrl, loginError, logout } from "~/client/auth";
 import { authReady, authStore } from "~/client/storage";
 
 export default function LoginPage() {
@@ -58,7 +58,9 @@ export default function LoginPage() {
           <button
             type="button"
             onClick={async () => {
-              localStorage.clear();
+              // Drop a stale session, but leave anything else in local storage
+              // alone: signing in should not wipe unrelated local state.
+              logout();
               window.location.href = await createLoginUrl(window.location.origin);
             }}
             class="font-black text-sm uppercase tracking-widest py-4 px-8 border-4 border-[#0a0a0a] bg-[#0a0a0a] text-[#f0ede8] transition hover:border-[#1DB954] hover:bg-[#1DB954] hover:text-[#0a0a0a]"

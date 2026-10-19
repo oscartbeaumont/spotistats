@@ -1,0 +1,13 @@
+# Static asset headers for the Worker's asset binding.
+#
+# Everything under /assets is content-hashed by Vite, so it can be cached
+# forever; the document that names those files is served by the worker and
+# marked no-store there (see src/server/middleware.ts).
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: DENY

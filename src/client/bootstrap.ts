@@ -1,5 +1,6 @@
 import { initAnalytics } from "./analytics";
 import { consumeSpotifyCallback } from "./auth";
+import { recoverFromDeploySkew } from "./resilience";
 import { hydrateAuthStore } from "./storage";
 
 /**
@@ -13,5 +14,6 @@ import { hydrateAuthStore } from "./storage";
 export function bootstrapClient(): void {
   const session = hydrateAuthStore();
   initAnalytics();
+  recoverFromDeploySkew();
   void consumeSpotifyCallback(session);
 }
