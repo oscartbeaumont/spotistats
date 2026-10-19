@@ -17,24 +17,24 @@
     "db:migrate:remote": "wrangler d1 migrations apply spotistats --remote"
   },
   "dependencies": {
-    "@effect/sql-d1": "^4.0.0",
+    "@effect/sql-d1": "^4.0.5",
     "@solidjs/meta": "next",
     "@solidjs/router": "next",
     "@solidjs/web": "next",
-    "effect": "^4.0.0",
-    "jszip": "^3.10.1",
-    "posthog-js": "^1.371.2",
+    "effect": "^4.0.5",
+    "jszip": "^3.10.2",
+    "posthog-js": "^1.438.12",
     "solid-js": "next"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "^1.33.1",
-    "@cloudflare/workers-types": "^4.20260423.1",
+    "@cloudflare/vite-plugin": "^1.64.0",
+    "@cloudflare/workers-types": "^5.20261019.1",
     "@solidjs/vite-plugin": "next",
-    "@tailwindcss/vite": "^4.2.4",
-    "tailwindcss": "^4.2.4",
+    "@tailwindcss/vite": "^4.3.3",
+    "tailwindcss": "^4.3.3",
     "typescript": "^6.0.3",
-    "vite": "^8.0.16",
-    "vitest": "^5.0.3",
-    "wrangler": "^4.84.1"
+    "vite": "^8.3.4",
+    "vitest": "^5.0.5",
+    "wrangler": "^4.151.2"
   }
 }
