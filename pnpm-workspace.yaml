@@ -9,3 +9,8 @@ onlyBuiltDependencies:
 minimumReleaseAgeExclude:
   - '@effect/sql-d1@4.0.0'
   - effect@4.0.0
+
+# vite auto-installs tsx as an optional peer; older tsx pins esbuild <0.28.1,
+# which is affected by GHSA-g7r4-m6w7-qqqr.
+overrides:
+  tsx: ^4.23.15
