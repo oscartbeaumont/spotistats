@@ -12,6 +12,7 @@ import {
 } from "solid-js";
 
 import { accountApi } from "~/client/api";
+import { downloadTextFile } from "~/lib/download";
 import { describeStatsReason, errorMessage } from "~/lib/errors";
 import { formatDate } from "~/lib/format";
 import { createShortcut, isEditableShortcutTarget } from "~/lib/shortcut";
@@ -35,6 +36,7 @@ export default function AccountPage() {
 
   const [disabling, setDisabling] = createSignal(false);
   const [deleting, setDeleting] = createSignal(false);
+  const [exporting, setExporting] = createSignal<"json" | "csv" | null>(null);
   const [actionError, setActionError] = createSignal<string | null>(null);
 
   const runDisable = action(function* () {
@@ -77,6 +79,29 @@ export default function AccountPage() {
       setActionError(errorMessage(error));
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const exportListeningData = async (format: "json" | "csv") => {
+    if (exporting()) return;
+    setExporting(format);
+    setActionError(null);
+    try {
+      if (format === "json") {
+        const data = await accountApi.exportJson();
+        downloadTextFile(
+          "spotistats-listening-data.json",
+          JSON.stringify(data, null, 2),
+          "application/json",
+        );
+      } else {
+        const csv = await accountApi.exportCsv();
+        downloadTextFile("spotistats-listening-data.csv", csv);
+      }
+    } catch (error) {
+      setActionError(errorMessage(error));
+    } finally {
+      setExporting(null);
     }
   };
 
@@ -123,8 +148,8 @@ export default function AccountPage() {
 
       <Loading fallback={<p class="text-sm uppercase tracking-widest text-[#5c5c5c]">LOADING_</p>}>
         <section class="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(22rem,28rem)]">
-          <div>
-            <div class="mb-6 p-5 border-4 border-[#0a0a0a]">
+          <div class="contents">
+            <div class="p-5 border-4 border-[#0a0a0a] lg:col-start-1 lg:row-start-1">
               <div class="text-xs uppercase tracking-[0.2em] mb-3 text-[#5c5c5c]">
                 Listening Stats
               </div>
@@ -206,7 +231,38 @@ export default function AccountPage() {
                 </div>
               </Show>
             </div>
-            <div class="p-5 border-4 border-red-800">
+            <div class="p-5 border-4 border-[#0a0a0a] bg-[#f8f5ef] lg:col-start-2 lg:row-start-1">
+              <div class="text-xs uppercase tracking-[0.2em] mb-3 text-[#5c5c5c]">
+                Export Your Data
+              </div>
+              <h2 class="text-2xl font-black uppercase tracking-tighter leading-none mb-3">
+                Your plays, portable
+              </h2>
+              <p class="text-sm max-w-xl mb-5 leading-[1.7] text-[#555]">
+                Download every listen Spotistats has stored for this account:
+                track, artists, album, context and timestamp. Exporting does not
+                stop sync or change what is stored.
+              </p>
+              <div class="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  disabled={exporting() !== null}
+                  onClick={() => void exportListeningData("json")}
+                  class="font-black text-sm uppercase tracking-widest py-4 px-8 transition disabled:opacity-50 border-4 border-[#0a0a0a] hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
+                >
+                  {exporting() === "json" ? "Preparing_" : "Download JSON ↓"}
+                </button>
+                <button
+                  type="button"
+                  disabled={exporting() !== null}
+                  onClick={() => void exportListeningData("csv")}
+                  class="font-black text-sm uppercase tracking-widest py-4 px-8 transition disabled:opacity-50 border-4 border-[#0a0a0a] hover:bg-[#1DB954] hover:text-black"
+                >
+                  {exporting() === "csv" ? "Preparing_" : "Download CSV ↓"}
+                </button>
+              </div>
+            </div>
+            <div class="p-5 border-4 border-red-800 lg:col-start-1 lg:row-start-2">
               <div class="text-xs uppercase tracking-[0.2em] mb-3 text-red-700">
                 Danger Zone
               </div>

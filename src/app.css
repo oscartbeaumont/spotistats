@@ -23,6 +23,13 @@ body {
   padding-top: 6.5rem;
 }
 
+/* The header sits in flow below `sm`, so it does not cover the page. */
+@media (max-width: 639px) {
+  .app-main {
+    padding-top: 0;
+  }
+}
+
 button,
 a {
   cursor: pointer;
@@ -33,11 +40,69 @@ a {
   outline-offset: 2px;
 }
 
+/* Listening-insights motion. The global reduced-motion rule below disables it. */
+@keyframes insight-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes insight-grow {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes insight-stretch {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes insight-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.insight-rise {
+  animation: insight-rise 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.insight-bar {
+  animation: insight-grow 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.insight-stretch {
+  animation: insight-stretch 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.insight-vinyl {
+  background-image: repeating-radial-gradient(
+    circle at center,
+    #0a0a0a 0 3px,
+    #1c1c1c 3px 6px
+  );
+  animation: insight-spin 9s linear infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;

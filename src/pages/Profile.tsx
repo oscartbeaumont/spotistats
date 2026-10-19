@@ -196,12 +196,20 @@ export default function ProfilePage() {
                         followers
                       </span>
                     </div>
-                    <a
-                      href="/favourites/tracks"
-                      class="inline-block border-4 border-[#0a0a0a] font-black text-sm uppercase px-6 py-3 tracking-wide transition hover:border-[#1DB954] hover:bg-[#1DB954] hover:text-black"
-                    >
-                      See Top Music →
-                    </a>
+                    <div class="flex flex-wrap gap-3">
+                      <a
+                        href="/favourites/tracks"
+                        class="inline-block border-4 border-[#0a0a0a] font-black text-sm uppercase px-6 py-3 tracking-wide transition hover:border-[#1DB954] hover:bg-[#1DB954] hover:text-black"
+                      >
+                        See Top Music →
+                      </a>
+                      <a
+                        href="/insights"
+                        class="inline-block border-4 border-[#0a0a0a] font-black text-sm uppercase px-6 py-3 tracking-wide transition hover:border-[#1DB954] hover:bg-[#1DB954] hover:text-black"
+                      >
+                        Listening Insights →
+                      </a>
+                    </div>
                   </div>
                 </section>
                 <aside class="border-4 border-[#0a0a0a] p-5">
