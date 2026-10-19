@@ -1,5 +1,6 @@
-import { createSignal, onCleanup } from "solid-js";
+import { createSignal, onCleanup, onSettled } from "solid-js";
 
+import { captureError } from "~/client/analytics";
 import { errorMessage } from "~/lib/errors";
 
 export function AppError(props: { error?: unknown; reset?: () => void }) {
@@ -7,6 +8,10 @@ export function AppError(props: { error?: unknown; reset?: () => void }) {
   let copiedTimer: number | undefined;
   onCleanup(() => {
     if (copiedTimer !== undefined) window.clearTimeout(copiedTimer);
+  });
+  // The boundary handles this error, so PostHog's global handlers miss it.
+  onSettled(() => {
+    if (props.error !== undefined) captureError(props.error);
   });
   const errorText = () => {
     if (props.error instanceof Error) {
