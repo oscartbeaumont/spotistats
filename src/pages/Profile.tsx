@@ -5,7 +5,6 @@ import {
   createMemo,
   createSignal,
   For,
-  isPending,
   latest,
   Loading,
   onSettled,
@@ -335,15 +334,7 @@ export default function ProfilePage() {
                   </a>
                 )}
               </Show>
-              <div
-                class={`grid gap-8 xl:grid-cols-[minmax(0,1fr)_minmax(20rem,26rem)] xl:items-start transition-opacity ${
-                  isPending(profile) ||
-                  isPending(currentlyPlaying) ||
-                  isPending(stats)
-                    ? "opacity-45"
-                    : "opacity-100"
-                }`}
-              >
+              <div class="grid gap-8 xl:grid-cols-[minmax(0,1fr)_minmax(20rem,26rem)] xl:items-start">
                 <header class="order-1 border-b-4 border-[#0a0a0a] pb-6 xl:col-start-1 xl:row-start-1">
                   <div class="flex flex-wrap items-start gap-5">
                     <a
