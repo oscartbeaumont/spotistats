@@ -16,6 +16,7 @@ Previously [https://spotistats.js.org].
 - [`@solidjs/vite-plugin`](https://www.npmjs.com/package/@solidjs/vite-plugin) start mode for the entries, the document shell and server rendering. SolidStart is no longer used.
 - [Effect 4](https://effect.website) for the worker. The API contract (`src/api`) is shared by both sides.
 - [Vite](https://vite.dev) with the [Cloudflare Vite plugin](https://developers.cloudflare.com/workers/vite-plugin/) for building and local development.
+- [Cloudflare CLI (`cf`)](https://developers.cloudflare.com/cf/) with [`cloudflare.config.ts`](https://developers.cloudflare.com/cf/projects/cloudflare-config/) for dev, build and deploy.
 - [TailwindCSS](https://tailwindcss.com) for styling.
 - [Cloudflare Workers](https://workers.cloudflare.com) for hosting, with D1, Queues and Cron Triggers.
 
@@ -82,9 +83,10 @@ registered as a redirect URI.
 
 ```bash
 pnpm typecheck   # TypeScript, no emit
-pnpm cf-typegen  # Regenerate worker-configuration.d.ts from wrangler.jsonc
+pnpm cf-typegen  # Regenerate .cloudflare/types/index.d.ts from cloudflare.config.ts
 pnpm build       # Regenerate types, type check, then build the client and the worker
 pnpm preview     # Build, then run the production build in workerd
+pnpm deploy      # Build and deploy with cf
 ```
 
 # Database

@@ -1,6 +1,7 @@
 dist
 .wrangler
 .output
+.cloudflare
 *.tsbuildinfo
 
 # Environment

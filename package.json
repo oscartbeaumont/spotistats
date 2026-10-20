@@ -6,15 +6,15 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "vite dev",
-    "build": "wrangler types && tsc --noEmit && vite build",
-    "preview": "pnpm run build && vite preview",
-    "deploy": "pnpm run build && wrangler deploy",
+    "dev": "cf dev",
+    "build": "cf workers types && tsc --noEmit && cf build",
+    "preview": "cf build && vite preview",
+    "deploy": "cf deploy",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "cf-typegen": "wrangler types",
-    "db:migrate:local": "wrangler d1 migrations apply spotistats --local",
-    "db:migrate:remote": "wrangler d1 migrations apply spotistats --remote"
+    "cf-typegen": "cf workers types",
+    "db:migrate:local": "cf d1 migrations apply 7529dabd-7b6d-42f6-ac94-ddc3db1332ab --local",
+    "db:migrate:remote": "cf d1 migrations apply 7529dabd-7b6d-42f6-ac94-ddc3db1332ab"
   },
   "dependencies": {
     "@effect/sql-d1": "^4.0.5",
@@ -27,14 +27,13 @@
     "solid-js": "next"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "^1.64.0",
-    "@cloudflare/workers-types": "^5.20261019.1",
+    "@cloudflare/vite-plugin": "beta",
     "@solidjs/vite-plugin": "next",
     "@tailwindcss/vite": "^4.3.3",
+    "cf": "1.0.0-beta.19",
     "tailwindcss": "^4.3.3",
     "typescript": "^6.0.3",
     "vite": "^8.3.4",
-    "vitest": "^5.0.5",
-    "wrangler": "^4.151.2"
+    "vitest": "^5.0.5"
   }
 }
