@@ -1,3 +1,4 @@
+import type { RequestEvent } from "@solidjs/web";
 import { Effect } from "effect";
 
 import { ServicesLive, apiHandler } from "./handler";
@@ -33,9 +34,10 @@ function withSecurityHeaders(response: Response): Response {
 }
 
 export default async function middleware(
-  request: Request,
+  event: RequestEvent,
   next: () => Promise<Response>,
 ): Promise<Response> {
+  const request = event.request;
   // Vite's preview dispatches relative URLs; production always sends an
   // absolute one. The base keeps both shapes working.
   const pathname = new URL(request.url, "http://localhost").pathname;
