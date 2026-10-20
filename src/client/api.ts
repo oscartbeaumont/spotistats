@@ -52,6 +52,17 @@ const authorization = () => {
 
 export const accountApi = {
   status: () => runApi(client.account.status({ headers: { authorization: authorization() } })),
+  insights: (tzOffset: number) =>
+    runApi(
+      client.account.insights({
+        headers: { authorization: authorization() },
+        query: { tzOffset },
+      }),
+    ),
+  exportJson: () =>
+    runApi(client.account.exportJson({ headers: { authorization: authorization() } })),
+  exportCsv: () =>
+    runApi(client.account.exportCsv({ headers: { authorization: authorization() } })),
   refresh: () =>
     runApi(client.account.refresh({ headers: { authorization: authorization() } })),
   disable: () =>

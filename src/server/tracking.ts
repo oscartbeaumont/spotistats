@@ -2,8 +2,14 @@ import { env } from "cloudflare:workers";
 import { Context, Effect, Layer } from "effect";
 import { SqlClient } from "effect/sql/SqlClient";
 
-import { type TrackingStatus, UpstreamError } from "~/api";
+import {
+  type ListeningExport,
+  type ListeningInsights,
+  type TrackingStatus,
+  UpstreamError,
+} from "~/api";
 
+import { exportCsv, readExport, readInsights } from "./insights";
 import { Spotify, SpotifyUnauthorized, type SpotifyProfile, type SpotifyToken } from "./spotify";
 import { nextWatermark } from "./watermark";
 
@@ -169,6 +175,13 @@ const make = Effect.gen(function* () {
         WHERE spotify_user_id = ${spotifyUserId}
       `.pipe(Effect.mapError(databaseError("Failed to disable tracking")));
     });
+
+  const insights = (spotifyUserId: string, tzOffset: number) =>
+    readInsights(sql, spotifyUserId, tzOffset);
+
+  const exportJson = (spotifyUserId: string) => readExport(sql, spotifyUserId);
+
+  const exportCsvData = (spotifyUserId: string) => exportCsv(sql, spotifyUserId);
 
   const disableInactive = Effect.gen(function* () {
     const now = Date.now();
@@ -376,6 +389,9 @@ const make = Effect.gen(function* () {
 
   return {
     status,
+    insights,
+    exportJson,
+    exportCsv: exportCsvData,
     enable,
     disable,
     disableInactive,
@@ -391,6 +407,14 @@ const make = Effect.gen(function* () {
 
 export interface TrackingShape {
   readonly status: (spotifyUserId: string) => Effect.Effect<TrackingStatus, UpstreamError>;
+  readonly insights: (
+    spotifyUserId: string,
+    tzOffset: number,
+  ) => Effect.Effect<ListeningInsights, UpstreamError>;
+  readonly exportJson: (
+    spotifyUserId: string,
+  ) => Effect.Effect<ListeningExport, UpstreamError>;
+  readonly exportCsv: (spotifyUserId: string) => Effect.Effect<string, UpstreamError>;
   readonly enable: (
     profile: SpotifyProfile,
     token: SpotifyToken,

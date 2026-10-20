@@ -47,6 +47,30 @@ export const AccountGroupLive = HttpApiBuilder.group(Api, "account", (handlers) 
         }),
       ),
     )
+    .handle("insights", ({ headers, query }) =>
+      withUser(headers, (user) =>
+        Effect.gen(function* () {
+          const tracking = yield* Tracking;
+          return yield* tracking.insights(user.id, query.tzOffset ?? 0);
+        }),
+      ),
+    )
+    .handle("exportJson", ({ headers }) =>
+      withUser(headers, (user) =>
+        Effect.gen(function* () {
+          const tracking = yield* Tracking;
+          return yield* tracking.exportJson(user.id);
+        }),
+      ),
+    )
+    .handle("exportCsv", ({ headers }) =>
+      withUser(headers, (user) =>
+        Effect.gen(function* () {
+          const tracking = yield* Tracking;
+          return yield* tracking.exportCsv(user.id);
+        }),
+      ),
+    )
     .handle("refresh", ({ headers }) =>
       withUser(headers, (user) =>
         Effect.gen(function* () {

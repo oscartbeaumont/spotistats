@@ -47,7 +47,7 @@ export function RootLayout(props: {
         : location.pathname === href;
 
   const linkClass = (href: string) =>
-    `font-black text-xs sm:text-sm uppercase px-3 sm:px-4 py-2 tracking-wide transition ${
+    `shrink-0 whitespace-nowrap font-black text-[0.65rem] sm:text-sm uppercase px-1 sm:px-4 py-2 tracking-wide transition ${
       isActive(href)
         ? "bg-[#0a0a0a] text-[#f0ede8]"
         : "border-4 border-[#0a0a0a] hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
@@ -77,22 +77,22 @@ export function RootLayout(props: {
       fallback={<LoginPage />}
     >
       <div>
-        <header class="fixed left-0 right-0 top-0 z-50 flex items-center justify-between border-b-4 border-[#0a0a0a] bg-[#f0ede8] p-4 sm:p-5">
-          <span class="font-black text-xl tracking-tighter uppercase select-none">
+        <header class="relative z-50 flex flex-wrap items-center justify-between gap-2 border-b-4 border-[#0a0a0a] bg-[#f0ede8] p-4 sm:fixed sm:left-0 sm:right-0 sm:top-0 sm:flex-nowrap sm:gap-4 sm:p-5">
+          <span class="shrink-0 font-black text-xl tracking-tighter uppercase select-none">
             SPOTISTATS
           </span>
-          <nav class="flex flex-wrap gap-0">
+          <nav class="order-3 flex w-full basis-full items-center gap-0 overflow-x-auto sm:order-none sm:w-auto sm:basis-auto sm:grow sm:justify-center">
             <a href="/" class={linkClass("/")}>
-              Profile <span class="ml-2 text-[0.6rem] opacity-50">Alt+1</span>
+              Profile <span class="ml-2 hidden text-[0.6rem] opacity-50 md:inline">Alt+1</span>
             </a>
             <a href="/favourites/tracks" class={linkClass("/favourites/tracks")}>
-              Favourites <span class="ml-2 text-[0.6rem] opacity-50">Alt+2</span>
+              Favourites <span class="ml-2 hidden text-[0.6rem] opacity-50 md:inline">Alt+2</span>
             </a>
             <a href="/export" class={linkClass("/export")}>
-              Export Data <span class="ml-2 text-[0.6rem] opacity-50">Alt+3</span>
+              Export Data <span class="ml-2 hidden text-[0.6rem] opacity-50 md:inline">Alt+3</span>
             </a>
             <a href="/account" class={linkClass("/account")}>
-              Account <span class="ml-2 text-[0.6rem] opacity-50">Alt+4</span>
+              Account <span class="ml-2 hidden text-[0.6rem] opacity-50 md:inline">Alt+4</span>
             </a>
           </nav>
           <button
@@ -100,7 +100,7 @@ export function RootLayout(props: {
               logout();
               navigate("/login");
             }}
-            class="text-xs uppercase tracking-widest font-bold text-[#5c5c5c] transition hover:underline"
+            class="shrink-0 text-xs uppercase tracking-widest font-bold text-[#5c5c5c] transition hover:underline"
           >
             Logout
           </button>
