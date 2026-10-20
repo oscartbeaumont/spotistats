@@ -1,4 +1,3 @@
-import { Title } from "@solidjs/meta";
 import { useNavigate } from "@solidjs/router";
 import {
   createEffect,
@@ -264,7 +263,6 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
 
   return (
     <main class="app-main p-8 md:p-12">
-      <Title>Spotistats | Favourites</Title>
       <div class="flex flex-wrap items-center gap-0 mb-3">
         <h1 class="text-2xl font-black uppercase tracking-tight mr-6">
           {title()}

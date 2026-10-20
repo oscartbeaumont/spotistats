@@ -1,4 +1,3 @@
-import { Title } from "@solidjs/meta";
 import {
   action,
   createEffect,
@@ -417,7 +416,6 @@ export default function ProfilePage() {
 
   return (
     <main class="app-main flex-1 p-8 md:p-16">
-      <Title>Spotistats</Title>
       <div class="space-y-8">
         <Show when={playingNow()?.is_playing && playingNow()?.item}>
           {(track) => (

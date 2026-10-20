@@ -1,9 +1,7 @@
-import { Title } from "@solidjs/meta";
 
 export default function NotFoundPage() {
   return (
     <main class="app-main flex-1 p-8 md:p-16">
-      <Title>Not Found | Spotistats</Title>
       <div class="text-xs uppercase tracking-[0.2em] mb-4 text-[#5c5c5c]">
         Error 404
       </div>

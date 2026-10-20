@@ -1,4 +1,3 @@
-import { Meta, Title } from "@solidjs/meta";
 import { onSettled } from "solid-js";
 
 import { bootstrapClient } from "./client/bootstrap";
@@ -17,15 +16,8 @@ export default function App() {
   onSettled(bootstrapClient);
 
   return (
-    <>
-      <Title>Spotistats</Title>
-      <Meta
-        name="description"
-        content="Spotistats is a tool designed to analyse and backup your music on Spotify!"
-      />
-      <Router>
-        {(props) => <RootLayout>{props.children}</RootLayout>}
-      </Router>
-    </>
+    <Router>
+      {(props) => <RootLayout>{props.children}</RootLayout>}
+    </Router>
   );
 }

@@ -1,4 +1,3 @@
-import { Title } from "@solidjs/meta";
 import JSZip from "jszip";
 import { createMemo, createSignal, For, isPending, latest, Loading, Show } from "solid-js";
 
@@ -213,7 +212,6 @@ export default function ExportPage() {
 
   return (
     <main class="app-main p-8 md:p-12">
-      <Title>Spotistats | Export</Title>
       <div class="flex flex-wrap items-baseline gap-6 mb-8 border-b-4 border-[#0a0a0a] pb-4">
         <h1 class="text-2xl font-black uppercase tracking-tight">Export Data</h1>
         <button

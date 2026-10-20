@@ -1,9 +1,10 @@
-import { Title } from "@solidjs/meta";
-import { useNavigate } from "@solidjs/router";
+import { useLocation, useNavigate } from "@solidjs/router";
 import { createEffect, createSignal, For, Show } from "solid-js";
 
 import { createLoginUrl, loginError } from "~/client/auth";
 import { authReady, authStore } from "~/client/storage";
+import { SeoContent } from "~/components/SeoContent";
+import { isPublicPath } from "~/lib/seo";
 
 const steps = [
   "Connect your Spotify account",
@@ -113,7 +114,9 @@ function SampleTeaser() {
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [signingIn, setSigningIn] = createSignal(false);
+  const publicPage = () => isPublicPath(location.pathname);
 
   createEffect(
     () => ({ ready: authReady(), status: authStore().status }),
@@ -136,7 +139,6 @@ export default function LoginPage() {
 
   return (
     <div class="flex min-h-screen flex-col">
-      <Title>Spotistats</Title>
       <header class="flex items-center justify-between border-b-4 border-[#0a0a0a] p-5">
         <span class="font-black text-xl tracking-tighter uppercase">
           SPOTISTATS
@@ -154,7 +156,7 @@ export default function LoginPage() {
         </span>
       </header>
 
-      <main class="flex-1 p-5 py-10 md:p-10 lg:p-12">
+      <main class="p-5 py-10 md:p-10 lg:p-12">
         <div class="mx-auto grid w-full max-w-[1440px] gap-12 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] xl:items-center xl:gap-16">
           <section class="min-w-0">
             <div class="flex items-center gap-2.5">
@@ -227,6 +229,13 @@ export default function LoginPage() {
           </section>
         </div>
       </main>
+
+      <Show when={publicPage()}>
+        <SeoContent
+          onConnect={() => void signIn()}
+          signingIn={signingIn()}
+        />
+      </Show>
     </div>
   );
 }

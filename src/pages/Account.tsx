@@ -1,4 +1,3 @@
-import { Title } from "@solidjs/meta";
 import { useLocation, useNavigate } from "@solidjs/router";
 import {
   action,
@@ -116,7 +115,6 @@ export default function AccountPage() {
 
   return (
     <main class="app-main p-8 md:p-12">
-      <Title>Spotistats | Account</Title>
       <div class="flex flex-wrap items-baseline gap-6 mb-8 border-b-4 border-[#0a0a0a] pb-4">
         <h1 class="text-2xl font-black uppercase tracking-tight">Account</h1>
         <span class="text-xs uppercase tracking-widest text-[#5c5c5c]">

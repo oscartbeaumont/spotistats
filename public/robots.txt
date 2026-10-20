@@ -1,4 +1,8 @@
 User-agent: *
 Allow: /
+Disallow: /api/
+Disallow: /account
+Disallow: /export
+Disallow: /favourites/
 
 Sitemap: https://spotistats.otbeaumont.me/sitemap.xml

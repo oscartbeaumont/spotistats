@@ -4,8 +4,10 @@ import type { JSX } from "@solidjs/web";
 
 import { AppError } from "~/components/AppError";
 import { ProfileSkeleton } from "~/components/ProfileSkeleton";
+import { Seo } from "~/components/Seo";
 import { hasSpotifyCallbackCode, logout } from "~/client/auth";
 import { authReady, authStore } from "~/client/storage";
+import { isPublicPath, titleForPath } from "~/lib/seo";
 import LoginPage from "~/pages/Login";
 import { createShortcut, isEditableShortcutTarget } from "~/lib/shortcut";
 
@@ -22,6 +24,8 @@ export function RootLayout(props: {
 }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const publicPage = () => isPublicPath(location.pathname);
+  const canonicalPath = () => (publicPage() ? "/" : location.pathname);
   const loadingFallback = () =>
     location.pathname === "/" ? <ProfileSkeleton /> : <LoadingScreen />;
 
@@ -75,7 +79,13 @@ export function RootLayout(props: {
   createShortcut(["Meta", "4"], go("/account"));
 
   return (
-    <Show
+    <>
+      <Seo
+        title={titleForPath(location.pathname)}
+        path={canonicalPath()}
+        publicPage={publicPage()}
+      />
+      <Show
       when={authStore().status === "authenticated"}
       fallback={<LoginPage />}
     >
@@ -113,5 +123,6 @@ export function RootLayout(props: {
         </Errored>
       </div>
     </Show>
+    </>
   );
 }

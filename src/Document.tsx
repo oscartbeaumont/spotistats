@@ -15,6 +15,11 @@ export default function Document(props: { children?: JSX.Element }) {
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="theme-color" content="#1DB954" />
+        <meta name="color-scheme" content="light" />
+        <meta name="application-name" content="Spotistats" />
+        <meta name="apple-mobile-web-app-title" content="Spotistats" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="mobile-web-app-capable" content="yes" />
         <meta
           name="google-site-verification"
           content="MTlWOXe7tGo0JJtX_8kPy0dSA6OOP8UasZF2X-L1Y-M"
@@ -22,6 +27,8 @@ export default function Document(props: { children?: JSX.Element }) {
         <link rel="icon" href="/favicon.ico?v=2" />
         <link rel="apple-touch-icon" href="/assets/logo-256.png" />
         <link rel="manifest" href="/manifest.webmanifest" />
+        <link rel="preconnect" href="https://api.spotify.com" />
+        <link rel="dns-prefetch" href="https://api.spotify.com" />
         {/* Must run before the async client entry, which start mode injects here. */}
         <HydrationScript />
       </head>
