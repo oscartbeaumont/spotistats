@@ -1,20 +1,9 @@
-import { Title } from "@solidjs/meta";
 import type { JSX } from "@solidjs/web";
-import {
-  createEffect,
-  createMemo,
-  createSignal,
-  For,
-  Loading,
-  onSettled,
-  Show,
-} from "solid-js";
+import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 
-import type { ListeningInsights } from "~/api";
-import { accountApi } from "~/client/api";
+import type { ListeningInsights as ListeningInsightsData } from "~/api";
 import { formatDate } from "~/lib/format";
 import {
-  browserTimezoneOffset,
   busiestIndex,
   formatDay,
   formatHour,
@@ -24,7 +13,6 @@ import {
   percentage,
   weekdayNames,
 } from "~/lib/insights";
-import { createShortcut, isEditableShortcutTarget } from "~/lib/shortcut";
 import { externalHref } from "~/lib/url";
 
 /** Counts up once data arrives; static at once for reduced-motion users. */
@@ -130,7 +118,7 @@ function BucketChart(props: {
   );
 }
 
-function InsightsContent(props: { data: ListeningInsights; onRefresh: () => void }) {
+function InsightsContent(props: { data: ListeningInsightsData }) {
   const busiestHour = () => busiestIndex(props.data.hours);
   const busiestWeekday = () => busiestIndex(props.data.weekdays);
   const peak = createMemo(() => {
@@ -152,30 +140,6 @@ function InsightsContent(props: { data: ListeningInsights; onRefresh: () => void
 
   return (
     <div class="space-y-10">
-      <div class="flex flex-wrap items-end justify-between gap-4 border-b-4 border-[#0a0a0a] pb-4">
-        <div>
-          <div class="mb-2 text-xs uppercase tracking-[0.25em] text-[#5c5c5c]">
-            From {props.data.totals.firstPlayedAtMs ? formatDate(props.data.totals.firstPlayedAtMs) : "your first sync"}
-          </div>
-          <h2 class="text-3xl font-black uppercase leading-none tracking-tighter md:text-5xl">
-            Your listening, decoded
-          </h2>
-        </div>
-        <div class="flex items-center gap-3">
-          <span class="text-[0.65rem] font-black uppercase tracking-widest text-[#5c5c5c]">
-            Updated {formatDate(props.data.generatedAt)}
-          </span>
-          <button
-            type="button"
-            onClick={props.onRefresh}
-            class="border-[3px] border-[#0a0a0a] px-3 py-2 text-[0.65rem] font-black uppercase tracking-widest whitespace-nowrap transition hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
-            title="Shortcut: R"
-          >
-            Reload (R)
-          </button>
-        </div>
-      </div>
-
       <section class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Listens tracked"
@@ -446,85 +410,89 @@ function InsightsContent(props: { data: ListeningInsights; onRefresh: () => void
   );
 }
 
-export default function InsightsPage() {
-  const [tick, setTick] = createSignal(0);
-  const data = createMemo(() => {
-    tick();
-    return accountApi.insights(browserTimezoneOffset());
-  });
-
-  onSettled(() => {
-    // The overview is cheap to refresh and should not look stale after a sync.
-    const interval = setInterval(() => setTick((value) => value + 1), 60_000);
-    return () => clearInterval(interval);
-  });
-
-  createShortcut(["r"], (event) => {
-    if (isEditableShortcutTarget(event)) return;
-    setTick((value) => value + 1);
-  });
-
+export function ListeningInsights(props: {
+  data: ListeningInsightsData;
+  onReload: () => void;
+  preview?: boolean;
+  onExitPreview?: () => void;
+}) {
   return (
-    <main class="app-main flex-1 p-8 md:p-12">
-      <Title>Spotistats | Insights</Title>
-      <header class="mb-8 flex flex-wrap items-center gap-6 border-b-4 border-[#0a0a0a] pb-4">
-        <div class="insight-vinyl h-14 w-14 shrink-0 rounded-full border-4 border-[#0a0a0a] bg-[#0a0a0a]">
-          <div class="flex h-full w-full items-center justify-center">
-            <div class="h-5 w-5 rounded-full border-[3px] border-[#0a0a0a] bg-[#1DB954]" />
+    <section
+      id="insights"
+      aria-labelledby="insights-heading"
+      class="scroll-mt-28 space-y-6"
+    >
+      <Show when={props.preview}>
+        <div
+          class="insight-rise border-4 border-[#0a0a0a] bg-[#fff7c2] p-4 md:p-5"
+          role="status"
+        >
+          <div class="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <p class="mb-1 text-xs font-black uppercase tracking-[0.25em] text-[#3b3200]">
+                Sample data
+              </p>
+              <p class="max-w-2xl text-sm leading-6 text-[#3b3200]">
+                This is a preview of the insights you get once listening stats
+                are connected. None of these plays are from your account.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={props.onExitPreview}
+              class="shrink-0 border-[3px] border-[#0a0a0a] px-3 py-2 text-[0.65rem] font-black uppercase tracking-widest transition hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
+            >
+              Exit preview
+            </button>
           </div>
         </div>
-        <div>
-          <h1 class="text-2xl font-black uppercase tracking-tight">Insights</h1>
-          <p class="text-xs uppercase tracking-widest text-[#5c5c5c]">
-            Derived from listens Spotistats stored
-          </p>
-        </div>
-      </header>
+      </Show>
 
-      <Loading
-        fallback={
-          <p class="text-sm uppercase tracking-widest text-[#5c5c5c]">LOADING_</p>
-        }
-      >
-        <Show
-          when={data()}
-          fallback={
-            <p class="text-sm uppercase tracking-widest text-[#5c5c5c]">LOADING_</p>
-          }
-        >
-          {(insights) => (
-            <Show
-              when={insights().totals.listens > 0}
-              fallback={
-                <section class="max-w-2xl border-4 border-[#0a0a0a] p-6 md:p-8">
-                  <div class="mb-2 text-xs uppercase tracking-[0.25em] text-[#5c5c5c]">
-                    Nothing to graph yet
-                  </div>
-                  <h2 class="mb-4 text-3xl font-black uppercase leading-none tracking-tighter">
-                    Your history starts at the next sync
-                  </h2>
-                  <p class="mb-6 text-sm leading-7 text-[#555]">
-                    Listening stats are not enabled, or the first sync has not
-                    landed yet. Spotistats only keeps the plays you opt into, and
-                    every graph here is built from that data.
-                  </p>
-                  <a
-                    href="/account"
-                    class="inline-block border-4 border-[#0a0a0a] px-6 py-3 text-sm font-black uppercase tracking-wide transition hover:bg-[#1DB954] hover:text-black"
-                  >
-                    Connect listening stats →
-                  </a>
-                </section>
-              }
+      <div class="flex flex-wrap items-end justify-between gap-4 border-b-4 border-[#0a0a0a] pb-4">
+        <div class="flex items-center gap-4">
+          <div class="insight-vinyl h-12 w-12 shrink-0 rounded-full border-4 border-[#0a0a0a] bg-[#0a0a0a]">
+            <div class="flex h-full w-full items-center justify-center">
+              <div class="h-4 w-4 rounded-full border-[3px] border-[#0a0a0a] bg-[#1DB954]" />
+            </div>
+          </div>
+          <div>
+            <div class="mb-2 text-xs uppercase tracking-[0.25em] text-[#5c5c5c]">
+              {props.preview
+                ? "A preview with sample data"
+                : props.data.totals.firstPlayedAtMs
+                  ? `Since ${formatDate(props.data.totals.firstPlayedAtMs)}`
+                  : "From your first sync"}
+            </div>
+            <h2
+              id="insights-heading"
+              class="text-3xl font-black uppercase leading-none tracking-tighter md:text-5xl"
             >
-              <InsightsContent
-                data={insights()}
-                onRefresh={() => setTick((value) => value + 1)}
-              />
-            </Show>
-          )}
-        </Show>
-      </Loading>
-    </main>
+              Listening Insights
+            </h2>
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          <Show when={!props.preview}>
+            <span class="text-[0.65rem] font-black uppercase tracking-widest text-[#5c5c5c]">
+              Updated {formatDate(props.data.generatedAt)}
+            </span>
+            <button
+              type="button"
+              onClick={props.onReload}
+              class="whitespace-nowrap border-[3px] border-[#0a0a0a] px-3 py-2 text-[0.65rem] font-black uppercase tracking-widest transition hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
+            >
+              Reload
+            </button>
+          </Show>
+          <Show when={props.preview}>
+            <span class="border-[3px] border-[#0a0a0a] bg-[#1DB954] px-3 py-2 text-[0.65rem] font-black uppercase tracking-widest">
+              Preview
+            </span>
+          </Show>
+        </div>
+      </div>
+
+      <InsightsContent data={props.data} />
+    </section>
   );
 }

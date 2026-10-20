@@ -16,11 +16,17 @@ import { accountApi } from "~/client/api";
 import { identifyUser } from "~/client/analytics";
 import { getCurrentlyPlaying, getProfile, runSpotify } from "~/client/spotify";
 import { setAuthStore } from "~/client/storage";
-import { formatDate } from "~/lib/format";
-import { createShortcut, isEditableShortcutTarget } from "~/lib/shortcut";
+import { ListeningInsights } from "~/components/ListeningInsights";
 import { errorMessage } from "~/lib/errors";
+import { formatDate } from "~/lib/format";
+import { browserTimezoneOffset } from "~/lib/insights";
+import { createPreviewInsights } from "~/lib/previewInsights";
+import { createShortcut, isEditableShortcutTarget } from "~/lib/shortcut";
 import { externalHref } from "~/lib/url";
-import type { TrackingStatus } from "~/api";
+import type {
+  ListeningInsights as ListeningInsightsData,
+  TrackingStatus,
+} from "~/api";
 
 const fetchStatus = async (): Promise<TrackingStatus> => {
   try {
@@ -40,8 +46,149 @@ const fetchStatus = async (): Promise<TrackingStatus> => {
   }
 };
 
+interface InsightsState {
+  data: ListeningInsightsData | null;
+  error: string | null;
+}
+
+const fetchInsights = async (): Promise<InsightsState> => {
+  try {
+    return {
+      data: await accountApi.insights(browserTimezoneOffset()),
+      error: null,
+    };
+  } catch (error) {
+    return { data: null, error: errorMessage(error) };
+  }
+};
+
+function InsightsGate(props: {
+  status: TrackingStatus;
+  refreshing: boolean;
+  onPreview: () => void;
+  onRefresh: () => void;
+}) {
+  return (
+    <section
+      id="insights"
+      class="scroll-mt-28 border-4 border-[#0a0a0a] p-6 md:p-8"
+    >
+      <div class="mb-2 text-xs uppercase tracking-[0.25em] text-[#5c5c5c]">
+        Listening Insights
+      </div>
+      <h2 class="max-w-3xl text-3xl font-black uppercase leading-none tracking-tighter md:text-5xl">
+        {props.status.enabled
+          ? "Your first listens are on the way"
+          : "See what your listening says about you"}
+      </h2>
+      <p class="mt-4 max-w-2xl text-sm leading-7 text-[#555]">
+        {props.status.enabled
+          ? "Stats sync is on. Spotify's recent-play window lands shortly, then this page will fill in on its own."
+          : "Spotistats can only graph the plays you choose to store. Connect listening stats to build a history Spotify does not keep, or preview the overview with sample data first."}
+      </p>
+      <div class="mt-6 grid gap-3 sm:grid-cols-3">
+        <div class="border-[3px] border-[#0a0a0a] p-4">
+          <p class="text-xs font-black uppercase tracking-widest">
+            Top artists & tracks
+          </p>
+          <p class="mt-2 text-xs leading-6 text-[#5c5c5c]">
+            All-time favourites, not just Spotify's last 50 plays.
+          </p>
+        </div>
+        <div class="border-[3px] border-[#0a0a0a] p-4">
+          <p class="text-xs font-black uppercase tracking-widest">When you listen</p>
+          <p class="mt-2 text-xs leading-6 text-[#5c5c5c]">
+            Your local hours, weekdays and the shape of the last year.
+          </p>
+        </div>
+        <div class="border-[3px] border-[#0a0a0a] p-4">
+          <p class="text-xs font-black uppercase tracking-widest">Streaks & quirks</p>
+          <p class="mt-2 text-xs leading-6 text-[#5c5c5c]">
+            Listening streaks, long-tail tracks and your night-owl share.
+          </p>
+        </div>
+      </div>
+      <Show when={props.status.lastError}>
+        {(error) => (
+          <pre class="mt-5 overflow-auto border-[3px] border-[#0a0a0a] bg-[#0a0a0a] p-3 text-xs text-red-500">
+            <samp>{error()}</samp>
+          </pre>
+        )}
+      </Show>
+      <div class="mt-6 flex flex-wrap gap-3">
+        <Show
+          when={props.status.enabled}
+          fallback={
+            <a
+              href="/account"
+              class="border-4 border-[#0a0a0a] bg-[#0a0a0a] px-6 py-3 text-sm font-black uppercase tracking-wide text-[#f0ede8] transition hover:bg-[#1DB954] hover:text-black"
+            >
+              Connect listening stats →
+            </a>
+          }
+        >
+          <button
+            type="button"
+            disabled={props.refreshing}
+            onClick={props.onRefresh}
+            class="border-4 border-[#0a0a0a] px-6 py-3 text-sm font-black uppercase tracking-wide transition disabled:opacity-50 hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
+          >
+            {props.refreshing ? "Refreshing_" : "Refresh now"}
+          </button>
+        </Show>
+        <button
+          type="button"
+          onClick={props.onPreview}
+          class="border-4 border-[#0a0a0a] bg-[#1DB954] px-6 py-3 text-sm font-black uppercase tracking-wide transition hover:bg-[#0a0a0a] hover:text-[#1DB954]"
+        >
+          Preview with sample data →
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function InsightsUnavailable(props: {
+  message: string;
+  onRetry: () => void;
+  onPreview: () => void;
+}) {
+  return (
+    <section
+      id="insights"
+      class="scroll-mt-28 border-4 border-red-800 p-6 md:p-8"
+    >
+      <div class="mb-2 text-xs uppercase tracking-[0.2em] text-red-700">
+        Listening Insights
+      </div>
+      <h2 class="text-2xl font-black uppercase leading-none tracking-tighter">
+        Could not load your insights
+      </h2>
+      <p class="mt-3 max-w-2xl text-sm leading-7 text-[#555]">{props.message}</p>
+      <div class="mt-5 flex flex-wrap gap-3">
+        <button
+          type="button"
+          onClick={props.onRetry}
+          class="border-4 border-[#0a0a0a] px-6 py-3 text-sm font-black uppercase tracking-wide transition hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
+        >
+          Try again
+        </button>
+        <button
+          type="button"
+          onClick={props.onPreview}
+          class="border-4 border-[#0a0a0a] bg-[#1DB954] px-6 py-3 text-sm font-black uppercase tracking-wide transition hover:bg-[#0a0a0a] hover:text-[#1DB954]"
+        >
+          Preview with sample data →
+        </button>
+      </div>
+    </section>
+  );
+}
+
 export default function ProfilePage() {
   const [tick, setTick] = createSignal(0);
+  const [insightsTick, setInsightsTick] = createSignal(0);
+  const [preview, setPreview] = createSignal<ListeningInsightsData | null>(null);
 
   const profile = createMemo(() => runSpotify(getProfile()));
   const stats = createMemo(() => {
@@ -52,6 +199,32 @@ export default function ProfilePage() {
     tick();
     return runSpotify(getCurrentlyPlaying());
   });
+  const insights = createMemo(() => {
+    insightsTick();
+    return fetchInsights();
+  });
+
+  const reloadInsights = () => setInsightsTick((value) => value + 1);
+  const showPreview = () => setPreview(createPreviewInsights());
+  const exitPreview = () => setPreview(null);
+
+  // Refresh the overview only when the stored listen count actually moves, so
+  // the 10-second "currently playing" poll does not rescan the whole history.
+  let lastListenCount: number | null = null;
+  createEffect(
+    () => stats().listenCount,
+    (count) => {
+      if (typeof count !== "number") return;
+      if (lastListenCount === null) {
+        lastListenCount = count;
+        return;
+      }
+      if (count !== lastListenCount) {
+        lastListenCount = count;
+        reloadInsights();
+      }
+    },
+  );
 
   onSettled(() => {
     const interval = setInterval(() => setTick((value) => value + 1), 10000);
@@ -91,6 +264,7 @@ export default function ProfilePage() {
   const queueRefresh = action(function* () {
     yield accountApi.refresh();
     setTick((value) => value + 1);
+    reloadInsights();
   });
   const refreshStats = async () => {
     if (refreshing() || !latest(stats)?.enabled) return;
@@ -204,10 +378,10 @@ export default function ProfilePage() {
                         See Top Music →
                       </a>
                       <a
-                        href="/insights"
+                        href="#insights"
                         class="inline-block border-4 border-[#0a0a0a] font-black text-sm uppercase px-6 py-3 tracking-wide transition hover:border-[#1DB954] hover:bg-[#1DB954] hover:text-black"
                       >
-                        Listening Insights →
+                        Listening Insights ↓
                       </a>
                     </div>
                   </div>
@@ -302,6 +476,65 @@ export default function ProfilePage() {
                   </Show>
                 </aside>
               </div>
+
+              <Loading
+                fallback={
+                  <p class="text-sm uppercase tracking-widest text-[#5c5c5c]">
+                    LOADING INSIGHTS_
+                  </p>
+                }
+              >
+                <Show
+                  when={preview()}
+                  fallback={
+                    <Show when={insights()}>
+                      {(state) => (
+                        <Show
+                          when={state().data}
+                          fallback={
+                            <InsightsUnavailable
+                              message={
+                                state().error ??
+                                "Insights could not be loaded. Try again."
+                              }
+                              onRetry={reloadInsights}
+                              onPreview={showPreview}
+                            />
+                          }
+                        >
+                          {(data) => (
+                            <Show
+                              when={data().totals.listens > 0}
+                              fallback={
+                                <InsightsGate
+                                  status={stats()}
+                                  refreshing={refreshing()}
+                                  onPreview={showPreview}
+                                  onRefresh={refreshStats}
+                                />
+                              }
+                            >
+                              <ListeningInsights
+                                data={data()}
+                                onReload={reloadInsights}
+                              />
+                            </Show>
+                          )}
+                        </Show>
+                      )}
+                    </Show>
+                  }
+                >
+                  {(data) => (
+                    <ListeningInsights
+                      data={data()}
+                      onReload={reloadInsights}
+                      preview
+                      onExitPreview={exitPreview}
+                    />
+                  )}
+                </Show>
+              </Loading>
             </div>
           )}
         </Show>

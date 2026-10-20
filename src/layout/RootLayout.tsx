@@ -64,15 +64,12 @@ export function RootLayout(props: {
   createShortcut(["Alt", "2"], go("/favourites/tracks"));
   createShortcut(["Control", "2"], go("/favourites/tracks"));
   createShortcut(["Meta", "2"], go("/favourites/tracks"));
-  createShortcut(["Alt", "3"], go("/insights"));
-  createShortcut(["Control", "3"], go("/insights"));
-  createShortcut(["Meta", "3"], go("/insights"));
-  createShortcut(["Alt", "4"], go("/export"));
-  createShortcut(["Control", "4"], go("/export"));
-  createShortcut(["Meta", "4"], go("/export"));
-  createShortcut(["Alt", "5"], go("/account"));
-  createShortcut(["Control", "5"], go("/account"));
-  createShortcut(["Meta", "5"], go("/account"));
+  createShortcut(["Alt", "3"], go("/export"));
+  createShortcut(["Control", "3"], go("/export"));
+  createShortcut(["Meta", "3"], go("/export"));
+  createShortcut(["Alt", "4"], go("/account"));
+  createShortcut(["Control", "4"], go("/account"));
+  createShortcut(["Meta", "4"], go("/account"));
 
   return (
     <Show
@@ -91,14 +88,11 @@ export function RootLayout(props: {
             <a href="/favourites/tracks" class={linkClass("/favourites/tracks")}>
               Favourites <span class="ml-2 hidden text-[0.6rem] opacity-50 md:inline">Alt+2</span>
             </a>
-            <a href="/insights" class={linkClass("/insights")}>
-              Insights <span class="ml-2 hidden text-[0.6rem] opacity-50 md:inline">Alt+3</span>
-            </a>
             <a href="/export" class={linkClass("/export")}>
-              Export Data <span class="ml-2 hidden text-[0.6rem] opacity-50 md:inline">Alt+4</span>
+              Export Data <span class="ml-2 hidden text-[0.6rem] opacity-50 md:inline">Alt+3</span>
             </a>
             <a href="/account" class={linkClass("/account")}>
-              Account <span class="ml-2 hidden text-[0.6rem] opacity-50 md:inline">Alt+5</span>
+              Account <span class="ml-2 hidden text-[0.6rem] opacity-50 md:inline">Alt+4</span>
             </a>
           </nav>
           <button
