@@ -36,7 +36,9 @@ export default async function middleware(
   request: Request,
   next: () => Promise<Response>,
 ): Promise<Response> {
-  const pathname = new URL(request.url).pathname;
+  // Vite's preview dispatches relative URLs; production always sends an
+  // absolute one. The base keeps both shapes working.
+  const pathname = new URL(request.url, "http://localhost").pathname;
 
   if (pathname === "/account/stats/login") {
     return request.method === "GET"

@@ -28,7 +28,7 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "beta",
-    "@solidjs/vite-plugin": "next",
+    "@solidjs/vite-plugin": "3.0.0-next.50",
     "@tailwindcss/vite": "^4.3.3",
     "cf": "1.0.0-beta.19",
     "tailwindcss": "^4.3.3",
