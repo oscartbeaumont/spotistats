@@ -51,7 +51,12 @@ export const AccountGroupLive = HttpApiBuilder.group(Api, "account", (handlers) 
       withUser(headers, (user) =>
         Effect.gen(function* () {
           const tracking = yield* Tracking;
-          return yield* tracking.insights(user.id, query.tzOffset ?? 0);
+          return yield* tracking.insights(user.id, {
+            tzOffset: query.tzOffset ?? 0,
+            range: query.range ?? "all",
+            fromMs: query.fromMs ?? null,
+            toMs: query.toMs ?? null,
+          });
         }),
       ),
     )

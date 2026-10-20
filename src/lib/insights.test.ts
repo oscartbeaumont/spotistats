@@ -4,12 +4,18 @@ import {
   busiestIndex,
   clampTimezoneOffset,
   computeStreaks,
+  dayKeysBetween,
   formatDay,
+  formatDayShort,
   formatHour,
   formatListeningTime,
   listeningHours,
   localDay,
+  monthKeysBetween,
   percentage,
+  resolveStatsWindow,
+  shiftMonth,
+  startOfLocalDay,
   timezoneModifier,
 } from "./insights";
 
@@ -114,5 +120,62 @@ describe("formatting", () => {
     expect(percentage(1, 0)).toBe(0);
     expect(busiestIndex([0, 3, 1])).toBe(1);
     expect(busiestIndex([0, 0])).toBeNull();
+  });
+
+  it("builds preset windows from local midnight", () => {
+    const now = Date.UTC(2026, 9, 20, 12, 0);
+    const day = startOfLocalDay(now, -600);
+    expect(localDay(day, -600)).toBe("2026-10-20");
+    expect(resolveStatsWindow("week", -600, null, null, now)).toEqual({
+      fromMs: day - 6 * 86_400_000,
+      toMs: now,
+    });
+    expect(resolveStatsWindow("month", -600, null, null, now).fromMs).toBe(
+      day - 29 * 86_400_000,
+    );
+    expect(resolveStatsWindow("sixMonths", -600, null, null, now).fromMs).toBe(
+      day - 182 * 86_400_000,
+    );
+    expect(resolveStatsWindow("all", -600, null, null, now)).toEqual({
+      fromMs: 0,
+      toMs: now,
+    });
+  });
+
+  it("swaps and clamps custom windows", () => {
+    const now = Date.UTC(2026, 9, 20, 12, 0);
+    expect(
+      resolveStatsWindow("custom", 0, now + 86_400_000, now - 86_400_000, now),
+    ).toEqual({ fromMs: now - 86_400_000, toMs: now });
+    expect(resolveStatsWindow("custom", 0, null, null, now)).toEqual({
+      fromMs: startOfLocalDay(now, 0) - 29 * 86_400_000,
+      toMs: now,
+    });
+  });
+
+  it("fills day and month buckets", () => {
+    expect(dayKeysBetween("2026-10-18", "2026-10-20")).toEqual([
+      "2026-10-18",
+      "2026-10-19",
+      "2026-10-20",
+    ]);
+    expect(dayKeysBetween("2026-10-20", "2026-10-18")).toEqual([]);
+    expect(monthKeysBetween("2026-08", "2026-10")).toEqual([
+      "2026-08",
+      "2026-09",
+      "2026-10",
+    ]);
+    expect(monthKeysBetween("2025-01", "2026-10", 3)).toEqual([
+      "2026-08",
+      "2026-09",
+      "2026-10",
+    ]);
+    expect(shiftMonth("2026-01", -11)).toBe("2025-02");
+    expect(shiftMonth("2026-10", -11)).toBe("2025-11");
+  });
+
+  it("formats short trend dates", () => {
+    expect(formatDayShort("2026-10-20")).toContain("20");
+    expect(formatDayShort("broken")).toBe("broken");
   });
 });

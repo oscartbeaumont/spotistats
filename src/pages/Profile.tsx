@@ -26,11 +26,18 @@ import {
 } from "~/components/ProfileSkeleton";
 import { errorMessage } from "~/lib/errors";
 import { formatDate } from "~/lib/format";
-import { browserTimezoneOffset } from "~/lib/insights";
+import {
+  DAY_MS,
+  browserTimezoneOffset,
+  formatDay,
+  localDay,
+} from "~/lib/insights";
 import { createPreviewInsights } from "~/lib/previewInsights";
 import { createShortcut, isEditableShortcutTarget } from "~/lib/shortcut";
 import { externalHref } from "~/lib/url";
 import type {
+  InsightsQuery,
+  InsightsRange,
   ListeningInsights as ListeningInsightsData,
   TrackingStatus,
 } from "~/api";
@@ -60,10 +67,20 @@ interface InsightsState {
   error: string | null;
 }
 
-const fetchInsights = async (): Promise<InsightsState> => {
+const localDateStart = (value: string) => {
+  const ms = new Date(`${value}T00:00:00`).getTime();
+  return Number.isFinite(ms) ? ms : null;
+};
+
+const localDateEnd = (value: string) => {
+  const ms = new Date(`${value}T23:59:59.999`).getTime();
+  return Number.isFinite(ms) ? ms : null;
+};
+
+const fetchInsights = async (query: InsightsQuery): Promise<InsightsState> => {
   try {
     return {
-      data: await accountApi.insights(browserTimezoneOffset()),
+      data: await accountApi.insights(query),
       error: null,
     };
   } catch (error) {
@@ -282,11 +299,86 @@ function StatsRail(props: {
   );
 }
 
+const rangeOptions: ReadonlyArray<{ value: InsightsRange; label: string }> = [
+  { value: "week", label: "7D" },
+  { value: "month", label: "30D" },
+  { value: "sixMonths", label: "6M" },
+  { value: "all", label: "ALL" },
+  { value: "custom", label: "CUSTOM" },
+];
+
+function InsightsRangeControl(props: {
+  value: InsightsRange;
+  fromDate: string;
+  toDate: string;
+  updating: boolean;
+  onChange: (value: InsightsRange) => void;
+  onFromChange: (value: string) => void;
+  onToChange: (value: string) => void;
+}) {
+  return (
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="mr-1 text-[0.6rem] font-black uppercase tracking-[0.2em] text-[#5c5c5c]">
+        Range
+      </span>
+      <For each={rangeOptions}>
+        {(option) => (
+          <button
+            type="button"
+            aria-pressed={props.value === option.value ? "true" : "false"}
+            onClick={() => props.onChange(option.value)}
+            class={`border-[3px] border-[#0a0a0a] px-2.5 py-1 text-[0.6rem] font-black uppercase tracking-widest transition ${
+              props.value === option.value
+                ? "bg-[#0a0a0a] text-[#f0ede8]"
+                : "hover:bg-[#1DB954] hover:text-black"
+            }`}
+          >
+            {option.label}
+          </button>
+        )}
+      </For>
+      <Show when={props.value === "custom"}>
+        <label class="flex items-center gap-2 border-[3px] border-[#0a0a0a] px-2 py-1 text-[0.55rem] font-black uppercase tracking-widest text-[#5c5c5c]">
+          From
+          <input
+            type="date"
+            value={props.fromDate}
+            max={props.toDate || undefined}
+            onInput={(event) => props.onFromChange(event.currentTarget.value)}
+            class="bg-transparent text-[0.6rem] font-bold uppercase tracking-wider text-[#0a0a0a] outline-none"
+          />
+        </label>
+        <label class="flex items-center gap-2 border-[3px] border-[#0a0a0a] px-2 py-1 text-[0.55rem] font-black uppercase tracking-widest text-[#5c5c5c]">
+          To
+          <input
+            type="date"
+            value={props.toDate}
+            min={props.fromDate || undefined}
+            onInput={(event) => props.onToChange(event.currentTarget.value)}
+            class="bg-transparent text-[0.6rem] font-bold uppercase tracking-wider text-[#0a0a0a] outline-none"
+          />
+        </label>
+      </Show>
+      <Show when={props.updating}>
+        <span class="text-[0.6rem] font-black uppercase tracking-widest text-[#5c5c5c]">
+          Updating_
+        </span>
+      </Show>
+    </div>
+  );
+}
+
 export default function ProfilePage() {
   const [tick, setTick] = createSignal(0);
   const [insightsTick, setInsightsTick] = createSignal(0);
   const [preview, setPreview] = createSignal<ListeningInsightsData | null>(null);
   const [refreshing, setRefreshing] = createSignal(false);
+  const timezone = browserTimezoneOffset();
+  const [range, setRange] = createSignal<InsightsRange>("all");
+  const [fromDate, setFromDate] = createSignal(
+    localDay(Date.now() - 29 * DAY_MS, timezone),
+  );
+  const [toDate, setToDate] = createSignal(localDay(Date.now(), timezone));
 
   const profile = createMemo(() => runSpotify(getProfile()));
   const stats = createMemo(() => {
@@ -299,7 +391,13 @@ export default function ProfilePage() {
   });
   const insights = createMemo(() => {
     insightsTick();
-    return fetchInsights();
+    const selected = range();
+    return fetchInsights({
+      tzOffset: timezone,
+      range: selected,
+      fromMs: selected === "custom" ? localDateStart(fromDate()) : null,
+      toMs: selected === "custom" ? localDateEnd(toDate()) : null,
+    });
   });
 
   const profileNow = () => {
@@ -325,9 +423,16 @@ export default function ProfilePage() {
   };
   const insightsNow = () => {
     try {
-      return isPending(insights) ? null : (latest(insights) ?? null);
+      return latest(insights) ?? null;
     } catch {
       return null;
+    }
+  };
+  const insightsPending = () => {
+    try {
+      return isPending(insights);
+    } catch {
+      return false;
     }
   };
   const readyInsights = () => {
@@ -339,6 +444,32 @@ export default function ProfilePage() {
   const reloadInsights = () => setInsightsTick((value) => value + 1);
   const showPreview = () => setPreview(createPreviewInsights());
   const exitPreview = () => setPreview(null);
+
+  const changeRange = (next: InsightsRange) => setRange(next);
+  const changeFromDate = (value: string) => {
+    setFromDate(value);
+    if (value && toDate() && value > toDate()) setToDate(value);
+  };
+  const changeToDate = (value: string) => {
+    setToDate(value);
+    if (value && fromDate() && value < fromDate()) setFromDate(value);
+  };
+  const rangeLabel = () => {
+    switch (range()) {
+      case "week":
+        return "Last 7 days";
+      case "month":
+        return "Last 30 days";
+      case "sixMonths":
+        return "Last 6 months";
+      case "custom":
+        return fromDate() && toDate()
+          ? `${formatDay(fromDate())} – ${formatDay(toDate())}`
+          : "Custom range";
+      default:
+        return "All time";
+    }
+  };
 
   createEffect(
     () => profileNow(),
@@ -478,6 +609,7 @@ export default function ProfilePage() {
                   <ListeningInsights
                     data={data()}
                     onReload={reloadInsights}
+                    rangeLabel="Sample data"
                     preview
                     onExitPreview={exitPreview}
                   />
@@ -502,7 +634,10 @@ export default function ProfilePage() {
                   >
                     {(data) => (
                       <Show
-                        when={data().totals.listens > 0}
+                        when={
+                          data().totals.listens > 0 ||
+                          ready().status.listenCount > 0
+                        }
                         fallback={
                           <InsightsGate
                             status={ready().status}
@@ -515,6 +650,18 @@ export default function ProfilePage() {
                         <ListeningInsights
                           data={data()}
                           onReload={reloadInsights}
+                          rangeLabel={rangeLabel()}
+                          controls={
+                            <InsightsRangeControl
+                              value={range()}
+                              fromDate={fromDate()}
+                              toDate={toDate()}
+                              updating={insightsPending()}
+                              onChange={changeRange}
+                              onFromChange={changeFromDate}
+                              onToChange={changeToDate}
+                            />
+                          }
                         />
                       </Show>
                     )}

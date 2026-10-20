@@ -3,6 +3,7 @@ import { Context, Effect, Layer } from "effect";
 import { SqlClient } from "effect/sql/SqlClient";
 
 import {
+  type InsightsQuery,
   type ListeningExport,
   type ListeningInsights,
   type TrackingStatus,
@@ -176,8 +177,8 @@ const make = Effect.gen(function* () {
       `.pipe(Effect.mapError(databaseError("Failed to disable tracking")));
     });
 
-  const insights = (spotifyUserId: string, tzOffset: number) =>
-    readInsights(sql, spotifyUserId, tzOffset);
+  const insights = (spotifyUserId: string, query: InsightsQuery) =>
+    readInsights(sql, spotifyUserId, query);
 
   const exportJson = (spotifyUserId: string) => readExport(sql, spotifyUserId);
 
@@ -409,7 +410,7 @@ export interface TrackingShape {
   readonly status: (spotifyUserId: string) => Effect.Effect<TrackingStatus, UpstreamError>;
   readonly insights: (
     spotifyUserId: string,
-    tzOffset: number,
+    query: InsightsQuery,
   ) => Effect.Effect<ListeningInsights, UpstreamError>;
   readonly exportJson: (
     spotifyUserId: string,

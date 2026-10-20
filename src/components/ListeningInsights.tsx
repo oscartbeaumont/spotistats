@@ -6,6 +6,7 @@ import { formatDate } from "~/lib/format";
 import {
   busiestIndex,
   formatDay,
+  formatDayShort,
   formatHour,
   formatListeningTime,
   formatMonth,
@@ -236,27 +237,35 @@ function InsightsContent(props: { data: ListeningInsightsData }) {
       <section class="grid gap-6 lg:grid-cols-2">
         <div class="border-4 border-[#0a0a0a] p-5 md:p-6">
           <div class="mb-1 flex items-baseline justify-between gap-4">
-            <h3 class="text-xl font-black uppercase tracking-tight">Last 12 months</h3>
+            <h3 class="text-xl font-black uppercase tracking-tight">
+              Listening over time
+            </h3>
             <span class="text-[0.65rem] font-black uppercase tracking-widest text-[#5c5c5c]">
-              Monthly
+              {props.data.trendUnit === "day" ? "Daily" : "Monthly"}
             </span>
           </div>
           <p class="mb-5 text-xs leading-6 text-[#5c5c5c]">
-            The shape of your year in plays. Bars are relative, so a quiet month
-            still reads at a glance.
+            {props.data.trendUnit === "day"
+              ? "Plays per day in this range. Quiet days stay visible so gaps are honest."
+              : "Plays per month in this range. Bars are relative, so a quiet month still reads at a glance."}
           </p>
           <Show
-            when={props.data.months.length > 0}
+            when={props.data.trend.length > 0}
             fallback={
               <p class="border-[3px] border-dashed border-[#0a0a0a] p-4 text-xs text-[#555]">
-                No monthly history yet.
+                No history in this range.
               </p>
             }
           >
             <BucketChart
-              label="Listens by month"
-              values={props.data.months.map((month) => month.listens)}
-              labels={(index) => formatMonth(props.data.months[index]?.month ?? "")}
+              label={`Listens by ${props.data.trendUnit}`}
+              values={props.data.trend.map((bucket) => bucket.listens)}
+              labels={(index) => {
+                const bucket = props.data.trend[index]?.bucket ?? "";
+                return props.data.trendUnit === "day"
+                  ? formatDayShort(bucket)
+                  : formatMonth(bucket);
+              }}
             />
           </Show>
         </div>
@@ -275,7 +284,7 @@ function InsightsContent(props: { data: ListeningInsightsData }) {
             when={props.data.topArtists.length > 0}
             fallback={
               <p class="border-[3px] border-dashed border-[#0a0a0a] p-4 text-xs text-[#555]">
-                No artists to rank yet.
+                No artists in this range.
               </p>
             }
           >
@@ -316,14 +325,14 @@ function InsightsContent(props: { data: ListeningInsightsData }) {
         </div>
         <p class="mb-5 text-xs leading-6 text-[#5c5c5c]">
           {topTrack()
-            ? `${topTrack()?.name} makes up ${repeatShare()}% of everything you play here.`
-            : "Your top tracks will appear after a sync."}
+            ? `${topTrack()?.name} makes up ${repeatShare()}% of plays in this range.`
+            : "No tracks in this range."}
         </p>
         <Show
           when={props.data.topTracks.length > 0}
           fallback={
             <p class="border-[3px] border-dashed border-[#0a0a0a] p-4 text-xs text-[#555]">
-              No track history yet. Enable listening stats and let the sync run.
+              No tracks in this range.
             </p>
           }
         >
@@ -368,7 +377,7 @@ function InsightsContent(props: { data: ListeningInsightsData }) {
         <StatCard
           label="Long tail"
           value={`${discoveryShare()}%`}
-          detail={`${props.data.onePlayTracks.toLocaleString()} tracks you have heard exactly once.`}
+          detail={`${props.data.onePlayTracks.toLocaleString()} tracks you heard exactly once in this range.`}
           delay={0}
         />
         <StatCard
@@ -376,7 +385,7 @@ function InsightsContent(props: { data: ListeningInsightsData }) {
           value={`${repeatShare()}%`}
           detail={
             topTrack()
-              ? `${topTrack()?.name} is your most repeated track.`
+              ? `${topTrack()?.name} is your most repeated track in this range.`
               : "No repeat champion yet."
           }
           delay={60}
@@ -413,6 +422,8 @@ function InsightsContent(props: { data: ListeningInsightsData }) {
 export function ListeningInsights(props: {
   data: ListeningInsightsData;
   onReload: () => void;
+  rangeLabel: string;
+  controls?: JSX.Element;
   preview?: boolean;
   onExitPreview?: () => void;
 }) {
@@ -457,11 +468,7 @@ export function ListeningInsights(props: {
           </div>
           <div>
             <div class="mb-2 text-xs uppercase tracking-[0.25em] text-[#5c5c5c]">
-              {props.preview
-                ? "A preview with sample data"
-                : props.data.totals.firstPlayedAtMs
-                  ? `Since ${formatDate(props.data.totals.firstPlayedAtMs)}`
-                  : "From your first sync"}
+              {props.preview ? "A preview with sample data" : props.rangeLabel}
             </div>
             <h2
               id="insights-heading"
@@ -491,6 +498,16 @@ export function ListeningInsights(props: {
           </Show>
         </div>
       </div>
+
+      <Show when={props.controls}>
+        <div>{props.controls}</div>
+      </Show>
+
+      <Show when={!props.preview && props.data.totals.listens === 0}>
+        <div class="border-[3px] border-dashed border-[#0a0a0a] p-4 text-xs leading-6 text-[#555]">
+          No listens in this range. Try a wider range or another date.
+        </div>
+      </Show>
 
       <InsightsContent data={props.data} />
     </section>

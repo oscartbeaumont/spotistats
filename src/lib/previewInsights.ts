@@ -19,12 +19,12 @@ const monthCounts = [180, 355, 240, 210, 330, 280, 415, 390, 460, 520, 480, 402]
 
 export function createPreviewInsights(now = Date.now()): ListeningInsights {
   const today = new Date(now);
-  const months = monthCounts.map((listens, index) => {
+  const trend = monthCounts.map((listens, index) => {
     const offset = index - (monthCounts.length - 1);
     const date = new Date(
       Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + offset, 1),
     );
-    return { month: monthKey(date), listens };
+    return { bucket: monthKey(date), listens };
   });
 
   const topTracks = [
@@ -91,7 +91,8 @@ export function createPreviewInsights(now = Date.now()): ListeningInsights {
       208, 258, 306, 342, 320, 279, 214, 138,
     ],
     weekdays: [520, 560, 610, 640, 790, 860, 832],
-    months,
+    trend,
+    trendUnit: "month",
     topTracks,
     topArtists: [
       { name: "Aurora Vale", listens: 412, tracks: 38 },

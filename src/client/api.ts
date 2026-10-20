@@ -4,6 +4,7 @@ import { HttpApiClient } from "effect/http-api";
 import { untrack } from "solid-js";
 
 import { Api } from "~/api";
+import type { InsightsQuery } from "~/api";
 
 import { SpotifyUnauthenticatedError } from "./spotify";
 import { authStore, setAuthStore } from "./storage";
@@ -52,11 +53,16 @@ const authorization = () => {
 
 export const accountApi = {
   status: () => runApi(client.account.status({ headers: { authorization: authorization() } })),
-  insights: (tzOffset: number) =>
+  insights: (query: InsightsQuery) =>
     runApi(
       client.account.insights({
         headers: { authorization: authorization() },
-        query: { tzOffset },
+        query: {
+          tzOffset: query.tzOffset,
+          range: query.range,
+          fromMs: query.fromMs ?? undefined,
+          toMs: query.toMs ?? undefined,
+        },
       }),
     ),
   exportJson: () =>

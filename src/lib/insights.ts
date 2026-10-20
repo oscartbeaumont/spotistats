@@ -142,3 +142,108 @@ export function formatDay(day: string) {
 export function browserTimezoneOffset() {
   return typeof Date === "undefined" ? 0 : new Date().getTimezoneOffset();
 }
+
+export const DAY_MS = 86_400_000;
+
+export const insightsRanges = [
+  "all",
+  "week",
+  "month",
+  "sixMonths",
+  "custom",
+] as const;
+export type InsightsRange = (typeof insightsRanges)[number];
+
+export interface StatsWindow {
+  readonly fromMs: number;
+  readonly toMs: number;
+}
+
+/** The first instant of the local day containing `ms`. */
+export function startOfLocalDay(ms: number, tzOffset: number) {
+  const offset = clampTimezoneOffset(tzOffset);
+  const local = ms - offset * 60_000;
+  return Math.floor(local / DAY_MS) * DAY_MS + offset * 60_000;
+}
+
+/**
+ * Turns a range choice into concrete UTC bounds. Presets start at local
+ * midnight so "last 7 days" is exactly seven local calendar days, and custom
+ * ranges are clamped to the past.
+ */
+export function resolveStatsWindow(
+  range: InsightsRange,
+  tzOffset: number,
+  fromMs: number | null = null,
+  toMs: number | null = null,
+  now = Date.now(),
+): StatsWindow {
+  const today = startOfLocalDay(now, tzOffset);
+  switch (range) {
+    case "week":
+      return { fromMs: today - 6 * DAY_MS, toMs: now };
+    case "month":
+      return { fromMs: today - 29 * DAY_MS, toMs: now };
+    case "sixMonths":
+      return { fromMs: today - 182 * DAY_MS, toMs: now };
+    case "custom": {
+      const rawFrom = fromMs ?? today - 29 * DAY_MS;
+      const rawTo = Math.min(toMs ?? now, now);
+      return rawFrom <= rawTo
+        ? { fromMs: Math.max(0, rawFrom), toMs: rawTo }
+        : { fromMs: Math.max(0, rawTo), toMs: Math.min(rawFrom, now) };
+    }
+    default:
+      return { fromMs: 0, toMs: now };
+  }
+}
+
+const dayKey = (day: number) =>
+  new Date(day * DAY_MS).toISOString().slice(0, 10);
+
+/** Every local day between two `YYYY-MM-DD` strings, inclusive. */
+export function dayKeysBetween(start: string, end: string) {
+  const first = dayNumber(start);
+  const last = dayNumber(end);
+  if (!Number.isFinite(first) || !Number.isFinite(last) || last < first) {
+    return [];
+  }
+  return Array.from(
+    { length: Math.min(last - first + 1, 366) },
+    (_, index) => dayKey(first + index),
+  );
+}
+
+/** Shifts a `YYYY-MM` key by a number of months. */
+export function shiftMonth(month: string, delta: number) {
+  const [year, value] = month.split("-").map(Number);
+  if (!year || !value) return month;
+  const index = year * 12 + (value - 1) + delta;
+  return `${Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, "0")}`;
+}
+
+/** Every month between two `YYYY-MM` strings, capped to the latest entries. */
+export function monthKeysBetween(start: string, end: string, max = 36) {
+  const [startYear, startMonth] = start.split("-").map(Number);
+  const [endYear, endMonth] = end.split("-").map(Number);
+  if (!startYear || !startMonth || !endYear || !endMonth) return [];
+  const startIndex = startYear * 12 + (startMonth - 1);
+  const endIndex = endYear * 12 + (endMonth - 1);
+  if (endIndex < startIndex) return [];
+  const first = Math.max(startIndex, endIndex - (max - 1));
+  return Array.from({ length: endIndex - first + 1 }, (_, index) => {
+    const value = first + index;
+    return `${Math.floor(value / 12)}-${String((value % 12) + 1).padStart(2, "0")}`;
+  });
+}
+
+/** Short day label for daily trend charts, e.g. `20 Oct`. */
+export function formatDayShort(day: string) {
+  const [year, month, date] = day.split("-").map(Number);
+  if (!year || !month || !date) return day;
+  return new Date(Date.UTC(year, month - 1, date)).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  });
+}

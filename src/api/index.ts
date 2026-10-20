@@ -58,6 +58,22 @@ const TopArtist = Schema.Struct({
   tracks: Schema.Number,
 });
 
+export const InsightsRange = Schema.Literals([
+  "all",
+  "week",
+  "month",
+  "sixMonths",
+  "custom",
+]);
+export type InsightsRange = typeof InsightsRange.Type;
+
+export interface InsightsQuery {
+  readonly tzOffset: number;
+  readonly range: InsightsRange;
+  readonly fromMs: number | null;
+  readonly toMs: number | null;
+}
+
 /**
  * Aggregates derived from the listens Spotistats collected itself. Spotify
  * only exposes a short recently-played window, so these are the numbers that
@@ -83,9 +99,11 @@ export const ListeningInsights = Schema.Struct({
   hours: Schema.Array(Schema.Number),
   /** Listens per local weekday, index 0 is Monday. */
   weekdays: Schema.Array(Schema.Number),
-  months: Schema.Array(
-    Schema.Struct({ month: Schema.String, listens: Schema.Number }),
+  /** Adaptive trend buckets: daily for short ranges, monthly for long ones. */
+  trend: Schema.Array(
+    Schema.Struct({ bucket: Schema.String, listens: Schema.Number }),
   ),
+  trendUnit: Schema.Literals(["day", "month"]),
   topTracks: Schema.Array(TopTrack),
   topArtists: Schema.Array(TopArtist),
   /** Tracks heard exactly once: your long tail. */
@@ -158,7 +176,12 @@ export const AccountGroup = HttpApiGroup.make("account").add(
   }),
   HttpApiEndpoint.get("insights", "/api/account/stats/insights", {
     headers: bearer,
-    query: { tzOffset: Schema.optional(Schema.NumberFromString) },
+    query: {
+      tzOffset: Schema.optional(Schema.NumberFromString),
+      range: Schema.optional(InsightsRange),
+      fromMs: Schema.optional(Schema.NumberFromString),
+      toMs: Schema.optional(Schema.NumberFromString),
+    },
     success: ListeningInsights,
     error: trackingErrors,
   }),

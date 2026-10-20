@@ -10,7 +10,8 @@ describe("createPreviewInsights", () => {
     expect(data.totals.listens).toBeGreaterThan(0);
     expect(data.hours).toHaveLength(24);
     expect(data.weekdays).toHaveLength(7);
-    expect(data.months).toHaveLength(12);
+    expect(data.trend).toHaveLength(12);
+    expect(data.trendUnit).toBe("month");
     expect(data.topTracks).toHaveLength(5);
     expect(data.topArtists).toHaveLength(5);
     expect(data.totals.activeDays).toBeLessThanOrEqual(365);
@@ -18,8 +19,8 @@ describe("createPreviewInsights", () => {
 
   it("ends its month series on the current month", () => {
     const data = createPreviewInsights(now);
-    expect(data.months.at(-1)?.month).toBe("2026-10");
-    expect(data.months[0]?.month).toBe("2025-11");
+    expect(data.trend.at(-1)?.bucket).toBe("2026-10");
+    expect(data.trend[0]?.bucket).toBe("2025-11");
   });
 
   it("ships self-contained cover art", () => {
