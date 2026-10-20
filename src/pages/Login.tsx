@@ -23,7 +23,7 @@ function SampleTeaser() {
   return (
     <div
       aria-hidden="true"
-      class="relative mx-auto w-full max-w-[700px] pt-8 xl:aspect-[700/640] xl:pt-0"
+      class="relative mx-auto w-full max-w-[700px] xl:aspect-[700/640]"
     >
       <div class="absolute inset-x-10 inset-y-6 hidden rotate-3 bg-[#1DB954] xl:block" />
       <div class="relative grid grid-cols-2 gap-3 xl:block xl:h-full">
@@ -106,10 +106,6 @@ function SampleTeaser() {
             </For>
           </div>
         </div>
-      </div>
-
-      <div class="absolute right-2 top-0 z-20 rotate-6 border-[3px] border-[#0a0a0a] bg-[#f0ede8] px-3 py-1.5 text-[0.6rem] font-black uppercase tracking-widest shadow-[4px_4px_0_#0a0a0a]">
-        Sample data
       </div>
     </div>
   );
@@ -231,11 +227,6 @@ export default function LoginPage() {
           </section>
         </div>
       </main>
-
-      <footer class="flex flex-wrap items-center justify-between gap-3 border-t-4 border-[#0a0a0a] px-5 py-4 text-[0.6rem] uppercase tracking-[0.2em] text-[#5c5c5c]">
-        <span>SPOTISTATS.OTBEAUMONT.ME</span>
-        <span>YOUR DATA. YOUR CALL.</span>
-      </footer>
     </div>
   );
 }
