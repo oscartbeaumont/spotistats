@@ -5,7 +5,6 @@ import {
   siteDescription,
   siteImage,
   siteImageAlt,
-  siteKeywords,
   siteName,
   siteUrl,
 } from "~/lib/seo";
@@ -32,7 +31,6 @@ export function Seo(props: {
     <>
       <Title>{props.title}</Title>
       <Meta name="description" content={description()} />
-      <Meta name="keywords" content={siteKeywords} />
       <Meta name="author" content="Oscar Beaumont" />
       <Meta name="robots" content={robots()} />
       <Link rel="canonical" href={canonical()} />

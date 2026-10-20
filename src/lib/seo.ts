@@ -7,9 +7,6 @@ export const siteDescription =
 export const siteImage = `${siteUrl}/assets/og.png`;
 export const siteImageAlt =
   "Spotistats — your Spotify listening stats, history and backup, decoded.";
-export const siteKeywords =
-  "Spotify stats, Spotify listening stats, Spotify listening history, Spotify backup, Spotify Wrapped alternative, export Spotify playlists, Spotify analytics, top artists, listening streak";
-
 export interface SiteFaq {
   readonly question: string;
   readonly answer: string;
