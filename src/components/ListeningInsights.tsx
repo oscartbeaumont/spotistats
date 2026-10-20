@@ -140,7 +140,7 @@ function InsightsContent(props: { data: ListeningInsightsData }) {
 
   return (
     <div class="space-y-10">
-      <section class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section class="grid gap-4 sm:grid-cols-2">
         <StatCard
           label="Listens tracked"
           value={<AnimatedNumber value={props.data.totals.listens} />}
@@ -364,7 +364,7 @@ function InsightsContent(props: { data: ListeningInsightsData }) {
         </Show>
       </section>
 
-      <section class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section class="grid gap-4 sm:grid-cols-2">
         <StatCard
           label="Long tail"
           value={`${discoveryShare()}%`}
