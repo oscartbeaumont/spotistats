@@ -400,23 +400,27 @@ export default function ProfilePage() {
     });
   });
 
+  // `latest` keeps the last settled value while a poll is in flight, so the
+  // 10-second refresh does not tear down and re-mount the dashboard (which can
+  // leave a `<Show>` child reading its narrowed accessor after it unmounts).
+  // It only throws before the first value arrives, which is the skeleton case.
   const profileNow = () => {
     try {
-      return isPending(profile) ? null : (latest(profile) ?? null);
+      return latest(profile) ?? null;
     } catch {
       return null;
     }
   };
   const statsNow = () => {
     try {
-      return isPending(stats) ? null : (latest(stats) ?? null);
+      return latest(stats) ?? null;
     } catch {
       return null;
     }
   };
   const playingNow = () => {
     try {
-      return isPending(currentlyPlaying) ? null : (latest(currentlyPlaying) ?? null);
+      return latest(currentlyPlaying) ?? null;
     } catch {
       return null;
     }
