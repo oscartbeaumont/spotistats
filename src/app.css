@@ -76,6 +76,19 @@ a {
   }
 }
 
+@keyframes content-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.content-fade-in {
+  animation: content-fade-in 0.3s ease-out both;
+}
+
 .insight-rise {
   animation: insight-rise 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }

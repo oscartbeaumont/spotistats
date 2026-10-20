@@ -3,6 +3,7 @@ import { createEffect, Errored, Loading, Show } from "solid-js";
 import type { JSX } from "@solidjs/web";
 
 import { AppError } from "~/components/AppError";
+import { ProfileSkeleton } from "~/components/ProfileSkeleton";
 import { hasSpotifyCallbackCode, logout } from "~/client/auth";
 import { authReady, authStore } from "~/client/storage";
 import LoginPage from "~/pages/Login";
@@ -21,6 +22,8 @@ export function RootLayout(props: {
 }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const loadingFallback = () =>
+    location.pathname === "/" ? <ProfileSkeleton /> : <LoadingScreen />;
 
   createEffect(
     () => ({
@@ -106,7 +109,7 @@ export function RootLayout(props: {
           </button>
         </header>
         <Errored fallback={(error, reset) => <AppError error={error()} reset={reset} />}>
-          <Loading fallback={<LoadingScreen />}>{props.children}</Loading>
+          <Loading fallback={loadingFallback()}>{props.children}</Loading>
         </Errored>
       </div>
     </Show>

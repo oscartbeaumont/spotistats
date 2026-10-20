@@ -5,17 +5,26 @@ import {
   createMemo,
   createSignal,
   For,
+  isPending,
   latest,
-  Loading,
   onSettled,
   Show,
 } from "solid-js";
 
 import { accountApi } from "~/client/api";
 import { identifyUser } from "~/client/analytics";
-import { getCurrentlyPlaying, getProfile, runSpotify } from "~/client/spotify";
+import {
+  getCurrentlyPlaying,
+  getProfile,
+  runSpotify,
+  SpotifyProfile,
+} from "~/client/spotify";
 import { setAuthStore } from "~/client/storage";
 import { ListeningInsights } from "~/components/ListeningInsights";
+import {
+  ProfileHeaderSkeleton,
+  StatsRailSkeleton,
+} from "~/components/ProfileSkeleton";
 import { errorMessage } from "~/lib/errors";
 import { formatDate } from "~/lib/format";
 import { browserTimezoneOffset } from "~/lib/insights";
@@ -26,6 +35,8 @@ import type {
   ListeningInsights as ListeningInsightsData,
   TrackingStatus,
 } from "~/api";
+
+type ProfileUser = typeof SpotifyProfile.Type;
 
 const fetchStatus = async (): Promise<TrackingStatus> => {
   try {
@@ -60,6 +71,465 @@ const fetchInsights = async (): Promise<InsightsState> => {
     return { data: null, error: errorMessage(error) };
   }
 };
+
+function ProfileHeader(props: { user: ProfileUser }) {
+  return (
+    <header class="content-fade-in order-1 border-b-4 border-[#0a0a0a] pb-6 xl:col-start-1 xl:row-start-1">
+      <div class="flex flex-wrap items-start gap-5">
+        <a
+          href={externalHref(props.user.external_urls.spotify)}
+          target="_blank"
+          rel="noopener"
+          class="shrink-0"
+        >
+          <img
+            src={props.user.images?.[0]?.url ?? "/assets/placeholder.svg"}
+            alt={props.user.display_name ?? "Profile"}
+            class="h-24 w-24 border-4 border-[#0a0a0a] object-cover md:h-28 md:w-28"
+          />
+        </a>
+        <div class="min-w-0 flex-1">
+          <div class="mb-1 text-[0.65rem] uppercase tracking-[0.25em] text-[#5c5c5c]">
+            Your profile
+          </div>
+          <h1 class="text-4xl font-black uppercase leading-none tracking-tighter md:text-5xl">
+            {props.user.display_name ?? props.user.id}
+          </h1>
+          <p class="mt-2 truncate text-xs uppercase tracking-widest text-[#666]">
+            {props.user.email}
+          </p>
+          <div class="mt-2 flex items-center gap-2">
+            <span class="text-sm font-bold">
+              {props.user.followers.total.toLocaleString()}
+            </span>
+            <span class="text-[0.65rem] uppercase tracking-widest text-[#666]">
+              followers
+            </span>
+          </div>
+        </div>
+        <div class="flex flex-wrap gap-2 md:ml-auto">
+          <a
+            href="/favourites/tracks"
+            class="border-[3px] border-[#0a0a0a] px-4 py-2 text-[0.65rem] font-black uppercase tracking-widest transition hover:bg-[#1DB954] hover:text-black"
+          >
+            Top Music →
+          </a>
+          <a
+            href={externalHref(props.user.external_urls.spotify)}
+            target="_blank"
+            rel="noopener"
+            class="border-[3px] border-[#0a0a0a] px-4 py-2 text-[0.65rem] font-black uppercase tracking-widest transition hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
+          >
+            Open Spotify ↗
+          </a>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function StatsRail(props: {
+  status: TrackingStatus;
+  refreshing: boolean;
+  onRefresh: () => void;
+}) {
+  return (
+    <div class="content-fade-in space-y-4 xl:sticky xl:top-24">
+      <section class="border-4 border-[#0a0a0a] p-5">
+        <div class="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <div class="text-xs uppercase tracking-[0.2em] text-[#5c5c5c]">
+              Recently Listened
+            </div>
+            <p class="mt-1 text-[0.6rem] uppercase tracking-widest text-[#666]">
+              {props.status.lastSuccessAt
+                ? `Synced ${formatDate(props.status.lastSuccessAt)}`
+                : "Spotify stats"}
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={props.refreshing || !props.status.enabled}
+            onClick={props.onRefresh}
+            class="shrink-0 border-[3px] border-[#0a0a0a] px-2 py-1.5 text-[0.6rem] font-black uppercase tracking-widest transition disabled:opacity-40 hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
+            title="Shortcut: R"
+          >
+            {props.refreshing ? "Queued_" : "Refresh (R)"}
+          </button>
+        </div>
+        <Show
+          when={props.status.enabled}
+          fallback={
+            <div class="border-[3px] border-dashed border-[#0a0a0a] p-4">
+              <p class="text-xs font-black uppercase tracking-tight">
+                Stats are off
+              </p>
+              <p class="mt-2 text-xs leading-6 text-[#555]">
+                Connect stats to keep recent plays here.
+              </p>
+              <a
+                href="/account"
+                class="mt-3 inline-block text-[0.65rem] font-black uppercase tracking-widest underline"
+              >
+                Connect stats →
+              </a>
+            </div>
+          }
+        >
+          <Show
+            when={props.status.recent.length > 0}
+            fallback={
+              <div class="border-[3px] border-dashed border-[#0a0a0a] p-4">
+                <p class="text-xs font-black uppercase tracking-tight">
+                  No listening data yet
+                </p>
+                <p class="mt-2 text-xs leading-6 text-[#555]">
+                  Use Refresh to queue a sync, then this list will update when
+                  Spotify returns recent plays.
+                </p>
+              </div>
+            }
+          >
+            <div>
+              <For each={props.status.recent}>
+                {(item) => (
+                  <a
+                    href={externalHref(item.externalUrl) ?? "#"}
+                    target="_blank"
+                    rel="noopener"
+                    class="flex items-center gap-3 border-b-[3px] border-[#0a0a0a] py-3 text-left transition last:border-b-0 hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
+                  >
+                    <img
+                      src={item.imageUrl ?? "/assets/placeholder.svg"}
+                      alt={item.name}
+                      class="h-9 w-9 shrink-0 border-2 border-[#0a0a0a] object-cover"
+                    />
+                    <div class="min-w-0 flex-1">
+                      <p class="truncate text-xs font-black uppercase tracking-tight">
+                        {item.name}
+                      </p>
+                      <p class="mt-0.5 truncate text-[0.65rem] text-[#5c5c5c]">
+                        {item.artistNames}
+                      </p>
+                      <p class="mt-0.5 text-[0.6rem] uppercase tracking-widest text-[#5c5c5c]">
+                        {formatDate(item.playedAt)}
+                      </p>
+                    </div>
+                  </a>
+                )}
+              </For>
+            </div>
+          </Show>
+        </Show>
+      </section>
+
+      <section class="border-4 border-[#0a0a0a] p-5">
+        <div class="mb-3 flex items-center justify-between gap-3">
+          <div class="text-xs uppercase tracking-[0.2em] text-[#5c5c5c]">
+            Stats Sync
+          </div>
+          <span
+            class={`border-[3px] border-[#0a0a0a] px-2 py-1 text-[0.6rem] font-black uppercase tracking-widest ${
+              props.status.enabled
+                ? "bg-[#1DB954] text-[#0a0a0a]"
+                : "bg-[#0a0a0a] text-[#f0ede8]"
+            }`}
+          >
+            {props.status.enabled ? "On" : "Off"}
+          </span>
+        </div>
+        <Show
+          when={props.status.enabled}
+          fallback={
+            <p class="text-xs leading-6 text-[#555]">
+              Turn on stats to keep a history Spotify does not expose.
+            </p>
+          }
+        >
+          <dl class="space-y-2 text-[0.6rem] uppercase tracking-widest text-[#666]">
+            <div class="flex items-baseline justify-between gap-2">
+              <dt>Last sync</dt>
+              <dd class="text-right font-bold text-[#0a0a0a]">
+                {formatDate(props.status.lastSuccessAt)}
+              </dd>
+            </div>
+            <div class="flex items-baseline justify-between gap-2">
+              <dt>Newest listen</dt>
+              <dd class="text-right font-bold text-[#0a0a0a]">
+                {formatDate(props.status.lastPlayedAtMs)}
+              </dd>
+            </div>
+            <div class="flex items-baseline justify-between gap-2">
+              <dt>Listens tracked</dt>
+              <dd class="text-right font-bold text-[#0a0a0a]">
+                {props.status.listenCount.toLocaleString()}
+              </dd>
+            </div>
+          </dl>
+        </Show>
+        <Show when={props.status.lastError}>
+          {(error) => (
+            <p class="mt-3 text-[0.65rem] leading-5 text-red-700">{error()}</p>
+          )}
+        </Show>
+        <a
+          href="/account"
+          class="mt-3 inline-block text-[0.65rem] font-black uppercase tracking-widest underline"
+        >
+          Manage stats →
+        </a>
+      </section>
+    </div>
+  );
+}
+
+export default function ProfilePage() {
+  const [tick, setTick] = createSignal(0);
+  const [insightsTick, setInsightsTick] = createSignal(0);
+  const [preview, setPreview] = createSignal<ListeningInsightsData | null>(null);
+  const [refreshing, setRefreshing] = createSignal(false);
+
+  const profile = createMemo(() => runSpotify(getProfile()));
+  const stats = createMemo(() => {
+    tick();
+    return fetchStatus();
+  });
+  const currentlyPlaying = createMemo(() => {
+    tick();
+    return runSpotify(getCurrentlyPlaying());
+  });
+  const insights = createMemo(() => {
+    insightsTick();
+    return fetchInsights();
+  });
+
+  const profileNow = () => {
+    try {
+      return isPending(profile) ? null : (latest(profile) ?? null);
+    } catch {
+      return null;
+    }
+  };
+  const statsNow = () => {
+    try {
+      return isPending(stats) ? null : (latest(stats) ?? null);
+    } catch {
+      return null;
+    }
+  };
+  const playingNow = () => {
+    try {
+      return isPending(currentlyPlaying) ? null : (latest(currentlyPlaying) ?? null);
+    } catch {
+      return null;
+    }
+  };
+  const insightsNow = () => {
+    try {
+      return isPending(insights) ? null : (latest(insights) ?? null);
+    } catch {
+      return null;
+    }
+  };
+  const readyInsights = () => {
+    const state = insightsNow();
+    const status = statsNow();
+    return state && status ? { state, status } : null;
+  };
+
+  const reloadInsights = () => setInsightsTick((value) => value + 1);
+  const showPreview = () => setPreview(createPreviewInsights());
+  const exitPreview = () => setPreview(null);
+
+  createEffect(
+    () => profileNow(),
+    (data) => {
+      if (!data) return;
+      const displayName = data.display_name ?? data.id;
+      identifyUser(data.id, {
+        username: displayName,
+        email: data.email,
+      });
+      setAuthStore((current) =>
+        current.status === "authenticated"
+          ? {
+              ...current,
+              profile: {
+                icon: data.images?.[0]?.url,
+                url:
+                  current.linkToUri && data.uri
+                    ? data.uri
+                    : data.external_urls.spotify,
+                displayName,
+                email: data.email,
+                followers: data.followers.total,
+              },
+            }
+          : current,
+      );
+    },
+  );
+
+  onSettled(() => {
+    const interval = setInterval(() => setTick((value) => value + 1), 10000);
+    return () => clearInterval(interval);
+  });
+
+  const queueRefresh = action(function* () {
+    yield accountApi.refresh();
+    setTick((value) => value + 1);
+    reloadInsights();
+  });
+  const refreshStats = async () => {
+    if (refreshing() || !statsNow()?.enabled) return;
+    setRefreshing(true);
+    try {
+      await queueRefresh();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  let lastListenCount: number | null = null;
+  createEffect(
+    () => statsNow()?.listenCount,
+    (count) => {
+      if (typeof count !== "number") return;
+      if (lastListenCount === null) {
+        lastListenCount = count;
+        return;
+      }
+      if (count !== lastListenCount) {
+        lastListenCount = count;
+        reloadInsights();
+      }
+    },
+  );
+
+  createShortcut(
+    ["r"],
+    (event) => {
+      if (isEditableShortcutTarget(event)) return;
+      void refreshStats();
+    },
+    { preventDefault: false },
+  );
+
+  return (
+    <main class="app-main flex-1 p-8 md:p-16">
+      <Title>Spotistats</Title>
+      <div class="space-y-8">
+        <Show when={playingNow()?.is_playing && playingNow()?.item}>
+          {(track) => (
+            <a
+              href={externalHref(track().external_urls.spotify)}
+              target="_blank"
+              rel="noopener"
+              class="content-fade-in group flex items-center gap-4 border-4 border-[#0a0a0a] bg-[#1DB954] p-4 text-[#0a0a0a] shadow-[8px_8px_0_#0a0a0a] transition hover:-translate-y-0.5 hover:shadow-[10px_10px_0_#0a0a0a]"
+            >
+              <img
+                src={
+                  track().album?.images?.[0]?.url ??
+                  track().images?.[0]?.url ??
+                  "/assets/placeholder.svg"
+                }
+                alt={track().name}
+                class="h-16 w-16 shrink-0 border-[3px] border-[#0a0a0a] object-cover"
+              />
+              <div class="min-w-0 flex-1">
+                <div class="mb-1 text-[0.65rem] font-black uppercase tracking-[0.25em]">
+                  Playing Now
+                </div>
+                <p class="truncate text-xl font-black uppercase tracking-tight md:text-2xl">
+                  {track().name}
+                </p>
+                <p class="truncate text-xs font-bold uppercase tracking-widest opacity-75">
+                  {track()
+                    .artists?.map((artist) => artist.name)
+                    .join(", ") ?? "Spotify"}
+                </p>
+              </div>
+              <span class="hidden shrink-0 border-[3px] border-[#0a0a0a] px-3 py-2 text-xs font-black uppercase tracking-widest transition group-hover:bg-[#0a0a0a] group-hover:text-[#1DB954] md:inline-block">
+                Open Spotify →
+              </span>
+            </a>
+          )}
+        </Show>
+
+        <div class="grid gap-8 xl:grid-cols-[minmax(0,1fr)_minmax(20rem,26rem)] xl:items-start">
+          <Show when={profileNow()} fallback={<ProfileHeaderSkeleton />}>
+            {(user) => <ProfileHeader user={user()} />}
+          </Show>
+
+          <aside class="order-2 xl:col-start-2 xl:row-span-2 xl:row-start-1">
+            <Show when={statsNow()} fallback={<StatsRailSkeleton />}>
+              {(status) => (
+                <StatsRail
+                  status={status()}
+                  refreshing={refreshing()}
+                  onRefresh={refreshStats}
+                />
+              )}
+            </Show>
+          </aside>
+
+          <div class="order-3 min-w-0 xl:col-start-1 xl:row-start-2">
+            <Show when={preview()}>
+              {(data) => (
+                <div class="content-fade-in">
+                  <ListeningInsights
+                    data={data()}
+                    onReload={reloadInsights}
+                    preview
+                    onExitPreview={exitPreview}
+                  />
+                </div>
+              )}
+            </Show>
+            <Show when={!preview() && readyInsights()}>
+              {(ready) => (
+                <div class="content-fade-in">
+                  <Show
+                    when={ready().state.data}
+                    fallback={
+                      <InsightsUnavailable
+                        message={
+                          ready().state.error ??
+                          "Insights could not be loaded. Try again."
+                        }
+                        onRetry={reloadInsights}
+                        onPreview={showPreview}
+                      />
+                    }
+                  >
+                    {(data) => (
+                      <Show
+                        when={data().totals.listens > 0}
+                        fallback={
+                          <InsightsGate
+                            status={ready().status}
+                            refreshing={refreshing()}
+                            onPreview={showPreview}
+                            onRefresh={refreshStats}
+                          />
+                        }
+                      >
+                        <ListeningInsights
+                          data={data()}
+                          onReload={reloadInsights}
+                        />
+                      </Show>
+                    )}
+                  </Show>
+                </div>
+              )}
+            </Show>
+          </div>
+        </div>
+      </div>
+    </main>
+  );
+}
 
 function InsightsGate(props: {
   status: TrackingStatus;
@@ -181,429 +651,5 @@ function InsightsUnavailable(props: {
         </button>
       </div>
     </section>
-  );
-}
-
-export default function ProfilePage() {
-  const [tick, setTick] = createSignal(0);
-  const [insightsTick, setInsightsTick] = createSignal(0);
-  const [preview, setPreview] = createSignal<ListeningInsightsData | null>(null);
-
-  const profile = createMemo(() => runSpotify(getProfile()));
-  const stats = createMemo(() => {
-    tick();
-    return fetchStatus();
-  });
-  const currentlyPlaying = createMemo(() => {
-    tick();
-    return runSpotify(getCurrentlyPlaying());
-  });
-  const insights = createMemo(() => {
-    insightsTick();
-    return fetchInsights();
-  });
-
-  const reloadInsights = () => setInsightsTick((value) => value + 1);
-  const showPreview = () => setPreview(createPreviewInsights());
-  const exitPreview = () => setPreview(null);
-
-  // Refresh the overview only when the stored listen count actually moves, so
-  // the 10-second "currently playing" poll does not rescan the whole history.
-  let lastListenCount: number | null = null;
-  createEffect(
-    () => stats().listenCount,
-    (count) => {
-      if (typeof count !== "number") return;
-      if (lastListenCount === null) {
-        lastListenCount = count;
-        return;
-      }
-      if (count !== lastListenCount) {
-        lastListenCount = count;
-        reloadInsights();
-      }
-    },
-  );
-
-  onSettled(() => {
-    const interval = setInterval(() => setTick((value) => value + 1), 10000);
-    return () => clearInterval(interval);
-  });
-
-  createEffect(
-    () => profile(),
-    (data) => {
-      if (!data) return;
-      const displayName = data.display_name ?? data.id;
-      identifyUser(data.id, {
-        username: displayName,
-        email: data.email,
-      });
-      setAuthStore((current) =>
-        current.status === "authenticated"
-          ? {
-              ...current,
-              profile: {
-                icon: data.images?.[0]?.url,
-                url:
-                  current.linkToUri && data.uri
-                    ? data.uri
-                    : data.external_urls.spotify,
-                displayName,
-                email: data.email,
-                followers: data.followers.total,
-              },
-            }
-          : current,
-      );
-    },
-  );
-
-  const [refreshing, setRefreshing] = createSignal(false);
-  const queueRefresh = action(function* () {
-    yield accountApi.refresh();
-    setTick((value) => value + 1);
-    reloadInsights();
-  });
-  const refreshStats = async () => {
-    if (refreshing() || !latest(stats)?.enabled) return;
-    setRefreshing(true);
-    try {
-      await queueRefresh();
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
-  createShortcut(
-    ["r"],
-    (event) => {
-      if (isEditableShortcutTarget(event)) return;
-      void refreshStats();
-    },
-    { preventDefault: false },
-  );
-
-  return (
-    <main class="app-main flex-1 p-8 md:p-16">
-      <Title>Spotistats</Title>
-      <Loading fallback={<p class="text-sm uppercase tracking-widest text-[#5c5c5c]">LOADING_</p>}>
-        <Show
-          when={profile()}
-          fallback={
-            <p class="text-sm uppercase tracking-widest text-[#5c5c5c]">LOADING_</p>
-          }
-        >
-          {(user) => (
-            <div class="space-y-8">
-              <Show
-                when={currentlyPlaying()?.is_playing && currentlyPlaying()?.item}
-              >
-                {(track) => (
-                  <a
-                    href={externalHref(track().external_urls.spotify)}
-                    target="_blank"
-                    rel="noopener"
-                    class="group flex items-center gap-4 border-4 border-[#0a0a0a] bg-[#1DB954] p-4 text-[#0a0a0a] shadow-[8px_8px_0_#0a0a0a] transition hover:-translate-y-0.5 hover:shadow-[10px_10px_0_#0a0a0a]"
-                  >
-                    <img
-                      src={
-                        track().album?.images?.[0]?.url ??
-                        track().images?.[0]?.url ??
-                        "/assets/placeholder.svg"
-                      }
-                      alt={track().name}
-                      class="h-16 w-16 shrink-0 border-[3px] border-[#0a0a0a] object-cover"
-                    />
-                    <div class="min-w-0 flex-1">
-                      <div class="mb-1 text-[0.65rem] font-black uppercase tracking-[0.25em]">
-                        Playing Now
-                      </div>
-                      <p class="truncate text-xl font-black uppercase tracking-tight md:text-2xl">
-                        {track().name}
-                      </p>
-                      <p class="truncate text-xs font-bold uppercase tracking-widest opacity-75">
-                        {track()
-                          .artists?.map((artist) => artist.name)
-                          .join(", ") ?? "Spotify"}
-                      </p>
-                    </div>
-                    <span class="hidden shrink-0 border-[3px] border-[#0a0a0a] px-3 py-2 text-xs font-black uppercase tracking-widest transition group-hover:bg-[#0a0a0a] group-hover:text-[#1DB954] md:inline-block">
-                      Open Spotify →
-                    </span>
-                  </a>
-                )}
-              </Show>
-              <div class="grid gap-8 xl:grid-cols-[minmax(0,1fr)_minmax(20rem,26rem)] xl:items-start">
-                <header class="order-1 border-b-4 border-[#0a0a0a] pb-6 xl:col-start-1 xl:row-start-1">
-                  <div class="flex flex-wrap items-start gap-5">
-                    <a
-                      href={externalHref(user().external_urls.spotify)}
-                      target="_blank"
-                      rel="noopener"
-                      class="shrink-0"
-                    >
-                      <img
-                        src={user().images?.[0]?.url ?? "/assets/placeholder.svg"}
-                        alt={user().display_name ?? "Profile"}
-                        class="h-24 w-24 border-4 border-[#0a0a0a] object-cover md:h-28 md:w-28"
-                      />
-                    </a>
-                    <div class="min-w-0 flex-1">
-                      <div class="mb-1 text-[0.65rem] uppercase tracking-[0.25em] text-[#5c5c5c]">
-                        Your profile
-                      </div>
-                      <h1 class="text-4xl font-black uppercase leading-none tracking-tighter md:text-5xl">
-                        {user().display_name ?? user().id}
-                      </h1>
-                      <p class="mt-2 truncate text-xs uppercase tracking-widest text-[#666]">
-                        {user().email}
-                      </p>
-                      <div class="mt-2 flex items-center gap-2">
-                        <span class="text-sm font-bold">
-                          {user().followers.total.toLocaleString()}
-                        </span>
-                        <span class="text-[0.65rem] uppercase tracking-widest text-[#666]">
-                          followers
-                        </span>
-                      </div>
-                    </div>
-                    <div class="flex flex-wrap gap-2 md:ml-auto">
-                      <a
-                        href="/favourites/tracks"
-                        class="border-[3px] border-[#0a0a0a] px-4 py-2 text-[0.65rem] font-black uppercase tracking-widest transition hover:bg-[#1DB954] hover:text-black"
-                      >
-                        Top Music →
-                      </a>
-                      <a
-                        href={externalHref(user().external_urls.spotify)}
-                        target="_blank"
-                        rel="noopener"
-                        class="border-[3px] border-[#0a0a0a] px-4 py-2 text-[0.65rem] font-black uppercase tracking-widest transition hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
-                      >
-                        Open Spotify ↗
-                      </a>
-                    </div>
-                  </div>
-                </header>
-
-                <aside class="order-2 xl:col-start-2 xl:row-span-2 xl:row-start-1">
-                  <div class="space-y-4 xl:sticky xl:top-24">
-                    <section class="border-4 border-[#0a0a0a] p-5">
-                      <div class="mb-4 flex items-start justify-between gap-3">
-                        <div>
-                          <div class="text-xs uppercase tracking-[0.2em] text-[#5c5c5c]">
-                            Recently Listened
-                          </div>
-                          <p class="mt-1 text-[0.6rem] uppercase tracking-widest text-[#666]">
-                            {stats().lastSuccessAt
-                              ? `Synced ${formatDate(stats().lastSuccessAt)}`
-                              : "Spotify stats"}
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          disabled={refreshing() || !stats().enabled}
-                          onClick={refreshStats}
-                          class="shrink-0 border-[3px] border-[#0a0a0a] px-2 py-1.5 text-[0.6rem] font-black uppercase tracking-widest transition disabled:opacity-40 hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
-                          title="Shortcut: R"
-                        >
-                          {refreshing() ? "Queued_" : "Refresh (R)"}
-                        </button>
-                      </div>
-                      <Show
-                        when={stats().enabled}
-                        fallback={
-                          <div class="border-[3px] border-dashed border-[#0a0a0a] p-4">
-                            <p class="text-xs font-black uppercase tracking-tight">
-                              Stats are off
-                            </p>
-                            <p class="mt-2 text-xs leading-6 text-[#555]">
-                              Connect stats to keep recent plays here.
-                            </p>
-                            <a
-                              href="/account"
-                              class="mt-3 inline-block text-[0.65rem] font-black uppercase tracking-widest underline"
-                            >
-                              Connect stats →
-                            </a>
-                          </div>
-                        }
-                      >
-                        <Show
-                          when={stats().recent.length > 0}
-                          fallback={
-                            <div class="border-[3px] border-dashed border-[#0a0a0a] p-4">
-                              <p class="text-xs font-black uppercase tracking-tight">
-                                No listening data yet
-                              </p>
-                              <p class="mt-2 text-xs leading-6 text-[#555]">
-                                Use Refresh to queue a sync, then this list will
-                                update when Spotify returns recent plays.
-                              </p>
-                            </div>
-                          }
-                        >
-                          <div>
-                            <For each={stats().recent}>
-                              {(item) => (
-                                <a
-                                  href={externalHref(item.externalUrl) ?? "#"}
-                                  target="_blank"
-                                  rel="noopener"
-                                  class="flex items-center gap-3 border-b-[3px] border-[#0a0a0a] py-3 text-left transition last:border-b-0 hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
-                                >
-                                  <img
-                                    src={item.imageUrl ?? "/assets/placeholder.svg"}
-                                    alt={item.name}
-                                    class="h-9 w-9 shrink-0 border-2 border-[#0a0a0a] object-cover"
-                                  />
-                                  <div class="min-w-0 flex-1">
-                                    <p class="truncate text-xs font-black uppercase tracking-tight">
-                                      {item.name}
-                                    </p>
-                                    <p class="mt-0.5 truncate text-[0.65rem] text-[#5c5c5c]">
-                                      {item.artistNames}
-                                    </p>
-                                    <p class="mt-0.5 text-[0.6rem] uppercase tracking-widest text-[#5c5c5c]">
-                                      {formatDate(item.playedAt)}
-                                    </p>
-                                  </div>
-                                </a>
-                              )}
-                            </For>
-                          </div>
-                        </Show>
-                      </Show>
-                    </section>
-
-                    <section class="border-4 border-[#0a0a0a] p-5">
-                      <div class="mb-3 flex items-center justify-between gap-3">
-                        <div class="text-xs uppercase tracking-[0.2em] text-[#5c5c5c]">
-                          Stats Sync
-                        </div>
-                        <span
-                          class={`border-[3px] border-[#0a0a0a] px-2 py-1 text-[0.6rem] font-black uppercase tracking-widest ${
-                            stats().enabled
-                              ? "bg-[#1DB954] text-[#0a0a0a]"
-                              : "bg-[#0a0a0a] text-[#f0ede8]"
-                          }`}
-                        >
-                          {stats().enabled ? "On" : "Off"}
-                        </span>
-                      </div>
-                      <Show
-                        when={stats().enabled}
-                        fallback={
-                          <p class="text-xs leading-6 text-[#555]">
-                            Turn on stats to keep a history Spotify does not
-                            expose.
-                          </p>
-                        }
-                      >
-                        <dl class="space-y-2 text-[0.6rem] uppercase tracking-widest text-[#666]">
-                          <div class="flex items-baseline justify-between gap-2">
-                            <dt>Last sync</dt>
-                            <dd class="text-right font-bold text-[#0a0a0a]">
-                              {formatDate(stats().lastSuccessAt)}
-                            </dd>
-                          </div>
-                          <div class="flex items-baseline justify-between gap-2">
-                            <dt>Newest listen</dt>
-                            <dd class="text-right font-bold text-[#0a0a0a]">
-                              {formatDate(stats().lastPlayedAtMs)}
-                            </dd>
-                          </div>
-                          <div class="flex items-baseline justify-between gap-2">
-                            <dt>Listens tracked</dt>
-                            <dd class="text-right font-bold text-[#0a0a0a]">
-                              {stats().listenCount.toLocaleString()}
-                            </dd>
-                          </div>
-                        </dl>
-                      </Show>
-                      <Show when={stats().lastError}>
-                        {(error) => (
-                          <p class="mt-3 text-[0.65rem] leading-5 text-red-700">
-                            {error()}
-                          </p>
-                        )}
-                      </Show>
-                      <a
-                        href="/account"
-                        class="mt-3 inline-block text-[0.65rem] font-black uppercase tracking-widest underline"
-                      >
-                        Manage stats →
-                      </a>
-                    </section>
-                  </div>
-                </aside>
-
-                <div class="order-3 min-w-0 xl:col-start-1 xl:row-start-2">
-                  <Loading
-                    fallback={
-                      <p class="text-sm uppercase tracking-widest text-[#5c5c5c]">
-                        LOADING INSIGHTS_
-                      </p>
-                    }
-                  >
-                    <Show
-                      when={preview()}
-                      fallback={
-                        <Show when={insights()}>
-                          {(state) => (
-                            <Show
-                              when={state().data}
-                              fallback={
-                                <InsightsUnavailable
-                                  message={
-                                    state().error ??
-                                    "Insights could not be loaded. Try again."
-                                  }
-                                  onRetry={reloadInsights}
-                                  onPreview={showPreview}
-                                />
-                              }
-                            >
-                              {(data) => (
-                                <Show
-                                  when={data().totals.listens > 0}
-                                  fallback={
-                                    <InsightsGate
-                                      status={stats()}
-                                      refreshing={refreshing()}
-                                      onPreview={showPreview}
-                                      onRefresh={refreshStats}
-                                    />
-                                  }
-                                >
-                                  <ListeningInsights
-                                    data={data()}
-                                    onReload={reloadInsights}
-                                  />
-                                </Show>
-                              )}
-                            </Show>
-                          )}
-                        </Show>
-                      }
-                    >
-                      {(data) => (
-                        <ListeningInsights
-                          data={data()}
-                          onReload={reloadInsights}
-                          preview
-                          onExitPreview={exitPreview}
-                        />
-                      )}
-                    </Show>
-                  </Loading>
-                </div>
-              </div>
-            </div>
-          )}
-        </Show>
-      </Loading>
-    </main>
   );
 }
