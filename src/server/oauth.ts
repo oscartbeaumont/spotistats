@@ -48,14 +48,18 @@ const originFromRequest = (request: Request) => {
 const redirectUri = (request: Request) =>
   `${originFromRequest(request)}/account/stats/callback`;
 
-const failed = (reason: string) =>
-  new Response(null, {
+const failed = (reason: string) => {
+  // The reason used to travel in the URL; keep it in the log instead so the
+  // account page can hand the failure straight to the error boundary.
+  console.warn(`Spotify stats setup failed: ${reason}`);
+  return new Response(null, {
     status: 302,
     headers: {
-      Location: `/account?stats=failed&reason=${encodeURIComponent(reason)}`,
+      Location: "/account?stats=failed",
       "Set-Cookie": clearCookie(stateCookie),
     },
   });
+};
 
 /** Keeps the server log readable: the raw Cause nests the error too deep. */
 const describeCause = (cause: unknown): string => {

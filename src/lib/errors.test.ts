@@ -1,16 +1,18 @@
 import { describe, expect, it } from "vitest";
 
-import { describeStatsReason } from "./errors";
+import { errorMessage } from "./errors";
 
-describe("describeStatsReason", () => {
-  it("maps known callback reasons to sentences", () => {
-    expect(describeStatsReason("spotify_denied")).toContain("cancelled");
-    expect(describeStatsReason("missing_state_cookie")).toContain("cookie");
-    expect(describeStatsReason("spotify_credentials")).toContain("client secret");
+describe("errorMessage", () => {
+  it("reads the message off an Error", () => {
+    expect(errorMessage(new Error("boom"))).toBe("boom");
   });
 
-  it("falls back for an unknown or missing reason", () => {
-    expect(describeStatsReason(null)).toBe("the Spotify sign-in did not complete");
-    expect(describeStatsReason("surprise")).toBe("unexpected error (surprise)");
+  it("falls back to a tagged error's tag", () => {
+    expect(errorMessage({ _tag: "UpstreamError" })).toBe("UpstreamError");
+  });
+
+  it("stringifies anything else", () => {
+    expect(errorMessage("plain")).toBe("plain");
+    expect(errorMessage(42)).toBe("42");
   });
 });
