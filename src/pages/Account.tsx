@@ -13,6 +13,7 @@ import {
 
 import { accountApi } from "~/client/api";
 import { capture } from "~/client/analytics";
+import { PageHeader } from "~/components/PageHeader";
 import { downloadTextFile } from "~/lib/download";
 import { describeStatsReason, errorMessage } from "~/lib/errors";
 import { formatDate } from "~/lib/format";
@@ -127,12 +128,7 @@ export default function AccountPage() {
 
   return (
     <main class="app-main p-8 md:p-12">
-      <div class="flex flex-wrap items-baseline gap-6 mb-8 border-b-4 border-[#0a0a0a] pb-4">
-        <h1 class="text-2xl font-black uppercase tracking-tight">Account</h1>
-        <span class="text-xs uppercase tracking-widest text-[#5c5c5c]">
-          Stats Sync
-        </span>
-      </div>
+      <PageHeader title="Account" eyebrow="Stats Sync" />
 
       <Show when={statsResult() === "enabled"}>
         <pre class="overflow-auto p-4 text-xs mb-6 border-4 border-[#0a0a0a] bg-[#1DB954] text-[#0a0a0a]">
