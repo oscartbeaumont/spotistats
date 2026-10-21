@@ -34,6 +34,7 @@ import {
 } from "~/lib/insights";
 import { createPreviewInsights } from "~/lib/previewInsights";
 import { createShortcut, isEditableShortcutTarget } from "~/lib/shortcut";
+import { reuseUnchanged } from "~/lib/stable";
 import { externalHref } from "~/lib/url";
 import type {
   InsightsQuery,
@@ -424,6 +425,21 @@ export default function ProfilePage() {
       return null;
     }
   };
+  // The dashboard polls every 10s and each poll parses fresh objects, so
+  // `<For>` would rebuild the recent list (and reload its covers) every time.
+  // Reuse the previous object for a row that has not changed.
+  let previousRecent: TrackingStatus["recent"] = [];
+  const stableStats = createMemo(() => {
+    const status = statsNow();
+    if (!status) return null;
+    const recent = reuseUnchanged(
+      previousRecent,
+      status.recent,
+      (item) => `${item.playedAtMs}:${item.name}`,
+    );
+    previousRecent = recent;
+    return { ...status, recent };
+  });
   const playingNow = () => {
     try {
       return latest(currentlyPlaying) ?? null;
@@ -611,7 +627,7 @@ export default function ProfilePage() {
           </Show>
 
           <aside class="order-2 xl:col-start-2 xl:row-span-2 xl:row-start-1">
-            <Show when={statsNow()} fallback={<StatsRailSkeleton />}>
+            <Show when={stableStats()} fallback={<StatsRailSkeleton />}>
               {(status) => (
                 <StatsRail
                   status={status()}
