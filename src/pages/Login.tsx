@@ -1,6 +1,7 @@
 import { useLocation, useNavigate } from "@solidjs/router";
 import { createEffect, createSignal, For, Show } from "solid-js";
 
+import { capture } from "~/client/analytics";
 import { createLoginUrl, loginError } from "~/client/auth";
 import { authReady, authStore } from "~/client/storage";
 import { SeoContent } from "~/components/SeoContent";
@@ -125,14 +126,16 @@ export default function LoginPage() {
     },
   );
 
-  const signIn = async () => {
+  const signIn = async (source: "login_page" | "seo_cta" = "login_page") => {
     if (signingIn()) return;
     setSigningIn(true);
+    capture("login_started", { source });
     try {
       localStorage.clear();
       window.location.href = await createLoginUrl(window.location.origin);
     } catch (error) {
       console.error("Could not start the Spotify login", error);
+      capture("login_failed", { reason: "start_failed" });
       setSigningIn(false);
     }
   };
@@ -232,7 +235,7 @@ export default function LoginPage() {
 
       <Show when={publicPage()}>
         <SeoContent
-          onConnect={() => void signIn()}
+          onConnect={() => void signIn("seo_cta")}
           signingIn={signingIn()}
         />
       </Show>

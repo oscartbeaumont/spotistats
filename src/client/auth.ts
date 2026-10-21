@@ -1,5 +1,6 @@
 import { createSignal, untrack } from "solid-js";
 
+import { capture, resetAnalytics } from "./analytics";
 import { authStore, setAuthStore, type AuthStore } from "./storage";
 import { spotifyClientId, spotifyScopes } from "./spotify";
 
@@ -93,6 +94,7 @@ export async function consumeSpotifyCallback(
   const cleanUrl = () => history.replaceState(null, "", window.location.pathname || "/");
 
   if (store.status !== "authenticating" || returnedState !== store.stateToken) {
+    capture("login_failed", { reason: "state_mismatch" });
     setLoginError("Your sign-in session expired. Please try again.");
     setAuthStore({ status: "empty" });
     cleanUrl();
@@ -116,6 +118,7 @@ export async function consumeSpotifyCallback(
     });
   } catch (error) {
     console.error("Spotify login network error:", error);
+    capture("login_failed", { reason: "network_error" });
     setLoginError("Could not reach Spotify. Check your connection and try again.");
     setAuthStore({ status: "empty" });
     cleanUrl();
@@ -127,6 +130,7 @@ export async function consumeSpotifyCallback(
       "Spotify login failed:",
       await response.json().catch(() => ({ status: response.status })),
     );
+    capture("login_failed", { reason: "rejected" });
     setLoginError("Spotify rejected the sign-in. Please try again.");
     setAuthStore({ status: "empty" });
     cleanUrl();
@@ -142,6 +146,7 @@ export async function consumeSpotifyCallback(
     token = value;
   } catch (error) {
     console.error("Spotify login response error:", error);
+    capture("login_failed", { reason: "invalid_response" });
     setLoginError("Spotify returned an unexpected sign-in response. Please try again.");
     setAuthStore({ status: "empty" });
     cleanUrl();
@@ -149,6 +154,7 @@ export async function consumeSpotifyCallback(
   }
 
   setLoginError(null);
+  capture("login_succeeded", {});
   setAuthStore({
     status: "authenticated",
     accessToken: `${token.token_type} ${token.access_token}`,
@@ -159,5 +165,7 @@ export async function consumeSpotifyCallback(
 }
 
 export function logout() {
+  capture("logout", {});
+  resetAnalytics();
   setAuthStore({ status: "empty" });
 }

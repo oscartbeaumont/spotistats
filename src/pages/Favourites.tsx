@@ -18,6 +18,7 @@ import {
   runSpotify,
   type SpotifyItem,
 } from "~/client/spotify";
+import { capture } from "~/client/analytics";
 import { authStore } from "~/client/storage";
 import { createShortcut, isEditableShortcutTarget } from "~/lib/shortcut";
 import { externalHref, spotifyUri } from "~/lib/url";
@@ -138,6 +139,13 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
     setRawSelected(0);
   };
 
+  const selectRange = (value: Range) => {
+    if (range() === value) return;
+    setRange(value);
+    resetPaging();
+    capture("favourites_range_changed", { range: value });
+  };
+
   const loadMore = async (offset: number) => {
     if (loadingMore() || !hasMore()) return;
     const requestGeneration = generation();
@@ -209,6 +217,10 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
     if (!item) return;
     const url = itemUrl(item);
     if (!url) return;
+    capture("spotify_item_opened", {
+      kind: item.type === "album" ? "album" : "track",
+      surface: "favourites",
+    });
     if (url.startsWith("spotify:")) window.location.href = url;
     else window.open(url, "_blank", "noopener");
   };
@@ -246,6 +258,9 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
   });
   createShortcut(["t"], (event) => {
     if (isEditableShortcutTarget(event)) return;
+    capture("favourites_kind_changed", {
+      kind: props.kind === "tracks" ? "albums" : "tracks",
+    });
     navigate(props.kind === "tracks" ? "/favourites/albums" : "/favourites/tracks");
     resetPaging();
   });
@@ -253,8 +268,7 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
     RANGES.forEach((value, index) => {
       createShortcut([String(index + 1)], (event) => {
         if (isEditableShortcutTarget(event)) return;
-        setRange(value);
-        resetPaging();
+        selectRange(value);
       });
     });
   }
@@ -269,6 +283,10 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
         </h1>
         <a
           href="/favourites/tracks"
+          onClick={() => {
+            if (props.kind !== "tracks")
+              capture("favourites_kind_changed", { kind: "tracks" });
+          }}
           class={`font-black text-xs uppercase px-4 py-2 tracking-wide transition border-[3px] border-[#0a0a0a] ${
             props.kind === "tracks" ? "bg-[#0a0a0a] text-[#f0ede8]" : "text-[#0a0a0a]"
           }`}
@@ -277,6 +295,10 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
         </a>
         <a
           href="/favourites/albums"
+          onClick={() => {
+            if (props.kind !== "albums")
+              capture("favourites_kind_changed", { kind: "albums" });
+          }}
           class={`font-black text-xs uppercase px-4 py-2 tracking-wide transition border-[3px] border-[#0a0a0a] ${
             props.kind === "albums" ? "bg-[#0a0a0a] text-[#f0ede8]" : "text-[#0a0a0a]"
           }`}
@@ -296,10 +318,7 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
           >
             {([optionRange, label], index) => (
               <button
-                onClick={() => {
-                  setRange(optionRange);
-                  resetPaging();
-                }}
+                onClick={() => selectRange(optionRange)}
                 class={`text-xs uppercase tracking-wide px-3 py-2 font-bold transition border-[3px] ${
                   range() === optionRange
                     ? "border-[#1DB954] bg-[#1DB954] text-black"

@@ -5,12 +5,14 @@ import {
   createMemo,
   createSignal,
   Loading,
+  onSettled,
   refresh,
   Show,
   untrack,
 } from "solid-js";
 
 import { accountApi } from "~/client/api";
+import { capture } from "~/client/analytics";
 import { downloadTextFile } from "~/lib/download";
 import { describeStatsReason, errorMessage } from "~/lib/errors";
 import { formatDate } from "~/lib/format";
@@ -25,6 +27,13 @@ export default function AccountPage() {
   const [statsResult] = createSignal(snapshot.get("stats"));
 
   const stats = createMemo(() => accountApi.status());
+
+  // The stats connect flow lands back here with its outcome in the query
+  // string. Report it once so the enable/fail funnel is visible.
+  onSettled(() => {
+    if (statsResult() === "enabled") capture("stats_sync_enabled", {});
+    else if (statsResult() === "failed") capture("stats_sync_failed", { reason: reason() });
+  });
 
   createEffect(
     () => location.search,
@@ -54,6 +63,7 @@ export default function AccountPage() {
     setActionError(null);
     try {
       await runDisable();
+      capture("stats_sync_disabled", {});
     } catch (error) {
       setActionError(errorMessage(error));
     } finally {
@@ -74,6 +84,7 @@ export default function AccountPage() {
     setActionError(null);
     try {
       await runDelete();
+      capture("account_data_deleted", {});
     } catch (error) {
       setActionError(errorMessage(error));
     } finally {
@@ -97,6 +108,7 @@ export default function AccountPage() {
         const csv = await accountApi.exportCsv();
         downloadTextFile("spotistats-listening-data.csv", csv);
       }
+      capture("listening_data_exported", { format });
     } catch (error) {
       setActionError(errorMessage(error));
     } finally {

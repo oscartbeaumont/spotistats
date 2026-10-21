@@ -2,6 +2,7 @@ import type { JSX } from "@solidjs/web";
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 
 import type { ListeningInsights as ListeningInsightsData } from "~/api";
+import { capture } from "~/client/analytics";
 import { formatDate } from "~/lib/format";
 import {
   busiestIndex,
@@ -342,6 +343,12 @@ function InsightsContent(props: { data: ListeningInsightsData }) {
                 href={externalHref(track.externalUrl) ?? "#"}
                 target="_blank"
                 rel="noopener"
+                onClick={() =>
+                  capture("spotify_item_opened", {
+                    kind: "track",
+                    surface: "insights",
+                  })
+                }
                 class="insight-rise flex items-center gap-4 border-b-[3px] border-[#0a0a0a] py-3 transition hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
                 style={`animation-delay:${index() * 60}ms`}
               >

@@ -4,6 +4,7 @@ import { createMemo, createSignal, For, isPending, latest, Loading, Show } from 
 import { downloadBlob, downloadTextFile, csvCell, safeFileName, playlistArchiveName } from "~/lib/download";
 import { errorMessage } from "~/lib/errors";
 import { createShortcut, isEditableShortcutTarget } from "~/lib/shortcut";
+import { capture } from "~/client/analytics";
 import { authStore } from "~/client/storage";
 import {
   getArtists,
@@ -42,6 +43,7 @@ export default function ExportPage() {
     totalProgress = 1,
   ) {
     let csv = csvHeader;
+    let trackCount = 0;
     const firstPage = await fetchPage(0);
     const pageCount = Math.ceil(firstPage.total / firstPage.limit);
     const progressIncrement = totalProgress / 3 / Math.max(pageCount, 1);
@@ -109,9 +111,10 @@ export default function ExportPage() {
           ]
             .map(csvCell)
             .join(",") + "\n";
+        trackCount += 1;
       }
     }
-    return csv;
+    return { csv, trackCount };
   }
 
   const fetchFor = (playlist: Playlist) =>
@@ -123,8 +126,12 @@ export default function ExportPage() {
     setProgress(0);
     setExportError(null);
     try {
-      const csv = await downloadPage(fetchFor(playlist));
+      const { csv, trackCount } = await downloadPage(fetchFor(playlist));
       downloadTextFile(`${safeFileName(playlist.name)}.csv`, csv);
+      capture("playlist_exported", {
+        kind: isLikedSongs(playlist) ? "liked_songs" : "playlist",
+        trackCount,
+      });
     } catch (error) {
       console.error("Spotify export failed", error);
       setExportError(errorMessage(error));
@@ -143,16 +150,19 @@ export default function ExportPage() {
     try {
       const zip = new JSZip();
       const totalProgress = 1 / Math.max(all.length, 1);
+      let playlistCount = 0;
       for (const playlist of all) {
         // The Liked Songs entry is synthesised client-side without an id, so
         // `fetchFor` reaches it via the liked-tracks endpoint; other id-less
         // entries are malformed and skipped.
         if (!isLikedSongs(playlist) && !playlist.id) continue;
         try {
+          const { csv } = await downloadPage(fetchFor(playlist), totalProgress);
           zip.file(
             playlistArchiveName(playlist.name, (name) => zip.file(name) !== null),
-            await downloadPage(fetchFor(playlist), totalProgress),
+            csv,
           );
+          playlistCount += 1;
         } catch (error) {
           console.error("Spotify export failed", error);
           setExportError(errorMessage(error));
@@ -164,6 +174,7 @@ export default function ExportPage() {
         JSON.stringify(store.status === "authenticated" ? store.profile : null),
       );
       downloadBlob("Music.zip", await zip.generateAsync({ type: "blob" }));
+      capture("library_backed_up", { playlistCount });
     } catch (error) {
       console.error("Spotify backup failed", error);
       setExportError(errorMessage(error));
