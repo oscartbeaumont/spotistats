@@ -1,6 +1,6 @@
 import { bindings, defineConfig, triggers } from "cf/config";
 
-export default defineConfig({
+export default defineConfig(({ isPreview }) => ({
   accountId: "f8b7c4b3e3ed4fb3d04a4264e21dd18e",
   worker: {
     name: "spotistats",
@@ -11,16 +11,21 @@ export default defineConfig({
       enabled: true,
     },
     domains: ["spotistats.otbeaumont.me"],
-    triggers: [
-      triggers.scheduled({
-        schedule: "*/15 * * * *",
-      }),
-      triggers.queue({
-        maxBatchSize: 10,
-        maxBatchTimeout: 30,
-        name: "spotistats",
-      }),
-    ],
+    // Worker Previews reject the `triggers` field, so the scheduled sync and the
+    // queue consumer exist only on the production Worker. A preview still gets
+    // the queue producer binding below, so uploads from it keep working.
+    triggers: isPreview
+      ? []
+      : [
+          triggers.scheduled({
+            schedule: "*/15 * * * *",
+          }),
+          triggers.queue({
+            maxBatchSize: 10,
+            maxBatchTimeout: 30,
+            name: "spotistats",
+          }),
+        ],
     env: {
       VITE_SPOTIFY_CLIENT_ID: bindings.text("1107a25b98c041bb90c9063553e5f1a8"),
       SPOTIFY_CLIENT_SECRET: bindings.secret(),
@@ -33,4 +38,4 @@ export default defineConfig({
       }),
     },
   },
-});
+}));
