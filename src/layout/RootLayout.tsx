@@ -42,12 +42,10 @@ export function RootLayout(props: {
       if (!ready) return;
       // A Spotify login callback owns the URL until it is consumed.
       if (typeof window !== "undefined" && hasSpotifyCallbackCode()) return;
-      // The policy pages and the sign-in screen are readable signed out.
-      if (
-        status !== "authenticated" &&
-        path !== "/login" &&
-        !isContentPath(path)
-      ) {
+      // Public routes (the sign-in screen and the policy pages) render signed
+      // out, so never bounce them to `/login`. This also stops opening `/`
+      // from flashing the sign-in screen and then redirecting to `/login`.
+      if (status !== "authenticated" && !isPublicPath(path)) {
         navigate("/login", { replace: true });
       }
     },
