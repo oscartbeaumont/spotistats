@@ -24,7 +24,14 @@ export function createPreviewInsights(now = Date.now()): ListeningInsights {
     const date = new Date(
       Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + offset, 1),
     );
-    return { bucket: monthKey(date), listens };
+    // Vary the average track length so the time line does not just mirror the
+    // play bars in the sample data.
+    const averageTrackMs = 168_000 + ((index * 41_000) % 96_000);
+    return {
+      bucket: monthKey(date),
+      listens,
+      listeningMs: listens * averageTrackMs,
+    };
   });
 
   const topTracks = [

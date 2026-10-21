@@ -67,6 +67,12 @@ interface BucketRow {
   listens: number;
 }
 
+interface TrendRow {
+  bucket: string;
+  listens: number;
+  listeningMs: number;
+}
+
 interface DayRow {
   day: string;
   listens: number;
@@ -197,21 +203,25 @@ export const readInsights = (
 
     const trendRows =
       trendUnit === "day"
-        ? yield* sql<BucketRow>`
+        ? yield* sql<TrendRow>`
             SELECT
               date(l.played_at_ms / 1000, 'unixepoch', ${modifier}) AS bucket,
-              COUNT(*) AS listens
+              COUNT(*) AS listens,
+              COALESCE(SUM(t.duration_ms), 0) AS listeningMs
             FROM spotify_listens l
+            INNER JOIN spotify_tracks t ON t.spotify_track_id = l.spotify_track_id
             WHERE l.spotify_user_id = ${spotifyUserId}
               AND l.played_at_ms >= ${fromMs}
               AND l.played_at_ms <= ${toMs}
             GROUP BY bucket
           `.pipe(Effect.mapError(databaseError("Failed to read daily listening")))
-        : yield* sql<BucketRow>`
+        : yield* sql<TrendRow>`
             SELECT
               strftime('%Y-%m', l.played_at_ms / 1000, 'unixepoch', ${modifier}) AS bucket,
-              COUNT(*) AS listens
+              COUNT(*) AS listens,
+              COALESCE(SUM(t.duration_ms), 0) AS listeningMs
             FROM spotify_listens l
+            INNER JOIN spotify_tracks t ON t.spotify_track_id = l.spotify_track_id
             WHERE l.spotify_user_id = ${spotifyUserId}
               AND l.played_at_ms >= ${fromMs}
               AND l.played_at_ms <= ${toMs}
@@ -259,10 +269,11 @@ export const readInsights = (
             endMonth,
             36,
           );
-    const trendCounts = new Map(trendRows.map((row) => [row.bucket, row.listens]));
+    const trendCounts = new Map(trendRows.map((row) => [row.bucket, row]));
     const trend = trendKeys.map((bucket) => ({
       bucket,
-      listens: trendCounts.get(bucket) ?? 0,
+      listens: trendCounts.get(bucket)?.listens ?? 0,
+      listeningMs: trendCounts.get(bucket)?.listeningMs ?? 0,
     }));
 
     return {
