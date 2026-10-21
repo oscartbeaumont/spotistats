@@ -23,6 +23,8 @@ const FavouritesAlbums = lazy(() =>
 );
 const ExportPage = lazy(() => import("./pages/Export"));
 const AccountPage = lazy(() => import("./pages/Account"));
+const PrivacyPage = lazy(() => import("./pages/Privacy"));
+const SecurityPage = lazy(() => import("./pages/Security"));
 const NotFoundPage = lazy(() => import("./pages/NotFound"));
 
 export const Router = createRouter({
@@ -32,6 +34,8 @@ export const Router = createRouter({
     { path: "/favourites/albums", component: FavouritesAlbums },
     { path: "/export", component: ExportPage },
     { path: "/account", component: AccountPage },
+    { path: "/privacy", component: PrivacyPage },
+    { path: "/security", component: SecurityPage },
     { path: "/login", component: LoginPage },
     { path: "*404", component: NotFoundPage },
   ],

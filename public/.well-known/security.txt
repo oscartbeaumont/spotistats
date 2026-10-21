@@ -1,0 +1,5 @@
+Contact: https://github.com/oscartbeaumont/spotistats/security/advisories/new
+Expires: 2027-10-22T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://spotistats.otbeaumont.me/.well-known/security.txt
+Policy: https://spotistats.otbeaumont.me/security
