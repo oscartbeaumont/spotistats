@@ -27,6 +27,25 @@ type Range = "long" | "medium" | "short";
 
 const RANGES: readonly Range[] = ["short", "medium", "long"];
 
+/** One page of a Spotify list, as far as paging cares. */
+interface Page {
+  items: readonly SpotifyItem[];
+  next: string | null;
+}
+
+/**
+ * The pages appended after the first, plus the first page they extend.
+ *
+ * Keying the tail on the first-page object means a new first page (a range
+ * change) drops the stale tail in the same flush, so the list never renders the
+ * new head with the old tail.
+ */
+interface Tail {
+  source: Page | null;
+  items: SpotifyItem[];
+  next: string | null;
+}
+
 const hasSaveData = () => {
   if (!("connection" in navigator)) return false;
   const connection = navigator.connection;
@@ -90,10 +109,8 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
   const [rawSelected, setRawSelected] = createSignal(0);
   const [atBottom, setAtBottom] = createSignal(false);
   const [saveData, setSaveData] = createSignal(false);
-  const [extra, setExtra] = createSignal<SpotifyItem[]>([]);
-  const [hasMore, setHasMore] = createSignal(true);
+  const [tail, setTail] = createSignal<Tail>({ source: null, items: [], next: null });
   const [loadingMore, setLoadingMore] = createSignal(false);
-  const [generation, setGeneration] = createSignal(0);
   let sentinel: HTMLDivElement | undefined;
   let observer: IntersectionObserver | undefined;
 
@@ -103,7 +120,7 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
       : runSpotify(getSavedAlbumsPage(offset));
 
   // The first page suspends, so `<Loading>` covers the initial load. Later
-  // pages append to `extra`, so a load never refetches the earlier pages.
+  // pages append to the tail, so a load never refetches the earlier pages.
   const firstPage = createMemo(async () => {
     if (props.kind === "albums" && saveData()) {
       return { items: [] as SpotifyItem[], next: null };
@@ -111,7 +128,27 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
     return fetchPage(0);
   });
 
-  const items = createMemo(() => [...firstPage().items, ...extra()]);
+  const items = createMemo(() => {
+    const page = firstPage();
+    const current = tail();
+    return [...page.items, ...(current.source === page ? current.items : [])];
+  });
+
+  /** Non-suspending first-page read, for handlers and effects. */
+  const firstPageNow = (): Page | null => {
+    try {
+      return isPending(firstPage) ? null : (latest(firstPage) ?? null);
+    } catch {
+      return null;
+    }
+  };
+
+  const hasMore = () => {
+    const page = firstPageNow();
+    if (!page) return true;
+    const current = tail();
+    return current.source === page ? current.next !== null : page.next !== null;
+  };
 
   /**
    * Non-suspending read for handlers, effects, and the scroll trigger.
@@ -134,8 +171,7 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
   );
 
   const resetPaging = () => {
-    setExtra([]);
-    setHasMore(true);
+    setTail({ source: null, items: [], next: null });
     setRawSelected(0);
   };
 
@@ -148,14 +184,17 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
 
   const loadMore = async (offset: number) => {
     if (loadingMore() || !hasMore()) return;
-    const requestGeneration = generation();
+    const source = firstPageNow();
+    if (!source) return;
     setLoadingMore(true);
     try {
       const page = await fetchPage(offset);
       // A range or kind change while this was in flight owns the list now.
-      if (generation() !== requestGeneration) return;
-      setExtra((previous) => [...previous, ...page.items]);
-      setHasMore(page.next !== null);
+      if (firstPageNow() !== source) return;
+      setTail((previous) => {
+        const base = previous.source === source ? previous.items : [];
+        return { source, items: [...base, ...page.items], next: page.next };
+      });
     } finally {
       setLoadingMore(false);
     }
@@ -173,36 +212,26 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
     return () => observer?.disconnect();
   });
 
-  // Run when the first page settles, so `latest` is safe to read.
-  createEffect(
-    () => (isPending(firstPage) ? undefined : latest(firstPage)),
-    (page) => {
-      if (!page) return;
-      setGeneration((value) => value + 1);
-      setHasMore(page.next !== null);
-      setExtra([]);
-    },
-  );
-
   // Load the next page when the sentinel is in view and the first page is
   // resolved. The offset is computed in the tracking scope so no `latest`
   // read happens in the effect callback.
   createEffect(
     () => {
       const pending = isPending(items);
+      // Track only the trigger and the offset. `loadMore` writes `loadingMore`
+      // and the tail, so reading either here would make this effect re-run from
+      // its own write; its guards live inside `loadMore` instead.
       return {
         pending,
         bottom: atBottom(),
-        more: hasMore(),
-        loading: loadingMore(),
         offset: pending ? 0 : (latest(items)?.length ?? 0),
       };
     },
-    ({ pending, bottom, more, loading, offset }) => {
-      // `loadMore` re-checks its guards and reads `range()` imperatively. Those
-      // are one-shot reads, so untrack them: reading them in the apply phase
-      // would (correctly) be reported as untracked.
-      if (!pending && bottom && more && !loading) untrack(() => loadMore(offset));
+    ({ pending, bottom, offset }) => {
+      // `loadMore` reads `range()` and the first page imperatively. Those are
+      // one-shot reads, so untrack them: reading them in the apply phase would
+      // (correctly) be reported as untracked.
+      if (!pending && bottom) untrack(() => loadMore(offset));
     },
   );
 
