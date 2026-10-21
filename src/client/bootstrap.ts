@@ -1,5 +1,6 @@
 import { initAnalytics } from "./analytics";
 import { consumeSpotifyCallback } from "./auth";
+import { installChunkRecovery } from "./chunkRecovery";
 import { hydrateAuthStore } from "./storage";
 
 /**
@@ -14,4 +15,15 @@ export function bootstrapClient(): void {
   const session = hydrateAuthStore();
   initAnalytics();
   void consumeSpotifyCallback(session);
+}
+
+// Register as early as possible: a lazy route chunk can fail during the first
+// render, before `bootstrapClient` runs. Guarded because this module is also
+// evaluated during the server render.
+if (typeof window !== "undefined") {
+  try {
+    installChunkRecovery(window, window.sessionStorage);
+  } catch {
+    // Blocked storage must not stop the app from booting.
+  }
 }
