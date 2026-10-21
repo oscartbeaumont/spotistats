@@ -3,6 +3,7 @@ import { createEffect, Errored, Loading, Show } from "solid-js";
 import type { JSX } from "@solidjs/web";
 
 import { AppError } from "~/components/AppError";
+import { ExportProgress } from "~/components/ExportProgress";
 import { ProfileSkeleton } from "~/components/ProfileSkeleton";
 import { Seo } from "~/components/Seo";
 import { hasSpotifyCallbackCode, logout } from "~/client/auth";
@@ -121,6 +122,7 @@ export function RootLayout(props: {
         <Errored fallback={(error, reset) => <AppError error={error()} reset={reset} />}>
           <Loading fallback={loadingFallback()}>{props.children}</Loading>
         </Errored>
+        <ExportProgress />
       </div>
     </Show>
     </>
