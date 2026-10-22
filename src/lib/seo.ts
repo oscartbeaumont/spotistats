@@ -63,6 +63,30 @@ const titleByPath = (path: string) => {
 export const titleForPath = (path: string) => titleByPath(path);
 
 /**
+ * The canonical URL for a path.
+ *
+ * Built from `siteUrl` rather than the current location, so it names the same
+ * host from either one. The legacy `spotistats.js.org` alias is proxied to this
+ * worker, which means the browser can be on a host the worker never sees; the
+ * canonical tag is what keeps search engines on the canonical one.
+ */
+export const canonicalUrl = (path: string, search = "") => `${siteUrl}${path}${search}`;
+
+/**
+ * Hosts that serve the app through a proxy to this worker.
+ *
+ * The browser sits on one of these while the worker answers as the canonical
+ * host, so `localStorage` there is a different store from the canonical one and
+ * everything the worker derives from `request.url` names the other host. Only
+ * these origins are handed over: the canonical host, local development and
+ * preview deploys are origins of their own and are left alone.
+ */
+const legacyOrigins = new Set(["https://spotistats.js.org"]);
+
+/** Whether the browser is on a legacy alias that should hand work over. */
+export const onLegacyOrigin = (origin: string) => legacyOrigins.has(origin);
+
+/**
  * Routes that are reachable without a Spotify session. `/` and `/login` are the
  * sign-in screen; `/privacy` and `/security` are the public policy pages.
  */

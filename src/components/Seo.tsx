@@ -1,12 +1,12 @@
 import { Link, Meta, Title } from "@solidjs/meta";
 
 import {
+  canonicalUrl,
   jsonLdFor,
   siteDescription,
   siteImage,
   siteImageAlt,
   siteName,
-  siteUrl,
 } from "~/lib/seo";
 
 /**
@@ -23,7 +23,7 @@ export function Seo(props: {
   faq?: boolean;
 }) {
   const description = () => props.description ?? siteDescription;
-  const canonical = () => `${siteUrl}${props.path}`;
+  const canonical = () => canonicalUrl(props.path);
   const robots = () =>
     props.publicPage
       ? "index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1"
