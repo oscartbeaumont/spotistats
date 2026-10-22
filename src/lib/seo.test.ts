@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   canonicalUrl,
+  handoverUrl,
   isContentPath,
   isPublicPath,
   onLegacyOrigin,
@@ -53,5 +54,18 @@ describe("canonical origin", () => {
     expect(onLegacyOrigin("http://localhost:5173")).toBe(false);
     expect(onLegacyOrigin("http://127.0.0.1:5173")).toBe(false);
     expect(onLegacyOrigin("https://spotistats-preview.workers.dev")).toBe(false);
+  });
+
+  it("hands a path to the canonical origin only from the alias", () => {
+    expect(handoverUrl("/account", "", "https://spotistats.js.org")).toBe(
+      "https://spotistats.otbeaumont.me/account",
+    );
+    expect(
+      handoverUrl("/account", "?stats=failed", "https://spotistats.js.org"),
+    ).toBe("https://spotistats.otbeaumont.me/account?stats=failed");
+    // Everything else keeps its own origin, so a local session is never
+    // abandoned for production.
+    expect(handoverUrl("/account", "", "https://spotistats.otbeaumont.me")).toBeNull();
+    expect(handoverUrl("/account", "", "http://localhost:5173")).toBeNull();
   });
 });

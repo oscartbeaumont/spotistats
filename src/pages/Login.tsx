@@ -5,7 +5,7 @@ import { capture } from "~/client/analytics";
 import { createLoginUrl, loginError } from "~/client/auth";
 import { authReady, authStore } from "~/client/storage";
 import { SeoContent } from "~/components/SeoContent";
-import { canonicalUrl, isPublicPath, onLegacyOrigin } from "~/lib/seo";
+import { handoverUrl, isPublicPath } from "~/lib/seo";
 
 const steps = [
   "Connect your Spotify account",
@@ -133,8 +133,9 @@ export default function LoginPage() {
     // the legacy alias would be stranded there, so hand the sign-in to the
     // canonical origin first: the hop is hidden inside the Spotify round trip,
     // so it costs the visitor nothing.
-    if (onLegacyOrigin(window.location.origin)) {
-      window.location.href = canonicalUrl("/login", "?start=1");
+    const handover = handoverUrl("/login", "?start=1", window.location.origin);
+    if (handover) {
+      window.location.href = handover;
       return;
     }
     setSigningIn(true);
