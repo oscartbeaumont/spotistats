@@ -1,32 +1,35 @@
 import JSZip from "jszip";
 import { createMemo, createSignal, For, isPending, latest, Loading, Show } from "solid-js";
 
-import { downloadBlob, downloadTextFile, csvCell, safeFileName, playlistArchiveName } from "~/lib/download";
+import {
+  downloadBlob,
+  playlistArchiveName,
+} from "~/lib/download";
 import { errorMessage } from "~/lib/errors";
 import { PageHeader } from "~/components/PageHeader";
+import { buildPlaylistCsv } from "~/lib/playlistExport";
 import { createShortcut, isEditableShortcutTarget } from "~/lib/shortcut";
 import { capture } from "~/client/analytics";
 import { authStore } from "~/client/storage";
 import {
-  getArtists,
-  getAudioFeatures,
-  getExportTracksPage,
+  exportJobId,
+  exportJobs,
+  startPlaylistExports,
+  type ExportJob,
+} from "~/client/exportStore";
+import {
   getPlaylists,
   isLikedSongs,
   runSpotify,
   type Playlist,
-  type PlaylistTrack,
-  type SpotifyPage,
 } from "~/client/spotify";
 
-const csvHeader =
-  "Spotify ID,Artist IDs,Track Name,Album Name,Artist Name(s),Release Date,Duration (ms),Popularity,Added By,Added At,Genres,Danceability,Energy,Key,Loudness,Mode,Speechiness,Acousticness,Instrumentalness,Liveness,Valence,Tempo,Time Signature\n";
-
 export default function ExportPage() {
-  const [progress, setProgress] = createSignal(0);
-  const [busy, setBusy] = createSignal(false);
+  const [backupProgress, setBackupProgress] = createSignal(0);
+  const [backingUp, setBackingUp] = createSignal(false);
   const [exportError, setExportError] = createSignal<string | null>(null);
-  const [selectedIndex, setSelectedIndex] = createSignal(0);
+  const [focusedIndex, setFocusedIndex] = createSignal(0);
+  const [selected, setSelected] = createSignal<ReadonlySet<string>>(new Set());
 
   const playlists = createMemo(() => runSpotify(getPlaylists()));
   const playlistItems = () => playlists();
@@ -39,126 +42,58 @@ export default function ExportPage() {
     }
   };
 
-  async function downloadPage(
-    fetchPage: (offset: number) => Promise<SpotifyPage<PlaylistTrack>>,
-    totalProgress = 1,
-  ) {
-    let csv = csvHeader;
-    let trackCount = 0;
-    const firstPage = await fetchPage(0);
-    const pageCount = Math.ceil(firstPage.total / firstPage.limit);
-    const progressIncrement = totalProgress / 3 / Math.max(pageCount, 1);
-    const pages = await Promise.all(
-      Array.from({ length: pageCount }, async (_, index) => {
-        const page =
-          index === 0 ? firstPage : await fetchPage(index * firstPage.limit);
-        setProgress((value) => value + progressIncrement);
-        const items = page.items.filter((item) => item.track && !item.track.is_local);
-        const ids = items
-          .map((item) => item.track?.id)
-          .filter((id): id is string => Boolean(id))
-          .join(",");
-        const audioFeatures = await runSpotify(getAudioFeatures(ids));
-        setProgress((value) => value + progressIncrement);
-        const artistIds = items
-          .map((item) => item.track?.artists[0]?.id)
-          .filter((id): id is string => Boolean(id));
-        const artistsOne = await runSpotify(getArtists(artistIds.slice(0, 50).join(",")));
-        const artistsTwo = await runSpotify(getArtists(artistIds.slice(50, 100).join(",")));
-        setProgress((value) => value + progressIncrement);
-        return {
-          items,
-          audioFeatures,
-          artists: [...artistsOne, ...artistsTwo],
-        };
-      }),
-    );
+  const jobFor = (playlist: Playlist): ExportJob | undefined =>
+    exportJobs().find((job) => job.id === exportJobId(playlist));
 
-    for (const page of pages) {
-      const artistById = new Map(page.artists.map((artist) => [artist.id, artist]));
-      for (const [index, item] of page.items.entries()) {
-        const track = item.track;
-        if (!track) continue;
-        const audio = page.audioFeatures[index];
-        const primaryArtistId = track.artists[0]?.id;
-        const artist = primaryArtistId
-          ? artistById.get(primaryArtistId)
-          : undefined;
-        csv +=
-          [
-            track.id,
-            track.artists.map((value) => value.id).join(","),
-            track.name,
-            track.album.name,
-            track.artists.map((value) => value.name).join(","),
-            track.album.release_date,
-            track.duration_ms,
-            track.popularity,
-            item.added_by?.id ?? "",
-            item.added_at,
-            artist?.genres.join(",") ?? "",
-            audio?.danceability,
-            audio?.energy,
-            audio?.key,
-            audio?.loudness,
-            audio?.mode,
-            audio?.speechiness,
-            audio?.acousticness,
-            audio?.instrumentalness,
-            audio?.liveness,
-            audio?.valence,
-            audio?.tempo,
-            audio?.time_signature,
-          ]
-            .map(csvCell)
-            .join(",") + "\n";
-        trackCount += 1;
-      }
-    }
-    return { csv, trackCount };
-  }
+  const isSelected = (playlist: Playlist) => selected().has(exportJobId(playlist));
 
-  const fetchFor = (playlist: Playlist) =>
-    (offset: number) => runSpotify(getExportTracksPage(playlist, offset));
+  const toggleSelected = (playlist: Playlist) => {
+    const id = exportJobId(playlist);
+    setSelected((current) => {
+      const next = new Set<string>(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
-  async function exportPlaylist(playlist: Playlist) {
-    if (busy()) return alert("Please wait for the current download to complete.");
-    setBusy(true);
-    setProgress(0);
+  const selectedPlaylists = () =>
+    loadedPlaylists().filter((playlist) => isSelected(playlist));
+
+  const exportSelected = () => {
+    const chosen = selectedPlaylists();
+    if (chosen.length === 0) return;
     setExportError(null);
-    try {
-      const { csv, trackCount } = await downloadPage(fetchFor(playlist));
-      downloadTextFile(`${safeFileName(playlist.name)}.csv`, csv);
-      capture("playlist_exported", {
-        kind: isLikedSongs(playlist) ? "liked_songs" : "playlist",
-        trackCount,
-      });
-    } catch (error) {
-      console.error("Spotify export failed", error);
-      setExportError(errorMessage(error));
-    } finally {
-      setBusy(false);
-      setProgress(0);
-    }
-  }
+    startPlaylistExports(chosen);
+    setSelected(new Set<string>());
+  };
+
+  const exportPlaylist = (playlist: Playlist) => {
+    setExportError(null);
+    startPlaylistExports([playlist]);
+  };
 
   async function backupAll() {
     const all = loadedPlaylists();
-    if (busy()) return alert("Please wait for the current download to complete.");
-    setBusy(true);
-    setProgress(0);
+    if (backingUp()) return;
+    setBackingUp(true);
+    setBackupProgress(0);
     setExportError(null);
     try {
       const zip = new JSZip();
-      const totalProgress = 1 / Math.max(all.length, 1);
+      const share = 1 / Math.max(all.length, 1);
+      let index = 0;
       let playlistCount = 0;
       for (const playlist of all) {
         // The Liked Songs entry is synthesised client-side without an id, so
-        // `fetchFor` reaches it via the liked-tracks endpoint; other id-less
-        // entries are malformed and skipped.
+        // `buildPlaylistCsv` reaches it via the liked-tracks endpoint; other
+        // id-less entries are malformed and skipped.
         if (!isLikedSongs(playlist) && !playlist.id) continue;
+        const base = index * share;
         try {
-          const { csv } = await downloadPage(fetchFor(playlist), totalProgress);
+          const { csv } = await buildPlaylistCsv(playlist, (fraction) =>
+            setBackupProgress(base + fraction * share),
+          );
           zip.file(
             playlistArchiveName(playlist.name, (name) => zip.file(name) !== null),
             csv,
@@ -168,6 +103,7 @@ export default function ExportPage() {
           console.error("Spotify export failed", error);
           setExportError(errorMessage(error));
         }
+        index += 1;
       }
       const store = authStore();
       zip.file(
@@ -180,17 +116,17 @@ export default function ExportPage() {
       console.error("Spotify backup failed", error);
       setExportError(errorMessage(error));
     } finally {
-      setBusy(false);
-      setProgress(0);
+      setBackingUp(false);
+      setBackupProgress(0);
     }
   }
 
-  function moveSelection(delta: number) {
+  function moveFocus(delta: number) {
     const next = Math.max(
       0,
-      Math.min(selectedIndex() + delta, loadedPlaylists().length - 1),
+      Math.min(focusedIndex() + delta, loadedPlaylists().length - 1),
     );
-    setSelectedIndex(next);
+    setFocusedIndex(next);
     document
       .getElementById(`playlist-${next}`)
       ?.scrollIntoView({ block: "nearest" });
@@ -198,28 +134,40 @@ export default function ExportPage() {
 
   createShortcut(["j"], (event) => {
     if (isEditableShortcutTarget(event)) return;
-    moveSelection(1);
+    moveFocus(1);
   });
   createShortcut(["k"], (event) => {
     if (isEditableShortcutTarget(event)) return;
-    moveSelection(-1);
+    moveFocus(-1);
   });
   createShortcut(["ArrowDown"], (event) => {
     if (isEditableShortcutTarget(event)) return;
-    moveSelection(1);
+    moveFocus(1);
   });
   createShortcut(["ArrowUp"], (event) => {
     if (isEditableShortcutTarget(event)) return;
-    moveSelection(-1);
+    moveFocus(-1);
   });
   createShortcut(["Enter"], (event) => {
     if (isEditableShortcutTarget(event)) return;
-    const selected = loadedPlaylists()[selectedIndex()];
-    if (selected) void exportPlaylist(selected);
+    const focused = loadedPlaylists()[focusedIndex()];
+    if (focused) exportPlaylist(focused);
+  });
+  createShortcut([" "], (event) => {
+    if (isEditableShortcutTarget(event)) return;
+    const focused = loadedPlaylists()[focusedIndex()];
+    if (focused) {
+      event.preventDefault();
+      toggleSelected(focused);
+    }
   });
   createShortcut(["b"], (event) => {
     if (isEditableShortcutTarget(event)) return;
     void backupAll();
+  });
+  createShortcut(["e"], (event) => {
+    if (isEditableShortcutTarget(event)) return;
+    exportSelected();
   });
 
   return (
@@ -227,27 +175,40 @@ export default function ExportPage() {
       <PageHeader
         title="Export Data"
         actions={
-          <button
-            onClick={backupAll}
-            class="font-black text-xs uppercase px-4 py-2 tracking-wide transition border-[3px] border-[#0a0a0a] hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
-          >
-            Backup All <span class="ml-2 text-[0.6rem] opacity-50">B</span> →
-          </button>
+          <>
+            <Show when={selectedPlaylists().length > 0}>
+              <button
+                onClick={exportSelected}
+                class="font-black text-xs uppercase px-4 py-2 tracking-wide transition border-[3px] border-[#0a0a0a] bg-[#1DB954] hover:bg-[#0a0a0a] hover:text-[#1DB954]"
+              >
+                Export selected ({selectedPlaylists().length})
+              </button>
+            </Show>
+            <button
+              onClick={backupAll}
+              disabled={backingUp()}
+              class="font-black text-xs uppercase px-4 py-2 tracking-wide transition border-[3px] border-[#0a0a0a] hover:bg-[#0a0a0a] hover:text-[#f0ede8] disabled:opacity-50"
+            >
+              Backup All <span class="ml-2 text-[0.6rem] opacity-50">B</span> →
+            </button>
+          </>
         }
         hints={
           <>
             <span>J/↓ Next</span>
             <span>K/↑ Previous</span>
             <span>Enter Export</span>
+            <span>Space Select</span>
+            <span>E Export Selected</span>
             <span>B Backup All</span>
           </>
         }
       />
-      <Show when={busy()}>
+      <Show when={backingUp()}>
         <progress
-          aria-label="Export progress"
+          aria-label="Backup progress"
           class="mb-6 h-4 w-full border-[3px] border-[#0a0a0a] accent-[#1DB954]"
-          value={progress()}
+          value={backupProgress()}
           max="1"
         />
       </Show>
@@ -260,46 +221,88 @@ export default function ExportPage() {
       </Show>
       <Loading fallback={<p class="text-sm uppercase tracking-widest text-[#5c5c5c]">LOADING_</p>}>
         <For each={playlistItems()}>
-          {(playlist, index) => (
-            <button
-              id={`playlist-${index()}`}
-              type="button"
-              onFocus={() => setSelectedIndex(index())}
-              onClick={() => void exportPlaylist(playlist)}
-              class={`w-full flex items-center gap-4 py-3 text-left transition outline-none border-b-[3px] border-[#0a0a0a] ${
-                selectedIndex() === index() ? "bg-[#0a0a0a] pl-2 text-[#f0ede8]" : ""
-              }`}
-            >
-              <img
-                src={playlist.images?.[0]?.url ?? "/assets/placeholder.svg"}
-                alt={playlist.name}
-                class="h-10 w-10 object-cover shrink-0 border-2 border-[#0a0a0a]"
-              />
-              <div class="min-w-0 flex-1">
-                <p class="text-sm font-black uppercase tracking-tight truncate">
-                  {playlist.name}
-                </p>
-                <p class="text-xs truncate mt-0.5 text-[#5c5c5c]">
-                  {playlist.owner?.display_name}
-                </p>
-              </div>
-              <div class="flex gap-2 shrink-0">
-                {playlist.collaborative && (
-                  <span class="text-xs uppercase tracking-widest font-bold text-[#5c5c5c]">
-                    Collab
+          {(playlist, index) => {
+            const job = () => jobFor(playlist);
+            return (
+              <div
+                id={`playlist-${index()}`}
+                class={`flex w-full items-center gap-4 border-b-[3px] border-[#0a0a0a] py-3 transition ${
+                  focusedIndex() === index() ? "bg-[#0a0a0a] pl-2 text-[#f0ede8]" : ""
+                }`}
+              >
+                <button
+                  type="button"
+                  role="checkbox"
+                  aria-checked={isSelected(playlist) ? "true" : "false"}
+                  aria-label={`Select ${playlist.name}`}
+                  onClick={() => toggleSelected(playlist)}
+                  class={`h-6 w-6 shrink-0 border-[3px] border-current text-center text-xs font-black leading-none ${
+                    isSelected(playlist) ? "bg-[#1DB954] text-[#0a0a0a]" : ""
+                  }`}
+                >
+                  {isSelected(playlist) ? "✓" : ""}
+                </button>
+                <button
+                  type="button"
+                  onFocus={() => setFocusedIndex(index())}
+                  onClick={() => exportPlaylist(playlist)}
+                  class="flex min-w-0 flex-1 items-center gap-4 text-left outline-none"
+                >
+                  <img
+                    src={playlist.images?.[0]?.url ?? "/assets/placeholder.svg"}
+                    alt={playlist.name}
+                    class="h-10 w-10 shrink-0 border-2 border-[#0a0a0a] object-cover"
+                  />
+                  <div class="min-w-0 flex-1">
+                    <p class="truncate text-sm font-black uppercase tracking-tight">
+                      {playlist.name}
+                    </p>
+                    <p class="mt-0.5 truncate text-xs text-[#5c5c5c]">
+                      {playlist.owner?.display_name}
+                    </p>
+                    <Show when={job()}>
+                      {(value) => (
+                        <div class="mt-2">
+                          <div class="h-2 w-full border-[2px] border-current">
+                            <div
+                              class={`h-full origin-left ${
+                                value().status === "error" ? "bg-red-600" : "bg-[#1DB954]"
+                              }`}
+                              style={`width:${Math.round(value().progress * 100)}%`}
+                            />
+                          </div>
+                          <p class="mt-1 text-[0.6rem] uppercase tracking-widest">
+                            {value().status === "queued"
+                              ? "Queued_"
+                              : value().status === "running"
+                                ? `Exporting ${Math.round(value().progress * 100)}%`
+                                : value().status === "done"
+                                  ? "Downloaded"
+                                  : `Failed: ${value().error ?? "unknown error"}`}
+                          </p>
+                        </div>
+                      )}
+                    </Show>
+                  </div>
+                </button>
+                <div class="flex shrink-0 gap-2">
+                  {playlist.collaborative && (
+                    <span class="text-xs uppercase tracking-widest font-bold text-[#5c5c5c]">
+                      Collab
+                    </span>
+                  )}
+                  {!playlist.public && !playlist.collaborative && (
+                    <span class="text-xs uppercase tracking-widest font-bold text-[#5c5c5c]">
+                      Private
+                    </span>
+                  )}
+                  <span class="text-xs uppercase tracking-widest font-bold text-[#1DB954]">
+                    ↓ CSV
                   </span>
-                )}
-                {!playlist.public && !playlist.collaborative && (
-                  <span class="text-xs uppercase tracking-widest font-bold text-[#5c5c5c]">
-                    Private
-                  </span>
-                )}
-                <span class="text-xs uppercase tracking-widest font-bold text-[#1DB954]">
-                  ↓ CSV
-                </span>
+                </div>
               </div>
-            </button>
-          )}
+            );
+          }}
         </For>
       </Loading>
     </main>

@@ -3,11 +3,12 @@ import { createEffect, Errored, Loading, Show } from "solid-js";
 import type { JSX } from "@solidjs/web";
 
 import { AppError } from "~/components/AppError";
+import { ExportProgress } from "~/components/ExportProgress";
 import { ProfileSkeleton } from "~/components/ProfileSkeleton";
 import { Seo } from "~/components/Seo";
 import { hasSpotifyCallbackCode, logout } from "~/client/auth";
 import { authReady, authStore } from "~/client/storage";
-import { isPublicPath, titleForPath } from "~/lib/seo";
+import { isContentPath, isPublicPath, titleForPath } from "~/lib/seo";
 import LoginPage from "~/pages/Login";
 import { createShortcut, isEditableShortcutTarget } from "~/lib/shortcut";
 
@@ -25,7 +26,9 @@ export function RootLayout(props: {
   const location = useLocation();
   const navigate = useNavigate();
   const publicPage = () => isPublicPath(location.pathname);
-  const canonicalPath = () => (publicPage() ? "/" : location.pathname);
+  const contentPage = () => isContentPath(location.pathname);
+  const canonicalPath = () =>
+    location.pathname === "/login" ? "/" : location.pathname;
   const loadingFallback = () =>
     location.pathname === "/" ? <ProfileSkeleton /> : <LoadingScreen />;
 
@@ -40,7 +43,10 @@ export function RootLayout(props: {
       if (!ready) return;
       // A Spotify login callback owns the URL until it is consumed.
       if (typeof window !== "undefined" && hasSpotifyCallbackCode()) return;
-      if (status !== "authenticated" && path !== "/login") {
+      // Public routes (the sign-in screen and the policy pages) render signed
+      // out, so never bounce them to `/login`. This also stops opening `/`
+      // from flashing the sign-in screen and then redirecting to `/login`.
+      if (status !== "authenticated" && !isPublicPath(path)) {
         navigate("/login", { replace: true });
       }
     },
@@ -84,10 +90,15 @@ export function RootLayout(props: {
         title={titleForPath(location.pathname)}
         path={canonicalPath()}
         publicPage={publicPage()}
+        faq={!contentPage()}
       />
       <Show
       when={authStore().status === "authenticated"}
-      fallback={<LoginPage />}
+      fallback={
+        <Show when={contentPage()} fallback={<LoginPage />}>
+          {props.children}
+        </Show>
+      }
     >
       <div>
         <header class="relative z-50 flex flex-wrap items-center justify-between gap-2 border-b-4 border-[#0a0a0a] bg-[#f0ede8] p-4 sm:fixed sm:left-0 sm:right-0 sm:top-0 sm:flex-nowrap sm:gap-4 sm:p-5">
@@ -121,6 +132,7 @@ export function RootLayout(props: {
         <Errored fallback={(error, reset) => <AppError error={error()} reset={reset} />}>
           <Loading fallback={loadingFallback()}>{props.children}</Loading>
         </Errored>
+        <ExportProgress />
       </div>
     </Show>
     </>

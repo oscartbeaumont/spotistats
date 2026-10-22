@@ -120,6 +120,80 @@ function BucketChart(props: {
   );
 }
 
+/**
+ * Two series over the same buckets: plays as bars and listening time as a
+ * line. They answer different questions, so a month with more plays but a
+ * shorter bar-line gap is a month of shorter tracks, not of less listening.
+ */
+function TimeVsPlaysChart(props: {
+  label: string;
+  buckets: ReadonlyArray<{ listens: number; listeningMs: number }>;
+  labels: (index: number) => string;
+}) {
+  const maxListens = () => Math.max(1, ...props.buckets.map((bucket) => bucket.listens));
+  const maxMs = () => Math.max(1, ...props.buckets.map((bucket) => bucket.listeningMs));
+  const lastIndex = () => Math.max(1, props.buckets.length - 1);
+  const xPercent = (index: number) =>
+    props.buckets.length === 1 ? 50 : (index / lastIndex()) * 100;
+  const yPercent = (listeningMs: number) => 100 - (listeningMs / maxMs()) * 100;
+  const points = () =>
+    props.buckets
+      .map((bucket, index) => `${xPercent(index)},${yPercent(bucket.listeningMs)}`)
+      .join(" ");
+
+  return (
+    <figure aria-label={props.label}>
+      <div class="relative h-40 border-b-4 border-[#0a0a0a]">
+        <div class="flex h-full items-end gap-[3px]">
+          <For each={props.buckets}>
+            {(bucket, index) => (
+              <div
+                class="relative flex-1"
+                style={`height:${Math.max(2, (bucket.listens / maxListens()) * 100)}%`}
+                title={`${props.labels(index())}: ${bucket.listens.toLocaleString()} plays, ${formatListeningTime(bucket.listeningMs)}`}
+                aria-hidden="true"
+              >
+                <div
+                  class="insight-bar h-full w-full origin-bottom bg-[#0a0a0a]"
+                  style={`animation-delay:${index() * 24}ms`}
+                />
+              </div>
+            )}
+          </For>
+        </div>
+        <svg
+          class="pointer-events-none absolute inset-0 h-full w-full"
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
+          <polyline
+            points={points()}
+            fill="none"
+            stroke="#1DB954"
+            stroke-width="2"
+            vector-effect="non-scaling-stroke"
+          />
+        </svg>
+        <For each={props.buckets}>
+          {(bucket, index) => (
+            <span
+              class="pointer-events-none absolute h-2 w-2 -translate-x-1/2 -translate-y-1/2 border border-[#0a0a0a] bg-[#1DB954]"
+              style={`left:${xPercent(index())}%;top:${yPercent(bucket.listeningMs)}%`}
+              aria-hidden="true"
+            />
+          )}
+        </For>
+      </div>
+      <div class="mt-2 flex justify-between text-[0.6rem] font-black uppercase tracking-widest text-[#5c5c5c]">
+        <span>{props.labels(0)}</span>
+        <span>{props.labels(Math.floor(props.buckets.length / 2))}</span>
+        <span>{props.labels(props.buckets.length - 1)}</span>
+      </div>
+    </figure>
+  );
+}
+
 function InsightsContent(props: { data: ListeningInsightsData }) {
   const busiestHour = () => busiestIndex(props.data.hours);
   const busiestWeekday = () => busiestIndex(props.data.weekdays);
@@ -139,6 +213,13 @@ function InsightsContent(props: { data: ListeningInsightsData }) {
     props.data.totals.activeDays === 0
       ? 0
       : Math.round(props.data.totals.listens / props.data.totals.activeDays);
+  const trendUnitLabel = () => (props.data.trendUnit === "day" ? "day" : "month");
+  const averageTrackTime = () =>
+    props.data.totals.listens === 0
+      ? "—"
+      : formatListeningTime(
+          props.data.totals.listeningMs / props.data.totals.listens,
+        );
 
   return (
     <div class="space-y-10">
@@ -233,6 +314,49 @@ function InsightsContent(props: { data: ListeningInsightsData }) {
             </p>
           </div>
         </div>
+      </section>
+
+      <section class="border-4 border-[#0a0a0a] p-5 md:p-8">
+        <div class="mb-1 flex flex-wrap items-baseline justify-between gap-4">
+          <h3 class="text-xl font-black uppercase tracking-tight">
+            Time vs plays
+          </h3>
+          <span class="flex items-center gap-4 text-[0.6rem] font-black uppercase tracking-widest text-[#5c5c5c]">
+            <span class="flex items-center gap-2">
+              <span class="inline-block h-3 w-3 border-[2px] border-[#0a0a0a] bg-[#0a0a0a]" />
+              Plays
+            </span>
+            <span class="flex items-center gap-2">
+              <span class="inline-block h-[3px] w-5 bg-[#1DB954]" />
+              Hours
+            </span>
+          </span>
+        </div>
+        <p class="mb-5 max-w-2xl text-xs leading-6 text-[#5c5c5c]">
+          Plays per {trendUnitLabel()} as bars, listening time as the green
+          line. They usually rise and fall together; when they drift apart, your{" "}
+          {trendUnitLabel()}s got shorter or longer tracks. You average{" "}
+          <strong class="text-[#0a0a0a]">{averageTrackTime()}</strong> a track.
+        </p>
+        <Show
+          when={props.data.trend.length > 0}
+          fallback={
+            <p class="border-[3px] border-dashed border-[#0a0a0a] p-4 text-xs text-[#555]">
+              No history in this range.
+            </p>
+          }
+        >
+          <TimeVsPlaysChart
+            label={`Plays and listening time by ${props.data.trendUnit}`}
+            buckets={props.data.trend}
+            labels={(index) => {
+              const bucket = props.data.trend[index]?.bucket ?? "";
+              return props.data.trendUnit === "day"
+                ? formatDayShort(bucket)
+                : formatMonth(bucket);
+            }}
+          />
+        </Show>
       </section>
 
       <section class="grid gap-6 lg:grid-cols-2">
@@ -479,9 +603,12 @@ export function ListeningInsights(props: {
             </div>
             <h2
               id="insights-heading"
-              class="text-3xl font-black uppercase leading-none tracking-tighter md:text-5xl"
+              class="flex flex-wrap items-center gap-3 text-3xl font-black uppercase leading-none tracking-tighter md:text-5xl"
             >
               Listening Insights
+              <span class="border-[3px] border-[#0a0a0a] bg-[#1DB954] px-2 py-1 text-[0.6rem] font-black uppercase tracking-widest">
+                Beta
+              </span>
             </h2>
           </div>
         </div>

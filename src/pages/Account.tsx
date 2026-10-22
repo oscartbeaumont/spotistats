@@ -15,25 +15,45 @@ import { accountApi } from "~/client/api";
 import { capture } from "~/client/analytics";
 import { PageHeader } from "~/components/PageHeader";
 import { downloadTextFile } from "~/lib/download";
-import { describeStatsReason, errorMessage } from "~/lib/errors";
+import { errorMessage } from "~/lib/errors";
 import { formatDate } from "~/lib/format";
 import { createShortcut, isEditableShortcutTarget } from "~/lib/shortcut";
 
 export default function AccountPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  // Snapshot the one-shot result before the effect below clears the query.
-  const snapshot = untrack(() => new URLSearchParams(location.search));
-  const [reason] = createSignal(snapshot.get("reason"));
+  // Snapshot the one-shot result before the effect below clears the query. The
+  // OAuth callback owns the URL, so read the browser's copy rather than the
+  // router's: it stays in step after the clear below.
+  const snapshot = untrack(() =>
+    new URLSearchParams(
+      typeof window === "undefined" ? "" : window.location.search,
+    ),
+  );
   const [statsResult] = createSignal(snapshot.get("stats"));
+
+  // A failed stats handshake is a setup problem, not page content. Clear the
+  // one-shot query so a boundary retry does not rethrow, then hand the error to
+  // the boundary, which shows it and reports it to PostHog.
+  if (typeof window !== "undefined" && statsResult() === "failed") {
+    window.history.replaceState(
+      null,
+      "",
+      window.location.pathname || "/account",
+    );
+    // Keep the conversion funnel event; the boundary reports the error itself.
+    capture("stats_sync_failed", { reason: null });
+    throw new Error(
+      "Connecting Spotify listening stats did not complete. Try connecting again; if it keeps failing, report this error.",
+    );
+  }
 
   const stats = createMemo(() => accountApi.status());
 
   // The stats connect flow lands back here with its outcome in the query
-  // string. Report it once so the enable/fail funnel is visible.
+  // string. Report success once so the enable funnel is visible.
   onSettled(() => {
     if (statsResult() === "enabled") capture("stats_sync_enabled", {});
-    else if (statsResult() === "failed") capture("stats_sync_failed", { reason: reason() });
   });
 
   createEffect(
@@ -135,12 +155,6 @@ export default function AccountPage() {
           <samp>
             Listening stats connected. Your recent plays will sync shortly.
           </samp>
-        </pre>
-      </Show>
-
-      <Show when={statsResult() === "failed"}>
-        <pre class="overflow-auto p-4 text-xs mb-6 text-red-600 border-4 border-[#0a0a0a] bg-[#0a0a0a]">
-          <samp>Failed to connect stats: {describeStatsReason(reason())}</samp>
         </pre>
       </Show>
 
@@ -288,6 +302,16 @@ export default function AccountPage() {
           </div>
         </section>
       </Loading>
+
+      <p class="mt-10 text-[0.65rem] uppercase tracking-widest text-[#5c5c5c]">
+        <a href="/privacy" class="underline hover:text-[#0a0a0a]">
+          Privacy
+        </a>
+        {" · "}
+        <a href="/security" class="underline hover:text-[#0a0a0a]">
+          Security
+        </a>
+      </p>
     </main>
   );
 }

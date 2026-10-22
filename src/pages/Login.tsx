@@ -224,6 +224,15 @@ export default function LoginPage() {
               <p class="mt-3 text-[0.6rem] leading-5 text-[#5c5c5c]">
                 Stats sync is opt-in. Delete your history whenever you want.
               </p>
+              <p class="mt-2 text-[0.6rem] leading-5 text-[#5c5c5c]">
+                <a href="/privacy" class="underline hover:text-[#0a0a0a]">
+                  Privacy
+                </a>
+                {" · "}
+                <a href="/security" class="underline hover:text-[#0a0a0a]">
+                  Security
+                </a>
+              </p>
             </div>
           </section>
 

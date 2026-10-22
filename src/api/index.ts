@@ -101,7 +101,12 @@ export const ListeningInsights = Schema.Struct({
   weekdays: Schema.Array(Schema.Number),
   /** Adaptive trend buckets: daily for short ranges, monthly for long ones. */
   trend: Schema.Array(
-    Schema.Struct({ bucket: Schema.String, listens: Schema.Number }),
+    Schema.Struct({
+      bucket: Schema.String,
+      listens: Schema.Number,
+      /** Total track time for the bucket, so a chart can weigh plays by time. */
+      listeningMs: Schema.Number,
+    }),
   ),
   trendUnit: Schema.Literals(["day", "month"]),
   topTracks: Schema.Array(TopTrack),
