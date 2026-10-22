@@ -1,4 +1,5 @@
-import { Effect } from "effect";
+import { Effect, Schedule } from "effect";
+import { HttpClientError } from "effect/http";
 import { layer as fetchHttpClientLayer } from "effect/http/FetchHttpClient";
 import { HttpApiClient } from "effect/http-api";
 import { untrack } from "solid-js";
@@ -23,9 +24,29 @@ const client = Effect.runSync(
   HttpApiClient.make(Api, { baseUrl }).pipe(Effect.provide(fetchHttpClientLayer)),
 );
 
+/**
+ * A dropped or interrupted connection is a transport failure, not an answer.
+ * Safari reports it as `TypeError: Load failed`, which the client wraps as an
+ * `HttpClientError` with a `TransportError` reason. A single dropped fetch used
+ * to reach the error boundary and blank the page, so retry it a few times
+ * before treating it as final. Retrying is safe here: the account routes are
+ * reads or idempotent writes, and the worker is one origin away.
+ */
+const transientTransport = (error: unknown): boolean =>
+  HttpClientError.isHttpClientError(error) &&
+  error.reason._tag === "TransportError";
+
 export const runApi = <A, E>(effect: Effect.Effect<A, E, never>): Promise<A> => {
   const session = untrack(() => authStore());
-  return Effect.runPromise(effect).catch((error: unknown) => {
+  return Effect.runPromise(
+    effect.pipe(
+      Effect.retry({
+        schedule: Schedule.exponential("250 millis"),
+        times: 3,
+        while: transientTransport,
+      }),
+    ),
+  ).catch((error: unknown) => {
     if (
       typeof error === "object" &&
       error !== null &&
