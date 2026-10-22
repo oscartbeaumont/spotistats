@@ -14,6 +14,7 @@ import {
 import { accountApi } from "~/client/api";
 import { capture } from "~/client/analytics";
 import { PageHeader } from "~/components/PageHeader";
+import { authorizationNeedsReconnect } from "~/lib/authorization";
 import { downloadTextFile } from "~/lib/download";
 import { errorMessage } from "~/lib/errors";
 import { formatDate } from "~/lib/format";
@@ -194,6 +195,32 @@ export default function AccountPage() {
                   </div>
                 }
               >
+                <Show
+                  when={authorizationNeedsReconnect(
+                    stats().consentedAt,
+                    Date.now(),
+                  )}
+                >
+                  <div class="mb-6 border-[3px] border-[#0a0a0a] bg-[#fff7c2] p-4 text-sm leading-7 text-[#3b3200]">
+                    <p class="mb-1 font-black uppercase tracking-tight">
+                      Spotify authorization expiring
+                    </p>
+                    <p>
+                      Spotify logins last six months. Reconnect before{" "}
+                      {formatDate(stats().authorizationExpiresAt)} to keep
+                      syncing without a gap.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.location.href = "/account/stats/login";
+                      }}
+                      class="mt-3 font-black text-sm uppercase tracking-widest py-3 px-6 transition border-4 border-[#0a0a0a] bg-[#0a0a0a] text-[#f0ede8] hover:bg-[#1DB954] hover:text-black"
+                    >
+                      Reconnect Spotify Stats →
+                    </button>
+                  </div>
+                </Show>
                 <div class="grid gap-3 text-xs uppercase tracking-widest mb-4 text-[#666]">
                   <p>
                     <span class="font-black text-[#0a0a0a]">Consented:</span>{" "}

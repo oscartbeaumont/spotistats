@@ -1,6 +1,8 @@
 import { Effect } from "effect";
 import { handleRequest } from "virtual:solid-ssr-handler";
 
+import { isClientCredentialFailure, reauthMessage } from "~/lib/authorization";
+
 import { ServicesLive } from "./handler";
 import { Tracking } from "./tracking";
 
@@ -19,9 +21,13 @@ const spotifyUserId = (body: unknown): string | null => {
   return typeof value === "string" ? value : null;
 };
 
-/** A Spotify status that will not succeed on retry. */
-const permanent = (status: number | null) =>
-  status === 400 || status === 401 || status === 403;
+/**
+ * A Spotify status that will not succeed on retry. 400 is deliberately absent:
+ * a rejected *request* is not a rejected *authorization*, and disabling the
+ * account over one would demand a reconnect that cannot fix it. Rejections from
+ * the token endpoint arrive as `SpotifyAuthRejected` instead.
+ */
+const permanent = (status: number | null) => status === 401 || status === 403;
 
 export default {
   async fetch(request: Request): Promise<Response> {
@@ -49,11 +55,28 @@ export default {
             const tracking = yield* Tracking;
             yield* Effect.catchCause(
               Effect.catchTags(tracking.sync(id), {
+                // The token endpoint refused the stored authorization, which is
+                // the one failure a reconnect fixes. Log it, because a systemic
+                // cause (a rotated client secret) hits every account at once.
+                SpotifyAuthRejected: (error) =>
+                  Effect.gen(function* () {
+                    console.error(
+                      `Spotify rejected the authorization for ${id}: ${error.message}`,
+                    );
+                    if (isClientCredentialFailure(error.message)) {
+                      // Not the user's problem, so do not make it the user's
+                      // job: keep the account enabled and retry once it is fixed.
+                      yield* tracking.recordSyncFailure(
+                        id,
+                        `spotify: ${error.message}`,
+                        null,
+                      );
+                      return;
+                    }
+                    yield* tracking.requireReauth(id, reauthMessage(error.message));
+                  }),
                 SpotifyUnauthorized: () =>
-                  tracking.requireReauth(
-                    id,
-                    "Spotify rejected the refresh token. Reconnect Spotify stats.",
-                  ),
+                  tracking.requireReauth(id, reauthMessage()),
                 UpstreamError: (error) =>
                   permanent(error.status)
                     ? tracking.requireReauth(

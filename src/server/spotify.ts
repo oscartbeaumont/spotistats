@@ -62,6 +62,18 @@ export class SpotifyUnauthorized extends Schema.TaggedError<SpotifyUnauthorized>
   { message: Schema.String },
 ) {}
 
+/**
+ * The token endpoint refused the authorization itself: the code or the stored
+ * refresh token is no longer accepted. Kept distinct from a failed API call
+ * because only this can be fixed by sending the user through sign-in again,
+ * and because the body names the reason (`invalid_grant` when a refresh token
+ * has expired, `invalid_client` when the app's credentials are wrong).
+ */
+export class SpotifyAuthRejected extends Schema.TaggedError<SpotifyAuthRejected>()(
+  "SpotifyAuthRejected",
+  { message: Schema.String, status: Schema.Number },
+) {}
+
 const basicAuth = () =>
   btoa(`${env.VITE_SPOTIFY_CLIENT_ID}:${env.SPOTIFY_CLIENT_SECRET}`);
 
@@ -131,8 +143,7 @@ const tokenRequest = (body: URLSearchParams) =>
     if (!response.ok) {
       const detail = yield* readText(response, "Failed to read Spotify token error");
       return yield* Effect.fail(
-        new UpstreamError({
-          service: "spotify",
+        new SpotifyAuthRejected({
           message: `Spotify token request failed: ${detail}`,
           status: response.status,
         }),
@@ -228,10 +239,10 @@ export interface SpotifyShape {
   readonly exchangeCode: (
     code: string,
     redirectUri: string,
-  ) => Effect.Effect<SpotifyToken, UpstreamError>;
+  ) => Effect.Effect<SpotifyToken, UpstreamError | SpotifyAuthRejected>;
   readonly refreshToken: (
     refreshToken: string,
-  ) => Effect.Effect<SpotifyToken, UpstreamError>;
+  ) => Effect.Effect<SpotifyToken, UpstreamError | SpotifyAuthRejected>;
   readonly profile: (
     accessToken: string,
   ) => Effect.Effect<SpotifyProfile, UpstreamError | SpotifyUnauthorized>;

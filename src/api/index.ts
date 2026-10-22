@@ -28,6 +28,8 @@ const RecentListen = Schema.Struct({
 export const TrackingStatus = Schema.Struct({
   enabled: Schema.Boolean,
   consentedAt: Schema.NullOr(Schema.Number),
+  /** When the stored Spotify authorization lapses; refresh tokens last six months. */
+  authorizationExpiresAt: Schema.NullOr(Schema.Number),
   lastReadAt: Schema.NullOr(Schema.Number),
   disabledAt: Schema.NullOr(Schema.Number),
   lastPlayedAtMs: Schema.NullOr(Schema.Number),
