@@ -83,6 +83,14 @@ export function RootLayout(props: {
     navigate(path);
   };
 
+  // Discovery is flagged, so the shortcut stays registered but does nothing
+  // while the feature is off. Gating here rather than at registration keeps the
+  // listener in step with the flag without re-binding it.
+  const goDiscovery = (event: KeyboardEvent) => {
+    if (!discoveryEnabled()) return;
+    go("/discover")(event);
+  };
+
   createShortcut(["Alt", "1"], go("/"));
   createShortcut(["Control", "1"], go("/"));
   createShortcut(["Meta", "1"], go("/"));
@@ -95,6 +103,9 @@ export function RootLayout(props: {
   createShortcut(["Alt", "4"], go("/account"));
   createShortcut(["Control", "4"], go("/account"));
   createShortcut(["Meta", "4"], go("/account"));
+  createShortcut(["Alt", "5"], goDiscovery);
+  createShortcut(["Control", "5"], goDiscovery);
+  createShortcut(["Meta", "5"], goDiscovery);
 
   return (
     <>
@@ -132,7 +143,7 @@ export function RootLayout(props: {
             </a>
             <Show when={discoveryEnabled()}>
               <a href="/discover" class={linkClass("/discover")}>
-                Discover
+                Discover <span class="ml-2 hidden text-[0.6rem] opacity-50 md:inline">Alt+5</span>
               </a>
             </Show>
           </nav>
