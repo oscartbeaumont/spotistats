@@ -67,6 +67,11 @@ pnpm i
 pnpm dev
 ```
 
+`pnpm dev` applies pending migrations to this checkout's local D1 database before
+starting the server. Local migrations and the Vite plugin both use
+`.cloudflare/state`, so a new worktree starts with an empty but usable database.
+Local stats are separate from production; connect stats locally to collect plays.
+
 # Secrets
 
 Listening-stats sync needs the Spotify app's client secret. Create `.dev.vars`
@@ -114,7 +119,8 @@ pnpm deploy      # Build and deploy with cf
 
 # Database
 
-Local migrations run against the local D1 database:
+Local migrations run against the same `.cloudflare/state` D1 database as the
+development server (not the CLI's default global state directory):
 
 ```bash
 pnpm db:migrate:local

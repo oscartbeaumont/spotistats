@@ -7,14 +7,14 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "cf dev",
+    "dev": "pnpm db:migrate:local && cf dev",
     "build": "cf workers types && tsc --noEmit && cf build",
     "preview": "cf build && vite preview",
     "deploy": "cf deploy",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "cf-typegen": "cf workers types",
-    "db:migrate:local": "cf d1 migrations apply 7529dabd-7b6d-42f6-ac94-ddc3db1332ab --local",
+    "db:migrate:local": "cf d1 migrations apply 7529dabd-7b6d-42f6-ac94-ddc3db1332ab --local --persist-to .cloudflare/state",
     "db:migrate:remote": "cf d1 migrations apply 7529dabd-7b6d-42f6-ac94-ddc3db1332ab"
   },
   "dependencies": {
