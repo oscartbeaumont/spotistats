@@ -292,6 +292,16 @@ export default function AccountPage() {
           </div>
         </section>
       </Loading>
+
+      <p class="mt-10 text-[0.65rem] uppercase tracking-widest text-[#5c5c5c]">
+        <a href="/privacy" class="underline hover:text-[#0a0a0a]">
+          Privacy
+        </a>
+        {" · "}
+        <a href="/security" class="underline hover:text-[#0a0a0a]">
+          Security
+        </a>
+      </p>
     </main>
   );
 }

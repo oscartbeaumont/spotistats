@@ -19,6 +19,8 @@ export function Seo(props: {
   path: string;
   publicPage: boolean;
   description?: string;
+  /** Emit the FAQ structured data. Only the sign-in screen has the FAQ copy. */
+  faq?: boolean;
 }) {
   const description = () => props.description ?? siteDescription;
   const canonical = () => `${siteUrl}${props.path}`;
@@ -55,7 +57,7 @@ export function Seo(props: {
 
       <script
         type="application/ld+json"
-        innerHTML={JSON.stringify(jsonLdFor(props.publicPage))}
+        innerHTML={JSON.stringify(jsonLdFor(props.faq ?? props.publicPage))}
       />
     </>
   );

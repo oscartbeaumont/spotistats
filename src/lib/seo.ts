@@ -55,12 +55,29 @@ const titleByPath = (path: string) => {
     return "Export your Spotify data — Spotistats";
   if (path.startsWith("/account"))
     return "Spotify stats account — Spotistats";
+  if (path.startsWith("/privacy")) return "Privacy policy — Spotistats";
+  if (path.startsWith("/security")) return "Security policy — Spotistats";
   return "Spotistats — Your Spotify, decoded";
 };
 
 export const titleForPath = (path: string) => titleByPath(path);
+
+/**
+ * Routes that are reachable without a Spotify session. `/` and `/login` are the
+ * sign-in screen; `/privacy` and `/security` are the public policy pages.
+ */
 export const isPublicPath = (path: string) =>
-  path === "/" || path === "/login";
+  path === "/" ||
+  path === "/login" ||
+  path === "/privacy" ||
+  path === "/security";
+
+/**
+ * Public pages that are their own canonical URL rather than the home page.
+ * The sign-in routes canonicalise to `/`; the policy pages stand alone.
+ */
+export const isContentPath = (path: string) =>
+  path === "/privacy" || path === "/security";
 
 /** Structured data for the public site. FAQ is only emitted for public pages. */
 export function jsonLdFor(publicPage: boolean) {
