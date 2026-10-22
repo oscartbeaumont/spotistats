@@ -23,6 +23,13 @@ describe("createPreviewInsights", () => {
     expect(data.trend[0]?.bucket).toBe("2025-11");
   });
 
+  it("carries listening time for each trend bucket", () => {
+    const data = createPreviewInsights(now);
+    expect(data.trend.every((bucket) => bucket.listeningMs > 0)).toBe(true);
+    const total = data.trend.reduce((sum, bucket) => sum + bucket.listeningMs, 0);
+    expect(total).toBeGreaterThan(0);
+  });
+
   it("ships self-contained cover art", () => {
     const data = createPreviewInsights(now);
     expect(
