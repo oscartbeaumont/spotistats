@@ -11,7 +11,7 @@ import {
 } from "solid-js";
 
 import { accountApi } from "~/client/api";
-import { identifyUser } from "~/client/analytics";
+import { capture, identifyUser } from "~/client/analytics";
 import {
   getCurrentlyPlaying,
   getProfile,
@@ -213,6 +213,12 @@ function StatsRail(props: {
                     href={externalHref(item.externalUrl) ?? "#"}
                     target="_blank"
                     rel="noopener"
+                    onClick={() =>
+                      capture("spotify_item_opened", {
+                        kind: "track",
+                        surface: "recent",
+                      })
+                    }
                     class="flex items-center gap-3 border-b-[3px] border-[#0a0a0a] py-3 text-left transition last:border-b-0 hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
                   >
                     <img
@@ -446,10 +452,19 @@ export default function ProfilePage() {
   };
 
   const reloadInsights = () => setInsightsTick((value) => value + 1);
-  const showPreview = () => setPreview(createPreviewInsights());
-  const exitPreview = () => setPreview(null);
+  const showPreview = () => {
+    setPreview(createPreviewInsights());
+    capture("insights_preview_opened", {});
+  };
+  const exitPreview = () => {
+    setPreview(null);
+    capture("insights_preview_exited", {});
+  };
 
-  const changeRange = (next: InsightsRange) => setRange(next);
+  const changeRange = (next: InsightsRange) => {
+    setRange(next);
+    capture("insights_range_changed", { range: next });
+  };
   const changeFromDate = (value: string) => {
     setFromDate(value);
     if (value && toDate() && value > toDate()) setToDate(value);
@@ -519,6 +534,7 @@ export default function ProfilePage() {
     setRefreshing(true);
     try {
       await queueRefresh();
+      capture("stats_refresh_requested", {});
     } finally {
       setRefreshing(false);
     }
