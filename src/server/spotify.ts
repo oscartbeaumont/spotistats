@@ -22,7 +22,9 @@ export type SpotifyToken = typeof SpotifyToken.Type;
 export const SpotifyProfile = Schema.Struct({
   id: Schema.String,
   display_name: Schema.NullOr(Schema.String),
-  email: Schema.optional(Schema.String),
+  // Spotify returns `null` for an account with no email, so this cannot be a
+  // plain optional string: `Schema.optional` only accepts absent or undefined.
+  email: Schema.optional(Schema.NullOr(Schema.String)),
   uri: Schema.String,
   external_urls: Schema.Struct({ spotify: Schema.String }),
   followers: Schema.Struct({ total: Schema.Number }),
