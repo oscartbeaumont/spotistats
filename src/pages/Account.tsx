@@ -106,6 +106,7 @@ export default function AccountPage() {
     setActionError(null);
     try {
       await runDelete();
+      try { sessionStorage.removeItem("spotistats-discovery-draft"); } catch { /* Storage may be blocked. */ }
       capture("account_data_deleted", {});
     } catch (error) {
       setActionError(errorMessage(error));

@@ -53,7 +53,7 @@ const isSpotifyToken = (
   typeof value.access_token === "string" &&
   value.access_token.length > 0;
 
-export async function createLoginUrl(origin: string) {
+export async function createLoginUrl(origin: string, playlistWrite = false) {
   const token = crypto.randomUUID();
   const verifier = randomString(96);
   const redirectOrigin = spotifyRedirectOrigin(origin);
@@ -63,6 +63,7 @@ export async function createLoginUrl(origin: string) {
     stateToken: token,
     codeVerifier: verifier,
     linkToUri: false,
+    ...(playlistWrite ? { returnTo: "/discover" as const } : {}),
   });
 
   const params = new URLSearchParams({
@@ -70,7 +71,7 @@ export async function createLoginUrl(origin: string) {
     response_type: "code",
     redirect_uri: redirectOrigin,
     state: token,
-    scope: spotifyScopes.join(" "),
+    scope: [...spotifyScopes, ...(playlistWrite ? ["playlist-modify-private"] : [])].join(" "),
     code_challenge_method: "S256",
     code_challenge: await createPkceChallenge(verifier),
   });
@@ -137,13 +138,13 @@ export async function consumeSpotifyCallback(
     return true;
   }
 
-  let token: { token_type: string; access_token: string };
+  let token: { token_type: string; access_token: string; scope?: string };
   try {
     const value: unknown = await response.json();
     if (!isSpotifyToken(value)) {
       throw new Error("Spotify returned an invalid token response");
     }
-    token = value;
+    token = { ...value, scope: typeof value === "object" && "scope" in value && typeof value.scope === "string" ? value.scope : undefined };
   } catch (error) {
     console.error("Spotify login response error:", error);
     capture("login_failed", { reason: "invalid_response" });
@@ -159,13 +160,16 @@ export async function consumeSpotifyCallback(
     status: "authenticated",
     accessToken: `${token.token_type} ${token.access_token}`,
     linkToUri: false,
+    scopes: token.scope?.split(" ").filter(Boolean) ?? [],
   });
   cleanUrl();
+  if (store.status === "authenticating" && store.returnTo) window.location.replace(store.returnTo);
   return true;
 }
 
 export function logout() {
   capture("logout", {});
   resetAnalytics();
+  try { sessionStorage.removeItem("spotistats-discovery-draft"); } catch { /* Storage may be blocked. */ }
   setAuthStore({ status: "empty" });
 }

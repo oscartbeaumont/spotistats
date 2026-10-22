@@ -67,6 +67,11 @@ pnpm i
 pnpm dev
 ```
 
+`pnpm dev` applies pending migrations to this checkout's local D1 database before
+starting the server. Local migrations and the Vite plugin both use
+`.cloudflare/state`, so a new worktree starts with an empty but usable database.
+Local stats are separate from production; connect stats locally to collect plays.
+
 # Secrets
 
 Listening-stats sync needs the Spotify app's client secret. Create `.dev.vars`
@@ -78,6 +83,35 @@ SPOTIFY_CLIENT_SECRET=your-client-secret
 
 The Spotify app must also have `http://127.0.0.1:5173/account/stats/callback`
 registered as a redirect URI.
+
+# Music discovery
+
+Music discovery is behind the PostHog feature flag `music-discovery`. The nav
+link and the `/discover` route both consult the flag, and a missing, unloaded or
+failed flag keeps the feature off, so the rollout fails closed. In a production
+build the flag comes from PostHog for the signed-in person; in development the
+feature is enabled so it can be worked on locally.
+
+`/discover` builds a reviewable selection of up to 30 tracks. New selections
+use Spotify recommendations seeded by tracked favourites (or Spotify top tracks
+when there is no stored history), excluding recorded listens and liked songs.
+Rediscovery uses the top 100 repeated tracks not played for 90 days; Blend
+alternates both sources. Each primary artist gets at most three slots.
+
+Chill, Focus, Workout and Upbeat use explicit Spotify musical-attribute filters,
+not an AI model or inferred emotions. Rediscovery mood filtering requires audio
+features. Recommendation, audio-feature and batch-track access must be available
+to the Spotify app; denied access is shown as an error, not guessed results.
+These capabilities include deprecated/restricted Spotify APIs and must be
+verified with the app's actual authorization before release.
+
+Saving requests `playlist-modify-private` separately from normal sign-in. The
+user reviews the tracks before creating a private playlist. The browser stores
+the draft and save progress in tab session storage across OAuth and reloads.
+Creation is never retried automatically. If its response is lost, the user must
+check Spotify before starting over. If the playlist ID is known, retrying replaces
+its tracks instead of appending duplicates. Signing out or deleting site data
+clears the local draft; neither action deletes playlists already saved to Spotify.
 
 # Checks
 
@@ -91,7 +125,8 @@ pnpm deploy      # Build and deploy with cf
 
 # Database
 
-Local migrations run against the local D1 database:
+Local migrations run against the same `.cloudflare/state` D1 database as the
+development server (not the CLI's default global state directory):
 
 ```bash
 pnpm db:migrate:local

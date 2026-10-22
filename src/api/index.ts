@@ -60,6 +60,23 @@ const TopArtist = Schema.Struct({
   tracks: Schema.Number,
 });
 
+export const DiscoveryTrack = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  artistNames: Schema.String,
+  imageUrl: Schema.NullOr(Schema.String),
+  externalUrl: Schema.NullOr(Schema.String),
+  listens: Schema.Number,
+  lastPlayedAtMs: Schema.Number,
+});
+export type DiscoveryTrack = typeof DiscoveryTrack.Type;
+
+export const DiscoveryHistory = Schema.Struct({
+  seeds: Schema.Array(Schema.String),
+  rediscovery: Schema.Array(DiscoveryTrack),
+});
+export type DiscoveryHistory = typeof DiscoveryHistory.Type;
+
 export const InsightsRange = Schema.Literals([
   "all",
   "week",
@@ -176,6 +193,17 @@ const bearer = { authorization: Schema.optional(Schema.String) } as const;
 const del = HttpApiEndpoint.make("DELETE");
 
 export const AccountGroup = HttpApiGroup.make("account").add(
+  HttpApiEndpoint.get("discoveryHistory", "/api/account/discovery", {
+    headers: bearer,
+    success: DiscoveryHistory,
+    error: trackingErrors,
+  }),
+  HttpApiEndpoint.post("discoveryKnown", "/api/account/discovery/known", {
+    headers: bearer,
+    payload: Schema.Struct({ ids: Schema.Array(Schema.String.check(Schema.isMaxLength(128))).check(Schema.isMaxLength(200)) }),
+    success: Schema.Array(Schema.String),
+    error: trackingErrors,
+  }),
   HttpApiEndpoint.get("status", "/api/account/stats", {
     headers: bearer,
     success: TrackingStatus,

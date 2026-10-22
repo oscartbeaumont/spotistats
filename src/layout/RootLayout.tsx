@@ -7,6 +7,7 @@ import { ExportProgress } from "~/components/ExportProgress";
 import { ProfileSkeleton } from "~/components/ProfileSkeleton";
 import { Seo } from "~/components/Seo";
 import { hasSpotifyCallbackCode, logout } from "~/client/auth";
+import { discoveryEnabled } from "~/client/features";
 import { authReady, authStore } from "~/client/storage";
 import { handoverUrl, isContentPath, isPublicPath, titleForPath } from "~/lib/seo";
 import LoginPage from "~/pages/Login";
@@ -129,6 +130,11 @@ export function RootLayout(props: {
             <a href="/account" class={linkClass("/account")}>
               Account <span class="ml-2 hidden text-[0.6rem] opacity-50 md:inline">Alt+4</span>
             </a>
+            <Show when={discoveryEnabled()}>
+              <a href="/discover" class={linkClass("/discover")}>
+                Discover
+              </a>
+            </Show>
           </nav>
           <button
             onClick={() => {

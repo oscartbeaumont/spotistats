@@ -179,6 +179,7 @@ const decode = <S extends Schema.ConstraintDecoder<unknown>>(
 const request = <S extends Schema.ConstraintDecoder<unknown>>(
   schema: S,
   url: string,
+  options?: { method: "POST" | "PUT"; body: unknown },
 ): Effect.Effect<S["Type"], SpotifyError> =>
   Effect.gen(function* () {
     const store = untrack(() => authStore());
@@ -189,8 +190,10 @@ const request = <S extends Schema.ConstraintDecoder<unknown>>(
     const response = yield* Effect.tryPromise({
       try: () =>
         fetch(url, {
+          method: options?.method,
+          body: options ? JSON.stringify(options.body) : undefined,
           cache: "no-store",
-          headers: { Authorization: store.accessToken },
+          headers: { Authorization: store.accessToken, ...(options ? { "Content-Type": "application/json" } : {}) },
         }),
       catch: (cause) => new SpotifyRequestError(cause),
     });
@@ -234,8 +237,8 @@ const request = <S extends Schema.ConstraintDecoder<unknown>>(
       schedule: Schedule.exponential("500 millis"),
       times: 2,
       while: (error) =>
-        error instanceof SpotifyRequestError ||
-        (error instanceof SpotifyApiError && retryable(error.status)),
+        !options && (error instanceof SpotifyRequestError ||
+        (error instanceof SpotifyApiError && retryable(error.status))),
     }),
   );
 
@@ -325,3 +328,49 @@ export const getArtists = (ids: string) =>
         ),
       )
     : Effect.succeed<ReadonlyArray<SpotifyArtist>>([]);
+
+export const CatalogTrack = Schema.Struct({
+  id: Schema.NullOr(Schema.String),
+  name: Schema.String,
+  artists: Schema.Array(Schema.Struct({ id: Schema.NullOr(Schema.String), name: Schema.String })),
+  album: Schema.Struct({ images: Schema.Array(Image) }),
+  external_urls: Schema.Struct({ spotify: Schema.String }),
+  is_local: Schema.optional(Schema.Boolean),
+  is_playable: Schema.optional(Schema.Boolean),
+  restrictions: Schema.optional(Schema.Struct({ reason: Schema.String })),
+  linked_from: Schema.optional(Schema.Struct({ id: Schema.String })),
+});
+export type CatalogTrack = typeof CatalogTrack.Type;
+
+export const getRecommendations = (seeds: readonly string[], attributes: Readonly<Record<string, number>>) =>
+  request(
+    Schema.Struct({ tracks: Schema.Array(CatalogTrack) }),
+    `https://api.spotify.com/v1/recommendations?${new URLSearchParams({
+      seed_tracks: seeds.slice(0, 5).join(","), limit: "100",
+      ...Object.fromEntries(Object.entries(attributes).map(([key, value]) => [key, String(value)])),
+    })}`,
+  );
+
+export const getDiscoveryTopTracks = () =>
+  request(page(CatalogTrack), "https://api.spotify.com/v1/me/top/tracks?limit=50&time_range=medium_term");
+
+export const getCatalogTracks = (ids: readonly string[]) =>
+  request(Schema.Struct({ tracks: Schema.Array(Schema.NullOr(CatalogTrack)) }),
+    `https://api.spotify.com/v1/tracks?${new URLSearchParams({ ids: ids.join(",") })}`);
+
+export const getSavedTrackFlags = (ids: readonly string[]) =>
+  request(Schema.Array(Schema.Boolean), `https://api.spotify.com/v1/me/tracks/contains?${new URLSearchParams({ ids: ids.join(",") })}`);
+
+export const CreatedPlaylist = Schema.Struct({ id: Schema.String, external_urls: Schema.Struct({ spotify: Schema.String }) });
+export type CreatedPlaylist = typeof CreatedPlaylist.Type;
+
+export const createPrivatePlaylist = (name: string) =>
+  request(CreatedPlaylist, "https://api.spotify.com/v1/me/playlists", {
+    method: "POST", body: { name, public: false, collaborative: false, description: "Selected with Spotistats. Music supplied by Spotify." },
+  });
+
+/** Replace only the new playlist we just created, so an explicit retry cannot append duplicates. */
+export const setDiscoveryPlaylistTracks = (id: string, trackIds: readonly string[]) =>
+  request(Schema.Struct({ snapshot_id: Schema.String }), `https://api.spotify.com/v1/playlists/${encodeURIComponent(id)}/items`, {
+    method: "PUT", body: { uris: trackIds.map((trackId) => `spotify:track:${trackId}`) },
+  });

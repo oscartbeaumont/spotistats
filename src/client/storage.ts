@@ -4,6 +4,7 @@ import { createSignal } from "solid-js";
 /** Persisted Spotify session, validated on read. */
 
 const ProfileCache = Schema.Struct({
+  id: Schema.optional(Schema.String),
   icon: Schema.optional(Schema.String),
   url: Schema.optional(Schema.String),
   displayName: Schema.optional(Schema.String),
@@ -18,12 +19,14 @@ export const AuthStore = Schema.Union([
     stateToken: Schema.String,
     codeVerifier: Schema.String,
     linkToUri: Schema.Boolean,
+    returnTo: Schema.optional(Schema.Literal("/discover")),
   }),
   Schema.Struct({
     status: Schema.Literal("authenticated"),
     accessToken: Schema.String,
     linkToUri: Schema.Boolean,
     profile: Schema.optional(ProfileCache),
+    scopes: Schema.optional(Schema.Array(Schema.String)),
   }),
 ]);
 export type AuthStore = typeof AuthStore.Type;

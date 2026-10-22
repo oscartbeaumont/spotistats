@@ -1,6 +1,7 @@
-import { initAnalytics } from "./analytics";
+import { initAnalytics, identifyUser } from "./analytics";
 import { consumeSpotifyCallback } from "./auth";
 import { installChunkRecovery } from "./chunkRecovery";
+import { initFeatureFlags } from "./features";
 import { hydrateAuthStore } from "./storage";
 
 /**
@@ -14,6 +15,15 @@ import { hydrateAuthStore } from "./storage";
 export function bootstrapClient(): void {
   const session = hydrateAuthStore();
   initAnalytics();
+  initFeatureFlags();
+  // Re-identify from the cached profile so feature flags resolve for the
+  // signed-in person on any route, not only after visiting the profile page.
+  if (session.status === "authenticated" && session.profile?.id) {
+    identifyUser(session.profile.id, {
+      username: session.profile.displayName,
+      email: session.profile.email,
+    });
+  }
   void consumeSpotifyCallback(session);
 }
 

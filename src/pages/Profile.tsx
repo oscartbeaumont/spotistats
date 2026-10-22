@@ -521,6 +521,7 @@ export default function ProfilePage() {
           ? {
               ...current,
               profile: {
+                id: data.id,
                 icon: data.images?.[0]?.url,
                 url:
                   current.linkToUri && data.uri
