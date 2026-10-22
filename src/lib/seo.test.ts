@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { isContentPath, isPublicPath, titleForPath } from "./seo";
+import {
+  canonicalUrl,
+  isContentPath,
+  isPublicPath,
+  onLegacyOrigin,
+  titleForPath,
+} from "./seo";
 
 describe("public route helpers", () => {
   it("treats the sign-in screen and the policy pages as public", () => {
@@ -27,5 +33,25 @@ describe("public route helpers", () => {
     expect(titleForPath("/privacy")).toContain("Privacy");
     expect(titleForPath("/security")).toContain("Security");
     expect(titleForPath("/")).toBe(titleForPath("/login"));
+  });
+});
+
+describe("canonical origin", () => {
+  it("names the canonical host whatever host the browser is on", () => {
+    expect(canonicalUrl("/")).toBe("https://spotistats.otbeaumont.me/");
+    expect(canonicalUrl("/account")).toBe(
+      "https://spotistats.otbeaumont.me/account",
+    );
+    expect(canonicalUrl("/login", "?start=1")).toBe(
+      "https://spotistats.otbeaumont.me/login?start=1",
+    );
+  });
+
+  it("hands over only the legacy alias, never a dev or preview origin", () => {
+    expect(onLegacyOrigin("https://spotistats.js.org")).toBe(true);
+    expect(onLegacyOrigin("https://spotistats.otbeaumont.me")).toBe(false);
+    expect(onLegacyOrigin("http://localhost:5173")).toBe(false);
+    expect(onLegacyOrigin("http://127.0.0.1:5173")).toBe(false);
+    expect(onLegacyOrigin("https://spotistats-preview.workers.dev")).toBe(false);
   });
 });
