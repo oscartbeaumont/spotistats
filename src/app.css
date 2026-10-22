@@ -23,6 +23,36 @@ body {
   padding-top: 6.5rem;
 }
 
+/* The dashboard pages run long, so the scrollbar gets a themed track and thumb
+   instead of the browser default on the warm background. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #0a0a0a #ddd7cd;
+}
+
+::-webkit-scrollbar {
+  width: 14px;
+  height: 14px;
+}
+
+::-webkit-scrollbar-track {
+  background: #ddd7cd;
+  border-left: 2px solid #0a0a0a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #0a0a0a;
+  border: 3px solid #ddd7cd;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #1db954;
+}
+
+::-webkit-scrollbar-corner {
+  background: #ddd7cd;
+}
+
 /* The header sits in flow below `sm`, so it does not cover the page. */
 @media (max-width: 639px) {
   .app-main {

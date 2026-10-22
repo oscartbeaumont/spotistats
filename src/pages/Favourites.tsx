@@ -20,6 +20,7 @@ import {
 } from "~/client/spotify";
 import { capture } from "~/client/analytics";
 import { authStore } from "~/client/storage";
+import { PageHeader } from "~/components/PageHeader";
 import { createShortcut, isEditableShortcutTarget } from "~/lib/shortcut";
 import { externalHref, spotifyUri } from "~/lib/url";
 
@@ -306,70 +307,80 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
 
   return (
     <main class="app-main p-8 md:p-12">
-      <div class="flex flex-wrap items-center gap-0 mb-3">
-        <h1 class="text-2xl font-black uppercase tracking-tight mr-6">
-          {title()}
-        </h1>
-        <a
-          href="/favourites/tracks"
-          onClick={() => {
-            if (props.kind !== "tracks")
-              capture("favourites_kind_changed", { kind: "tracks" });
-          }}
-          class={`font-black text-xs uppercase px-4 py-2 tracking-wide transition border-[3px] border-[#0a0a0a] ${
-            props.kind === "tracks" ? "bg-[#0a0a0a] text-[#f0ede8]" : "text-[#0a0a0a]"
-          }`}
-        >
-          Tracks
-        </a>
-        <a
-          href="/favourites/albums"
-          onClick={() => {
-            if (props.kind !== "albums")
-              capture("favourites_kind_changed", { kind: "albums" });
-          }}
-          class={`font-black text-xs uppercase px-4 py-2 tracking-wide transition border-[3px] border-[#0a0a0a] ${
-            props.kind === "albums" ? "bg-[#0a0a0a] text-[#f0ede8]" : "text-[#0a0a0a]"
-          }`}
-        >
-          Albums
-        </a>
-        <Show when={props.kind === "tracks"}>
-          <span class="mx-4 font-black text-[#5c5c5c]">/</span>
-          <For
-            each={
-              [
-                ["short", "Month"],
-                ["medium", "6 Months"],
-                ["long", "All Time"],
-              ] as [Range, string][]
-            }
-          >
-            {([optionRange, label], index) => (
-              <button
-                onClick={() => selectRange(optionRange)}
-                class={`text-xs uppercase tracking-wide px-3 py-2 font-bold transition border-[3px] ${
-                  range() === optionRange
-                    ? "border-[#1DB954] bg-[#1DB954] text-black"
-                    : "border-transparent text-[#5c5c5c]"
-                }`}
+      <PageHeader
+        title={title()}
+        actions={
+          <>
+            <a
+              href="/favourites/tracks"
+              onClick={() => {
+                if (props.kind !== "tracks")
+                  capture("favourites_kind_changed", { kind: "tracks" });
+              }}
+              class={`font-black text-xs uppercase px-4 py-2 tracking-wide transition border-[3px] border-[#0a0a0a] ${
+                props.kind === "tracks"
+                  ? "bg-[#0a0a0a] text-[#f0ede8]"
+                  : "text-[#0a0a0a]"
+              }`}
+            >
+              Tracks
+            </a>
+            <a
+              href="/favourites/albums"
+              onClick={() => {
+                if (props.kind !== "albums")
+                  capture("favourites_kind_changed", { kind: "albums" });
+              }}
+              class={`font-black text-xs uppercase px-4 py-2 tracking-wide transition border-[3px] border-[#0a0a0a] ${
+                props.kind === "albums"
+                  ? "bg-[#0a0a0a] text-[#f0ede8]"
+                  : "text-[#0a0a0a]"
+              }`}
+            >
+              Albums
+            </a>
+            <Show when={props.kind === "tracks"}>
+              <span class="mx-2 font-black text-[#5c5c5c]">/</span>
+              <For
+                each={
+                  [
+                    ["short", "Month"],
+                    ["medium", "6 Months"],
+                    ["long", "All Time"],
+                  ] as [Range, string][]
+                }
               >
-                {label}{" "}
-                <span class="ml-1 text-[0.6rem] opacity-50">{index() + 1}</span>
-              </button>
-            )}
-          </For>
-        </Show>
-      </div>
-      <div class="mb-6 flex flex-wrap gap-2 text-[0.65rem] font-bold uppercase tracking-widest text-[#5c5c5c]">
-        <span>J/↓ Next</span>
-        <span>K/↑ Previous</span>
-        <span>Enter Open</span>
-        <span>T Toggle Type</span>
-        <Show when={props.kind === "tracks"}>
-          <span>1/2/3 Range</span>
-        </Show>
-      </div>
+                {([optionRange, label], index) => (
+                  <button
+                    onClick={() => selectRange(optionRange)}
+                    class={`text-xs uppercase tracking-wide px-3 py-2 font-bold transition border-[3px] ${
+                      range() === optionRange
+                        ? "border-[#1DB954] bg-[#1DB954] text-black"
+                        : "border-transparent text-[#5c5c5c]"
+                    }`}
+                  >
+                    {label}{" "}
+                    <span class="ml-1 text-[0.6rem] opacity-50">
+                      {index() + 1}
+                    </span>
+                  </button>
+                )}
+              </For>
+            </Show>
+          </>
+        }
+        hints={
+          <>
+            <span>J/↓ Next</span>
+            <span>K/↑ Previous</span>
+            <span>Enter Open</span>
+            <span>T Toggle Type</span>
+            <Show when={props.kind === "tracks"}>
+              <span>1/2/3 Range</span>
+            </Show>
+          </>
+        }
+      />
       <Loading fallback={<p class="text-sm uppercase tracking-widest text-[#5c5c5c]">LOADING_</p>}>
         <Show
           when={items().length > 0}

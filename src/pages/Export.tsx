@@ -6,6 +6,7 @@ import {
   playlistArchiveName,
 } from "~/lib/download";
 import { errorMessage } from "~/lib/errors";
+import { PageHeader } from "~/components/PageHeader";
 import { buildPlaylistCsv } from "~/lib/playlistExport";
 import { createShortcut, isEditableShortcutTarget } from "~/lib/shortcut";
 import { capture } from "~/client/analytics";
@@ -171,10 +172,10 @@ export default function ExportPage() {
 
   return (
     <main class="app-main p-8 md:p-12">
-      <div class="mb-8 border-b-4 border-[#0a0a0a] pb-4">
-        <div class="flex flex-wrap items-center justify-between gap-4">
-          <h1 class="text-2xl font-black uppercase tracking-tight">Export Data</h1>
-          <div class="flex flex-wrap items-center gap-2">
+      <PageHeader
+        title="Export Data"
+        actions={
+          <>
             <Show when={selectedPlaylists().length > 0}>
               <button
                 onClick={exportSelected}
@@ -190,17 +191,19 @@ export default function ExportPage() {
             >
               Backup All <span class="ml-2 text-[0.6rem] opacity-50">B</span> →
             </button>
-          </div>
-        </div>
-      </div>
-      <div class="mb-6 flex flex-wrap gap-2 text-[0.65rem] font-bold uppercase tracking-widest text-[#5c5c5c]">
-        <span>J/↓ Next</span>
-        <span>K/↑ Previous</span>
-        <span>Enter Export</span>
-        <span>Space Select</span>
-        <span>E Export Selected</span>
-        <span>B Backup All</span>
-      </div>
+          </>
+        }
+        hints={
+          <>
+            <span>J/↓ Next</span>
+            <span>K/↑ Previous</span>
+            <span>Enter Export</span>
+            <span>Space Select</span>
+            <span>E Export Selected</span>
+            <span>B Backup All</span>
+          </>
+        }
+      />
       <Show when={backingUp()}>
         <progress
           aria-label="Backup progress"
