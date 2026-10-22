@@ -11,7 +11,7 @@
 
 import type { InsightsRange } from "~/api";
 
-type PostHogClient = typeof import("posthog-js")["default"];
+export type PostHogClient = typeof import("posthog-js")["default"];
 
 let client: Promise<PostHogClient> | undefined;
 
@@ -38,6 +38,15 @@ function analytics(): Promise<PostHogClient> | undefined {
 
 export function initAnalytics(): void {
   void analytics();
+}
+
+/**
+ * The shared PostHog client, or `undefined` when analytics must not run
+ * (server render or a development build). Feature flags live with analytics
+ * because the same client answers both, and callers still share one load.
+ */
+export function posthogClient(): Promise<PostHogClient> | undefined {
+  return analytics();
 }
 
 export function identifyUser(

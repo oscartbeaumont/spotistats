@@ -6,15 +6,30 @@ import {
   saveDiscoveryPlaylist, writeDiscoveryDraft, type DiscoveryDraft,
 } from "~/client/discovery";
 import { getProfile, runSpotify } from "~/client/spotify";
+import { discoveryEnabled } from "~/client/features";
 import { authStore } from "~/client/storage";
 import { PageHeader } from "~/components/PageHeader";
 import type { DiscoveryMode, Mood } from "~/lib/discovery";
 import { externalHref } from "~/lib/url";
+import NotFoundPage from "./NotFound";
 
 const control = "min-w-0 w-full border-[3px] border-[#0a0a0a] px-4 py-3 text-sm font-bold disabled:opacity-50";
 const button = `${control} uppercase tracking-widest transition hover:bg-[#0a0a0a] hover:text-[#f0ede8]`;
 
+/**
+ * The route stays registered, but the flag decides whether the feature exists
+ * for this person. Rendering the 404 keeps the rollout honest for everyone
+ * else, and it matches how the nav link is hidden.
+ */
 export default function DiscoverPage() {
+  return (
+    <Show when={discoveryEnabled()} fallback={<NotFoundPage />}>
+      <Discover />
+    </Show>
+  );
+}
+
+function Discover() {
   const [mode, setMode] = createSignal<DiscoveryMode>("blend");
   const [mood, setMood] = createSignal<Mood>("any");
   const [draft, setDraft] = createSignal<DiscoveryDraft | null>(null);

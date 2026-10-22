@@ -86,6 +86,12 @@ registered as a redirect URI.
 
 # Music discovery
 
+Music discovery is behind the PostHog feature flag `music-discovery`. The nav
+link and the `/discover` route both consult the flag, and a missing, unloaded or
+failed flag keeps the feature off, so the rollout fails closed. In a production
+build the flag comes from PostHog for the signed-in person; in development the
+feature is enabled so it can be worked on locally.
+
 `/discover` builds a reviewable selection of up to 30 tracks. New selections
 use Spotify recommendations seeded by tracked favourites (or Spotify top tracks
 when there is no stored history), excluding recorded listens and liked songs.

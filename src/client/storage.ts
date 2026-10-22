@@ -4,6 +4,7 @@ import { createSignal } from "solid-js";
 /** Persisted Spotify session, validated on read. */
 
 const ProfileCache = Schema.Struct({
+  id: Schema.optional(Schema.String),
   icon: Schema.optional(Schema.String),
   url: Schema.optional(Schema.String),
   displayName: Schema.optional(Schema.String),
