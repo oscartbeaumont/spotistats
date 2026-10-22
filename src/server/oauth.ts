@@ -72,18 +72,38 @@ const describeCause = (cause: unknown): string => {
   }
 };
 
+/**
+ * Marks the hop through the canonical origin, so it is taken exactly once.
+ */
+const resumedParam = "resumed";
+
+/**
+ * Starts the listening-stats OAuth flow.
+ *
+ * The state cookie is host-scoped, and a browser stores it against the host it
+ * requested, which is not always the host this worker answers as: the legacy
+ * `spotistats.js.org` alias is proxied here with the canonical host already
+ * rewritten, so `request.url` is `spotistats.otbeaumont.me` even for a browser
+ * on `spotistats.js.org`. Spotify then returns to the canonical callback, where
+ * the js.org cookie is not sent and the handshake dies with
+ * `missing_state_cookie`. Redirect through the canonical origin before setting
+ * anything, so the browser stores the state against the host Spotify returns
+ * to. The host is normalised at the same time, so `localhost` becomes
+ * `127.0.0.1` for the registered development redirect URI.
+ */
 export function statsLogin(request: Request): Response {
   const requestUrl = new URL(request.url);
-  const normalizedOrigin = originFromRequest(request);
-  if (requestUrl.origin !== normalizedOrigin) {
-    const normalizedUrl = new URL(request.url);
-    const origin = new URL(normalizedOrigin);
-    normalizedUrl.protocol = origin.protocol;
-    normalizedUrl.hostname = origin.hostname;
-    normalizedUrl.port = origin.port;
+  const normalized = new URL(originFromRequest(request));
+  const canonical = new URL(requestUrl.toString());
+  canonical.protocol = normalized.protocol;
+  canonical.hostname = normalized.hostname;
+  canonical.port = normalized.port;
+  canonical.searchParams.set(resumedParam, "1");
+
+  if (canonical.toString() !== requestUrl.toString()) {
     return new Response(null, {
       status: 302,
-      headers: { Location: normalizedUrl.toString() },
+      headers: { Location: canonical.toString() },
     });
   }
 
