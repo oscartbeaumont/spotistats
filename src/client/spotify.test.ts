@@ -2,7 +2,7 @@ import { Effect, Schema } from "effect";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { authStore, setAuthStore } from "./storage";
-import { getExportTracksPage, getProfile, isLikedSongs, PlaylistTrack, runSpotify } from "./spotify";
+import { getExportTracksPage, getProfile, isLikedSongs, PlaylistTrack, runSpotify, SpotifyProfile } from "./spotify";
 
 vi.mock("./storage", () => {
   let store: unknown;
@@ -74,5 +74,25 @@ describe("export playlist identity", () => {
   it("recognizes the synthetic library entry but not a malformed null-ID playlist", () => {
     expect(isLikedSongs({ name: "Liked Songs" })).toBe(true);
     expect(isLikedSongs({ name: "Liked Songs", id: null })).toBe(false);
+  });
+});
+
+describe("profile decoding", () => {
+  const profile = {
+    id: "user",
+    display_name: null,
+    uri: "spotify:user:user",
+    external_urls: { spotify: "https://open.spotify.com/user/user" },
+    followers: { total: 0 },
+  };
+
+  it("accepts an account with no email", () => {
+    const decoded = Schema.decodeUnknownSync(SpotifyProfile)({ ...profile, email: null });
+    expect(decoded.email).toBeNull();
+  });
+
+  it("accepts a profile that omits the email", () => {
+    const decoded = Schema.decodeUnknownSync(SpotifyProfile)(profile);
+    expect(decoded.email).toBeUndefined();
   });
 });

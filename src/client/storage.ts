@@ -8,7 +8,9 @@ const ProfileCache = Schema.Struct({
   icon: Schema.optional(Schema.String),
   url: Schema.optional(Schema.String),
   displayName: Schema.optional(Schema.String),
-  email: Schema.optional(Schema.String),
+  // Mirrors `SpotifyProfile`: an account with no email caches `null`, and a
+  // stricter schema here would drop the whole session on the next read.
+  email: Schema.optional(Schema.NullOr(Schema.String)),
   followers: Schema.optional(Schema.Number),
 });
 
