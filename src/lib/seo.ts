@@ -87,6 +87,17 @@ const legacyOrigins = new Set(["https://spotistats.js.org"]);
 export const onLegacyOrigin = (origin: string) => legacyOrigins.has(origin);
 
 /**
+ * The canonical URL this request should be handed to, or `null` when the
+ * browser should handle it where it is.
+ *
+ * Only the legacy alias hands over, and everything it hands over has to be a
+ * whole page load: the canonical origin is a different origin, so the SPA
+ * router cannot reach it.
+ */
+export const handoverUrl = (path: string, search: string, origin: string) =>
+  onLegacyOrigin(origin) ? canonicalUrl(path, search) : null;
+
+/**
  * Routes that are reachable without a Spotify session. `/` and `/login` are the
  * sign-in screen; `/privacy` and `/security` are the public policy pages.
  */
