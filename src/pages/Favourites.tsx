@@ -21,6 +21,7 @@ import {
 import { capture } from "~/client/analytics";
 import { authStore } from "~/client/storage";
 import { PageHeader } from "~/components/PageHeader";
+import { errorMessage } from "~/lib/errors";
 import { createShortcut, isEditableShortcutTarget } from "~/lib/shortcut";
 import { externalHref, spotifyUri } from "~/lib/url";
 
@@ -112,6 +113,7 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
   const [saveData, setSaveData] = createSignal(false);
   const [tail, setTail] = createSignal<Tail>({ source: null, items: [], next: null });
   const [loadingMore, setLoadingMore] = createSignal(false);
+  const [pagingError, setPagingError] = createSignal<string | null>(null);
   let sentinel: HTMLDivElement | undefined;
   let observer: IntersectionObserver | undefined;
 
@@ -174,6 +176,7 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
   const resetPaging = () => {
     setTail({ source: null, items: [], next: null });
     setRawSelected(0);
+    setPagingError(null);
   };
 
   const selectRange = (value: Range) => {
@@ -196,6 +199,13 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
         const base = previous.source === source ? previous.items : [];
         return { source, items: [...base, ...page.items], next: page.next };
       });
+      setPagingError(null);
+    } catch (error) {
+      // The paging effect calls this without awaiting it, so a rejection here
+      // would escape as an unhandled rejection rather than reaching the error
+      // boundary. Keep the rows already loaded and offer a retry instead.
+      console.error("Loading the next favourites page failed", error);
+      setPagingError(errorMessage(error));
     } finally {
       setLoadingMore(false);
     }
@@ -408,6 +418,20 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
           </Show>
         </Show>
       </Loading>
+      <Show when={pagingError()}>
+        {(message) => (
+          <div class="mt-6 border-4 border-red-800 p-4">
+            <p class="text-sm text-red-700">Loading more failed: {message()}</p>
+            <button
+              type="button"
+              onClick={() => void loadMore(loadedItems().length)}
+              class="mt-3 border-[3px] border-[#0a0a0a] px-3 py-1.5 text-[0.65rem] font-black uppercase tracking-widest transition hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+      </Show>
       <div
         ref={(el) => {
           sentinel = el;
