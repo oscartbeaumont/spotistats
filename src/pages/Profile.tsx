@@ -52,6 +52,7 @@ const fetchStatus = async (): Promise<TrackingStatus> => {
     return {
       enabled: false,
       consentedAt: null,
+      authorizationExpiresAt: null,
       lastReadAt: null,
       disabledAt: null,
       lastPlayedAtMs: null,

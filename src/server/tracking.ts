@@ -9,9 +9,16 @@ import {
   type TrackingStatus,
   UpstreamError,
 } from "~/api";
+import { authorizationExpiry } from "~/lib/authorization";
 
 import { exportCsv, readExport, readInsights } from "./insights";
-import { Spotify, SpotifyUnauthorized, type SpotifyProfile, type SpotifyToken } from "./spotify";
+import {
+  Spotify,
+  SpotifyAuthRejected,
+  SpotifyUnauthorized,
+  type SpotifyProfile,
+  type SpotifyToken,
+} from "./spotify";
 import { nextWatermark } from "./watermark";
 
 /**
@@ -97,9 +104,11 @@ const make = Effect.gen(function* () {
       `.pipe(Effect.mapError(databaseError("Failed to count listens")));
 
       const row = rows[0];
+      const consentedAt = row?.consentedAt ?? null;
       return {
         enabled: !!row?.enabled,
-        consentedAt: row?.consentedAt ?? null,
+        consentedAt,
+        authorizationExpiresAt: authorizationExpiry(consentedAt),
         lastReadAt: row?.lastReadAt ?? null,
         disabledAt: row?.disabledAt ?? null,
         lastPlayedAtMs: row?.lastPlayedAtMs ?? null,
@@ -437,7 +446,7 @@ export interface TrackingShape {
   readonly enqueueDue: (limit?: number) => Effect.Effect<number, UpstreamError>;
   readonly sync: (
     spotifyUserId: string,
-  ) => Effect.Effect<void, UpstreamError | SpotifyUnauthorized>;
+  ) => Effect.Effect<void, UpstreamError | SpotifyUnauthorized | SpotifyAuthRejected>;
 }
 
 export class Tracking extends Context.Service<Tracking, TrackingShape>()(
