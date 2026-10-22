@@ -66,6 +66,22 @@ export default function PrivacyPage() {
       </section>
 
       <section>
+        <h2 class="mb-2 text-xs font-black uppercase tracking-[0.2em]">Music discovery</h2>
+        <p>
+          When you generate a selection, Spotistats uses your tracked history and
+          Spotify favourites, recommendations, liked-song checks and musical
+          attributes. No music data is sent to an AI model. The selection and
+          playlist-save progress stay in this tab&apos;s session storage so you can
+          reconnect or retry a save. Generating a new selection replaces that
+          draft; signing out, deleting site data, or closing the tab clears it.
+          Saving requires separate permission
+          and creates a private playlist in your Spotify account only when you
+          confirm. Deleting Spotistats data does not delete playlists you saved
+          to Spotify.
+        </p>
+      </section>
+
+      <section>
         <h2 class="mb-2 text-xs font-black uppercase tracking-[0.2em]">
           Cookies
         </h2>

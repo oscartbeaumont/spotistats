@@ -1,10 +1,12 @@
 import { Effect } from "effect";
+import { SqlClient } from "effect/sql/SqlClient";
 import { HttpApiBuilder, HttpApiError } from "effect/http-api";
 
 import { Api } from "~/api";
 
 import { Spotify, type SpotifyProfile } from "./spotify";
 import { Tracking } from "./tracking";
+import { readDiscoveryHistory, readKnownTracks } from "./discovery";
 
 /**
  * Resolves the Spotify user behind a bearer token. A token Spotify rejects
@@ -38,6 +40,16 @@ const withUser = <A, E, R>(
 
 export const AccountGroupLive = HttpApiBuilder.group(Api, "account", (handlers) =>
   handlers
+    .handle("discoveryHistory", ({ headers }) =>
+      withUser(headers, (user) => Effect.gen(function* () {
+        return yield* readDiscoveryHistory(yield* SqlClient, user.id);
+      })),
+    )
+    .handle("discoveryKnown", ({ headers, payload }) =>
+      withUser(headers, (user) => Effect.gen(function* () {
+        return yield* readKnownTracks(yield* SqlClient, user.id, payload.ids);
+      })),
+    )
     .handle("status", ({ headers }) =>
       withUser(headers, (user) =>
         Effect.gen(function* () {

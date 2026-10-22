@@ -55,6 +55,7 @@ const titleByPath = (path: string) => {
     return "Export your Spotify data — Spotistats";
   if (path.startsWith("/account"))
     return "Spotify stats account — Spotistats";
+  if (path.startsWith("/discover")) return "Discover music — Spotistats";
   if (path.startsWith("/privacy")) return "Privacy policy — Spotistats";
   if (path.startsWith("/security")) return "Security policy — Spotistats";
   return "Spotistats — Your Spotify, decoded";

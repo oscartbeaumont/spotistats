@@ -73,6 +73,8 @@ const authorization = () => {
 };
 
 export const accountApi = {
+  discoveryHistory: () => runApi(client.account.discoveryHistory({ headers: { authorization: authorization() } })),
+  discoveryKnown: (ids: readonly string[]) => runApi(client.account.discoveryKnown({ headers: { authorization: authorization() }, payload: { ids } })),
   status: () => runApi(client.account.status({ headers: { authorization: authorization() } })),
   insights: (query: InsightsQuery) =>
     runApi(

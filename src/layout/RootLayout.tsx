@@ -129,6 +129,7 @@ export function RootLayout(props: {
             <a href="/account" class={linkClass("/account")}>
               Account <span class="ml-2 hidden text-[0.6rem] opacity-50 md:inline">Alt+4</span>
             </a>
+            <a href="/discover" class={linkClass("/discover")}>Discover</a>
           </nav>
           <button
             onClick={() => {
