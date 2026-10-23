@@ -15,6 +15,81 @@ export type PostHogClient = typeof import("posthog-js")["default"];
 
 let client: Promise<PostHogClient> | undefined;
 
+/** One frame of a PostHog `$exception` stack. Client events use `filename`. */
+type ExceptionFrame = { filename?: string; source?: string };
+
+/** Every stack frame across an `$exception` event's exception list. */
+function exceptionFrames(event: {
+  properties?: Record<string, unknown>;
+}): ExceptionFrame[] {
+  const list = event.properties?.["$exception_list"];
+  if (!Array.isArray(list)) return [];
+  const frames: ExceptionFrame[] = [];
+  for (const exception of list) {
+    const stack = (exception as { stacktrace?: { frames?: unknown } } | null)
+      ?.stacktrace;
+    if (Array.isArray(stack?.frames)) {
+      frames.push(...(stack.frames as ExceptionFrame[]));
+    }
+  }
+  return frames;
+}
+
+/**
+ * Whether a frame names a script the app served.
+ *
+ * Injected and inline scripts are never bundled by the app, so their frames
+ * name something else: Chrome iOS reports its injected content script and the
+ * browser reports inline handlers as the page URL, Chromium reports inline and
+ * string-evaluated frames as `<anonymous>`, and extensions use their own
+ * scheme. A script the app served is a same-origin `http(s)` URL, or a path
+ * that resolves to one, other than the document itself.
+ */
+function namesAppScript(frame: ExceptionFrame, pageUrl: string): boolean {
+  const filename = frame.filename ?? frame.source;
+  if (!filename || filename.startsWith("<")) return false;
+  try {
+    const script = new URL(filename, pageUrl);
+    const document = new URL(pageUrl);
+    if (script.origin !== document.origin) return false;
+    if (script.protocol !== "http:" && script.protocol !== "https:") {
+      return false;
+    }
+    return script.pathname !== document.pathname;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether an exception came from a script the app does not serve.
+ *
+ * PostHog groups these as app issues because injected frames share the app's
+ * origin, and its own injected-script filter only matches the scripts that
+ * sign their errors (Firefox's `__firefox__` and Chrome iOS's `__gCrWeb`). A
+ * real error from this app always has at least one frame in a script it
+ * served, so an exception with no such frame is safe to drop.
+ */
+export function isInjectedScriptError(
+  frames: ReadonlyArray<ExceptionFrame>,
+  pageUrl: string,
+): boolean {
+  if (frames.length === 0) return false;
+  return frames.every((frame) => !namesAppScript(frame, pageUrl));
+}
+
+/** Whether PostHog should drop this event before it is sent. */
+function shouldDropEvent(event: {
+  event?: string;
+  properties?: Record<string, unknown>;
+}): boolean {
+  if (event.event !== "$exception") return false;
+  const currentUrl = event.properties?.["$current_url"];
+  const pageUrl =
+    typeof currentUrl === "string" ? currentUrl : window.location.href;
+  return isInjectedScriptError(exceptionFrames(event), pageUrl);
+}
+
 /**
  * Loads and initializes PostHog once, or returns `undefined` when analytics
  * must not run (server render, or a development build). Callers share the same
@@ -30,6 +105,13 @@ function analytics(): Promise<PostHogClient> | undefined {
       defaults: "2025-05-24",
       person_profiles: "identified_only",
       capture_exceptions: true,
+      // Injected and inline scripts report the page URL or `<anonymous>` as
+      // their frame filename, so their errors look like app crashes. Drop them
+      // rather than filing an issue the app cannot fix.
+      before_send: (event) => {
+        if (event === null) return event;
+        return shouldDropEvent(event) ? null : event;
+      },
     });
     return posthog;
   });
