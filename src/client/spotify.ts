@@ -1,4 +1,4 @@
-import { Effect, Schedule, Schema } from "effect";
+import { Effect, Option, Schedule, Schema } from "effect";
 import { untrack } from "solid-js";
 
 import { authStore, setAuthStore } from "./storage";
@@ -42,6 +42,26 @@ export class SpotifyApiError extends Schema.TaggedError<SpotifyApiError>()(
   }
 }
 
+/**
+ * A successful response whose body the app cannot use.
+ *
+ * This is not an HTTP failure, so it must not reuse `SpotifyApiError` and its
+ * status: a decode failure used to travel as `SpotifyApiError(200)`, which read
+ * as "Spotify answered 200" in error tracking and named no endpoint.
+ */
+export class SpotifyResponseError extends Schema.TaggedError<SpotifyResponseError>()(
+  "SpotifyResponseError",
+  { endpoint: Schema.String, detail: Schema.String, message: Schema.String },
+) {
+  constructor(readonly endpoint: string, readonly detail: string) {
+    super({
+      endpoint,
+      detail,
+      message: `Spotistats: unexpected response from ${endpoint}`,
+    });
+  }
+}
+
 export class SpotifyRequestError extends Schema.TaggedError<SpotifyRequestError>()(
   "SpotifyRequestError",
   { cause: Schema.Unknown, message: Schema.String },
@@ -54,6 +74,7 @@ export class SpotifyRequestError extends Schema.TaggedError<SpotifyRequestError>
 export type SpotifyError =
   | SpotifyUnauthenticatedError
   | SpotifyApiError
+  | SpotifyResponseError
   | SpotifyRequestError;
 
 const Image = Schema.Struct({ url: Schema.String });
@@ -140,6 +161,19 @@ export type SpotifyPage<T> = {
   offset: number;
 };
 
+/**
+ * A page the favourites list can append, with where the next page starts.
+ *
+ * `nextOffset` is Spotify's item numbering, not the number of rows kept. When
+ * an entry is skipped, counting the kept rows would re-request it on the next
+ * page and shift every later offset.
+ */
+export type SpotifyListing<T> = {
+  items: readonly T[];
+  next: string | null;
+  nextOffset: number;
+};
+
 const AudioFeatures = Schema.Struct({
   danceability: Schema.Number,
   energy: Schema.Number,
@@ -164,17 +198,31 @@ export type SpotifyArtist = typeof Artist.Type;
 
 const retryable = (status: number) => [429, 500, 502, 503].includes(status);
 
+/**
+ * The Spotify endpoint a URL hits, with ids masked.
+ *
+ * It labels a shape failure without leaking a track, album or playlist id into
+ * the message or into error grouping.
+ */
+const endpointOf = (url: string): string => {
+  try {
+    return new URL(url, "https://api.spotify.com").pathname.replace(
+      /\/[0-9A-Za-z]{22}(?=\/|$)/g,
+      "/:id",
+    );
+  } catch {
+    return "Spotify";
+  }
+};
+
 const decode = <S extends Schema.ConstraintDecoder<unknown>>(
   schema: S,
   value: unknown,
-): Effect.Effect<S["Type"], SpotifyApiError> =>
+  url: string,
+): Effect.Effect<S["Type"], SpotifyResponseError> =>
   Schema.decodeUnknownEffect(schema)(value).pipe(
     Effect.mapError(
-      (error) =>
-        new SpotifyApiError(200, {
-          error: "Spotify returned an unexpected response shape",
-          detail: String(error),
-        }),
+      (error) => new SpotifyResponseError(endpointOf(url), String(error)),
     ),
   );
 
@@ -211,7 +259,7 @@ const request = <S extends Schema.ConstraintDecoder<unknown>>(
       return yield* Effect.fail(new SpotifyUnauthenticatedError());
     }
 
-    if (response.status === 204) return yield* decode(schema, null);
+    if (response.status === 204) return yield* decode(schema, null, url);
 
     if (!response.ok) {
       const body = yield* Effect.tryPromise({
@@ -233,7 +281,7 @@ const request = <S extends Schema.ConstraintDecoder<unknown>>(
           detail: String(cause),
         }),
     });
-    return yield* decode(schema, json);
+    return yield* decode(schema, json, url);
   }).pipe(
     Effect.retry({
       schedule: Schedule.exponential("500 millis"),
@@ -251,23 +299,63 @@ export const runSpotify = <A, E>(effect: Effect.Effect<A, E>): Promise<A> =>
 export const getProfile = () =>
   request(SpotifyProfile, "https://api.spotify.com/v1/me");
 
+/** Every saved-albums entry, whether or not its album can be rendered. */
+const savedAlbumPage = Schema.Struct({
+  items: Schema.Array(Schema.Unknown),
+  next: Schema.NullOr(Schema.String),
+  total: Schema.Number,
+  limit: Schema.Number,
+  offset: Schema.Number,
+});
+
+/**
+ * The album on a saved-albums entry, or `undefined` when the entry has none.
+ *
+ * Spotify returns saved entries with no album, for example one pulled from the
+ * catalog or unavailable in the user's market. Such an entry cannot be shown,
+ * but it also must not fail the whole page, so each entry is decoded on its own.
+ */
+const savedAlbum = (entry: unknown): SpotifyItem | undefined => {
+  if (typeof entry !== "object" || entry === null || !("album" in entry)) {
+    return undefined;
+  }
+  return Option.getOrUndefined(
+    Schema.decodeUnknownOption(SpotifyItem)(entry.album),
+  );
+};
+
 export const getTopTracksPage = (range: "long" | "medium" | "short", offset = 0) =>
   request(
     page(SpotifyItem),
     `https://api.spotify.com/v1/me/top/tracks?limit=50&offset=${offset}&time_range=${range}_term`,
+  ).pipe(
+    Effect.map(
+      (data): SpotifyListing<SpotifyItem> => ({
+        items: data.items,
+        next: data.next,
+        nextOffset: data.offset + data.items.length,
+      }),
+    ),
   );
 
 export const getSavedAlbumsPage = (offset = 0) =>
   request(
-    Schema.Struct({
-      items: Schema.Array(Schema.Struct({ album: SpotifyItem })),
-      next: Schema.NullOr(Schema.String),
-      total: Schema.Number,
-      limit: Schema.Number,
-      offset: Schema.Number,
-    }),
+    savedAlbumPage,
     `https://api.spotify.com/v1/me/albums?limit=50&offset=${offset}`,
-  ).pipe(Effect.map((data) => ({ ...data, items: data.items.map((entry) => entry.album) })));
+  ).pipe(
+    Effect.map(
+      (data): SpotifyListing<SpotifyItem> => ({
+        items: data.items.flatMap((entry) => {
+          const album = savedAlbum(entry);
+          return album ? [album] : [];
+        }),
+        next: data.next,
+        // Spotify's numbering, not the kept rows: a skipped album must not
+        // shift the offset every later page is requested at.
+        nextOffset: data.offset + data.items.length,
+      }),
+    ),
+  );
 
 const playlistPage = Schema.Struct({
   items: Schema.Array(Playlist),

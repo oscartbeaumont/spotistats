@@ -33,6 +33,7 @@ const RANGES: readonly Range[] = ["short", "medium", "long"];
 interface Page {
   items: readonly SpotifyItem[];
   next: string | null;
+  nextOffset: number;
 }
 
 /**
@@ -46,6 +47,7 @@ interface Tail {
   source: Page | null;
   items: SpotifyItem[];
   next: string | null;
+  nextOffset: number;
 }
 
 const hasSaveData = () => {
@@ -111,7 +113,12 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
   const [rawSelected, setRawSelected] = createSignal(0);
   const [atBottom, setAtBottom] = createSignal(false);
   const [saveData, setSaveData] = createSignal(false);
-  const [tail, setTail] = createSignal<Tail>({ source: null, items: [], next: null });
+  const [tail, setTail] = createSignal<Tail>({
+    source: null,
+    items: [],
+    next: null,
+    nextOffset: 0,
+  });
   const [loadingMore, setLoadingMore] = createSignal(false);
   const [pagingError, setPagingError] = createSignal<string | null>(null);
   let sentinel: HTMLDivElement | undefined;
@@ -126,7 +133,7 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
   // pages append to the tail, so a load never refetches the earlier pages.
   const firstPage = createMemo(async () => {
     if (props.kind === "albums" && saveData()) {
-      return { items: [] as SpotifyItem[], next: null };
+      return { items: [] as SpotifyItem[], next: null, nextOffset: 0 };
     }
     return fetchPage(0);
   });
@@ -154,6 +161,20 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
   };
 
   /**
+   * Where the next page starts, in Spotify's numbering.
+   *
+   * Rows the API returns but the list cannot render, such as a saved album
+   * that no longer exists, are not counted, so this comes from the last page
+   * rather than from the number of loaded rows.
+   */
+  const nextPageOffset = () => {
+    const page = firstPageNow();
+    if (!page) return 0;
+    const current = tail();
+    return current.source === page ? current.nextOffset : page.nextOffset;
+  };
+
+  /**
    * Non-suspending read for handlers, effects, and the scroll trigger.
    * `latest` throws for a source that has never resolved, and `isPending`
    * itself re-throws in a tracking context for such a source, so both are
@@ -174,7 +195,7 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
   );
 
   const resetPaging = () => {
-    setTail({ source: null, items: [], next: null });
+    setTail({ source: null, items: [], next: null, nextOffset: 0 });
     setRawSelected(0);
     setPagingError(null);
   };
@@ -197,7 +218,12 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
       if (firstPageNow() !== source) return;
       setTail((previous) => {
         const base = previous.source === source ? previous.items : [];
-        return { source, items: [...base, ...page.items], next: page.next };
+        return {
+          source,
+          items: [...base, ...page.items],
+          next: page.next,
+          nextOffset: page.nextOffset,
+        };
       });
       setPagingError(null);
     } catch (error) {
@@ -231,11 +257,12 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
       const pending = isPending(items);
       // Track only the trigger and the offset. `loadMore` writes `loadingMore`
       // and the tail, so reading either here would make this effect re-run from
-      // its own write; its guards live inside `loadMore` instead.
+      // its own write; its guards live inside `loadMore` instead. The offset
+      // does follow the tail: every page that lands must advance it.
       return {
         pending,
         bottom: atBottom(),
-        offset: pending ? 0 : (latest(items)?.length ?? 0),
+        offset: pending ? 0 : nextPageOffset(),
       };
     },
     ({ pending, bottom, offset }) => {
@@ -424,7 +451,7 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
             <p class="text-sm text-red-700">Loading more failed: {message()}</p>
             <button
               type="button"
-              onClick={() => void loadMore(loadedItems().length)}
+              onClick={() => void loadMore(nextPageOffset())}
               class="mt-3 border-[3px] border-[#0a0a0a] px-3 py-1.5 text-[0.65rem] font-black uppercase tracking-widest transition hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
             >
               Retry

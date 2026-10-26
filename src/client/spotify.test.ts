@@ -2,7 +2,15 @@ import { Effect, Schema } from "effect";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { authStore, setAuthStore } from "./storage";
-import { getExportTracksPage, getProfile, isLikedSongs, PlaylistTrack, runSpotify, SpotifyProfile } from "./spotify";
+import {
+  getExportTracksPage,
+  getProfile,
+  getSavedAlbumsPage,
+  isLikedSongs,
+  PlaylistTrack,
+  runSpotify,
+  SpotifyProfile,
+} from "./spotify";
 
 vi.mock("./storage", () => {
   let store: unknown;
@@ -74,6 +82,77 @@ describe("export playlist identity", () => {
   it("recognizes the synthetic library entry but not a malformed null-ID playlist", () => {
     expect(isLikedSongs({ name: "Liked Songs" })).toBe(true);
     expect(isLikedSongs({ name: "Liked Songs", id: null })).toBe(false);
+  });
+});
+
+describe("saved album decoding", () => {
+  const album = {
+    name: "Album",
+    type: "album",
+    uri: "spotify:album:album",
+    external_urls: { spotify: "https://open.spotify.com/album/album" },
+    images: [{ url: "https://i.scdn.co/image/album" }],
+    artists: [{ name: "Artist" }],
+  };
+
+  const respond = (body: unknown) => {
+    setAuthStore({
+      status: "authenticated",
+      accessToken: "Bearer token",
+      linkToUri: false,
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json(body)));
+  };
+
+  const page = (items: unknown[], offset = 0, next: string | null = null) => ({
+    items,
+    next,
+    total: items.length,
+    limit: 50,
+    offset,
+  });
+
+  it("keeps a page whose album Spotify no longer returns", async () => {
+    respond(page([{ added_at: null, album: null }, { added_at: null, album }]));
+    const result = await runSpotify(getSavedAlbumsPage());
+    expect(result.items.map((item) => item.name)).toEqual(["Album"]);
+  });
+
+  it("skips an album that cannot be rendered instead of failing the page", async () => {
+    respond(page([{ added_at: null, album: { name: "Broken" } }, { album }]));
+    const result = await runSpotify(getSavedAlbumsPage());
+    expect(result.items.map((item) => item.name)).toEqual(["Album"]);
+  });
+
+  it("advances by Spotify's items, not by the rows it kept", async () => {
+    respond(
+      page(
+        [{ album: null }],
+        50,
+        "https://api.spotify.com/v1/me/albums?offset=51",
+      ),
+    );
+    const result = await runSpotify(getSavedAlbumsPage(50));
+    expect(result.items).toEqual([]);
+    expect(result.nextOffset).toBe(51);
+  });
+
+  it("names the endpoint in a shape failure, not a fake status", async () => {
+    respond({ items: "not a page" });
+    await expect(runSpotify(getSavedAlbumsPage())).rejects.toMatchObject({
+      _tag: "SpotifyResponseError",
+      message: "Spotistats: unexpected response from /v1/me/albums",
+    });
+  });
+
+  it("masks ids in the endpoint a shape failure names", async () => {
+    respond({ items: "not a page" });
+    const playlist = { id: "0123456789abcdefghijkl", name: "Playlist" };
+    await expect(
+      runSpotify(getExportTracksPage(playlist)),
+    ).rejects.toMatchObject({
+      message: "Spotistats: unexpected response from /v1/playlists/:id/tracks",
+    });
   });
 });
 
