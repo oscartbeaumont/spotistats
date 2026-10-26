@@ -94,6 +94,14 @@ export default defineConfig({
   server: {
     host: "127.0.0.1",
   },
+  // PostHog error tracking fetches a served bundle's source map to symbolicate
+  // production stack traces. Only the client needs them: without one every
+  // report arrives minified, which made the `SpotifyApiError` triage a guess.
+  environments: {
+    client: {
+      build: { sourcemap: true },
+    },
+  },
   plugins: [
     // Start mode with SSR. The plugin owns the client entry, the document
     // shell and the server render. `external` hands the Worker entry to us,

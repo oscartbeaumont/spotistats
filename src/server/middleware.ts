@@ -66,5 +66,13 @@ export default async function middleware(
 
   if (isPostHogPath(pathname)) return proxyPostHog(request);
 
+  // Static assets are served before the Worker, so a `/assets/*` request that
+  // reaches this point names a file that does not exist. Falling through to the
+  // page render answered 200 with HTML: PostHog read `index.html` as a source
+  // map, and a missing script looked like a successful download.
+  if (pathname.startsWith("/assets/")) {
+    return withSecurityHeaders(new Response("Not Found", { status: 404 }));
+  }
+
   return withSecurityHeaders(await next());
 }
