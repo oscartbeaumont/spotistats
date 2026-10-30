@@ -12,32 +12,75 @@ import { Tracking } from "./tracking";
  */
 
 const statsScopes = ["user-read-email", "user-read-recently-played"];
-const stateCookie = "spotify_stats_state";
 
-const cookie = (name: string, value: string, maxAgeSeconds: number) =>
-  `${name}=${encodeURIComponent(value)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAgeSeconds}`;
+/** How long the browser may sit on Spotify's consent screen before the handshake expires. */
+const stateLifetimeMs = 10 * 60 * 1000;
 
-const clearCookie = (name: string) =>
-  `${name}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
+const encoder = new TextEncoder();
 
-const parseCookie = (request: Request, name: string) => {
-  const header = request.headers.get("Cookie") ?? "";
-  const value = header
-    .split(";")
-    .map((part) => part.trim())
-    .find((part) => part.startsWith(`${name}=`));
-  if (!value) return null;
-  try {
-    return decodeURIComponent(value.slice(name.length + 1));
-  } catch {
-    return null;
-  }
-};
+const toHex = (bytes: Uint8Array) =>
+  Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 
 const randomState = () =>
   Array.from(crypto.getRandomValues(new Uint8Array(24)), (byte) =>
     byte.toString(16).padStart(2, "0"),
   ).join("");
+
+/** Compares two hex strings without leaking where they first differ. */
+const stateMatches = (left: string, right: string) => {
+  if (left.length !== right.length) return false;
+  let difference = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  }
+  return difference === 0;
+};
+
+/**
+ * Signs the OAuth state instead of storing it in a cookie.
+ *
+ * The state cookie was dropped before the callback on iOS Safari, which failed
+ * the setup with `missing_state_cookie` even though Spotify had authorised the
+ * account. A signature needs no browser storage, so the handshake survives
+ * cookie blocking, ITP and the redirect through Spotify's consent page.
+ *
+ * The payload is a random nonce plus an issue time; the HMAC uses the client
+ * secret that is already required to exchange the code, so no new secret or
+ * table is involved.
+ */
+const signState = async (payload: string) => {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(env.SPOTIFY_CLIENT_SECRET),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    encoder.encode(payload),
+  );
+  return toHex(new Uint8Array(signature));
+};
+
+export const createState = async () => {
+  const payload = `${randomState()}.${Date.now().toString(36)}`;
+  return `${payload}.${await signState(payload)}`;
+};
+
+/** Whether `state` was minted by this worker and is still inside its window. */
+export const stateIsValid = async (state: string) => {
+  const parts = state.split(".");
+  if (parts.length !== 3) return false;
+  const [nonce, issuedAt, signature] = parts;
+  if (!nonce || !issuedAt || !signature) return false;
+  const issued = Number.parseInt(issuedAt, 36);
+  if (!Number.isFinite(issued)) return false;
+  const age = Date.now() - issued;
+  if (age < 0 || age > stateLifetimeMs) return false;
+  return stateMatches(signature, await signState(`${nonce}.${issuedAt}`));
+};
 
 const originFromRequest = (request: Request) => {
   const url = new URL(request.url);
@@ -49,14 +92,14 @@ const redirectUri = (request: Request) =>
   `${originFromRequest(request)}/account/stats/callback`;
 
 const failed = (reason: string) => {
-  // The reason used to travel in the URL; keep it in the log instead so the
-  // account page can hand the failure straight to the error boundary.
+  // Log for the worker console, and carry a short machine code in the URL so
+  // the account page can report *why* the setup failed to PostHog. Only these
+  // fixed codes are ever sent; the raw cause stays in the log.
   console.warn(`Spotify stats setup failed: ${reason}`);
   return new Response(null, {
     status: 302,
     headers: {
-      Location: "/account?stats=failed",
-      "Set-Cookie": clearCookie(stateCookie),
+      Location: `/account?stats=failed&reason=${encodeURIComponent(reason)}`,
     },
   });
 };
@@ -80,18 +123,14 @@ const resumedParam = "resumed";
 /**
  * Starts the listening-stats OAuth flow.
  *
- * The state cookie is host-scoped, and a browser stores it against the host it
- * requested, which is not always the host this worker answers as: the legacy
- * `spotistats.js.org` alias is proxied here with the canonical host already
- * rewritten, so `request.url` is `spotistats.otbeaumont.me` even for a browser
- * on `spotistats.js.org`. Spotify then returns to the canonical callback, where
- * the js.org cookie is not sent and the handshake dies with
- * `missing_state_cookie`. Redirect through the canonical origin before setting
- * anything, so the browser stores the state against the host Spotify returns
- * to. The host is normalised at the same time, so `localhost` becomes
- * `127.0.0.1` for the registered development redirect URI.
+ * Redirect through the canonical origin before handing the browser to Spotify,
+ * so the registered redirect URI is always the host the worker answers as. The
+ * legacy `spotistats.js.org` alias is proxied here with the canonical host
+ * already rewritten, and `localhost` becomes `127.0.0.1` for the development
+ * redirect URI. The state itself is signed rather than host-scoped, so this hop
+ * is only about the redirect URI.
  */
-export function statsLogin(request: Request): Response {
+export async function statsLogin(request: Request): Promise<Response> {
   const requestUrl = new URL(request.url);
   const normalized = new URL(originFromRequest(request));
   const canonical = new URL(requestUrl.toString());
@@ -107,12 +146,11 @@ export function statsLogin(request: Request): Response {
     });
   }
 
-  const state = randomState();
   const params = new URLSearchParams({
     client_id: env.VITE_SPOTIFY_CLIENT_ID,
     response_type: "code",
     redirect_uri: redirectUri(request),
-    state,
+    state: await createState(),
     scope: statsScopes.join(" "),
     show_dialog: "true",
   });
@@ -121,7 +159,6 @@ export function statsLogin(request: Request): Response {
     status: 302,
     headers: {
       Location: `https://accounts.spotify.com/authorize?${params.toString()}`,
-      "Set-Cookie": cookie(stateCookie, state, 10 * 60),
     },
   });
 }
@@ -139,16 +176,10 @@ export function statsCallback(
 
     const code = url.searchParams.get("code");
     const state = url.searchParams.get("state");
-    const expectedState = parseCookie(request, stateCookie);
-    if (!code || !state || !expectedState || state !== expectedState) {
-      const reason = !code
-        ? "missing_code"
-        : !state
-          ? "missing_state"
-          : !expectedState
-            ? "missing_state_cookie"
-            : "state_mismatch";
-      return failed(reason);
+    if (!code) return failed("missing_code");
+    if (!state) return failed("missing_state");
+    if (!(yield* Effect.promise(() => stateIsValid(state)))) {
+      return failed("invalid_state");
     }
 
     const token = yield* spotify.exchangeCode(code, redirectUri(request));
@@ -157,10 +188,7 @@ export function statsCallback(
 
     return new Response(null, {
       status: 302,
-      headers: {
-        Location: "/account?stats=enabled",
-        "Set-Cookie": clearCookie(stateCookie),
-      },
+      headers: { Location: "/account?stats=enabled" },
     });
   }).pipe(
     Effect.catchCause((cause) => {

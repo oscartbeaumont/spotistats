@@ -44,7 +44,7 @@ export default async function middleware(
 
   if (pathname === "/account/stats/login") {
     return request.method === "GET"
-      ? withSecurityHeaders(statsLogin(request))
+      ? withSecurityHeaders(await statsLogin(request))
       : new Response("Method Not Allowed", { status: 405 });
   }
 

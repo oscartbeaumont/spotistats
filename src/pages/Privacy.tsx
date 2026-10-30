@@ -87,8 +87,8 @@ export default function PrivacyPage() {
         </h2>
         <p>
           Spotistats sets no tracking cookies. The listening-stats sign-in flow
-          sets a single short-lived, HTTP-only <code>spotify_stats_state</code>{" "}
-          cookie to protect the OAuth callback against cross-site requests.
+          needs no cookie: its OAuth state is a short-lived signed value carried
+          on the redirect and checked when Spotify sends you back.
         </p>
       </section>
 

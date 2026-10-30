@@ -20,6 +20,16 @@ import { errorMessage } from "~/lib/errors";
 import { formatDate } from "~/lib/format";
 import { createShortcut, isEditableShortcutTarget } from "~/lib/shortcut";
 
+/** Fixed reason codes the worker puts on a failed stats handshake. */
+const statsFailureMessages: Record<string, string> = {
+  spotify_denied: "Spotify did not grant access.",
+  spotify_credentials: "Spotify rejected the app's credentials.",
+  missing_code: "Spotify did not return an authorization code.",
+  missing_state: "The Spotify handshake was missing its state.",
+  invalid_state: "The Spotify handshake expired or was invalid.",
+  internal_error: "The Spotify handshake failed on the server.",
+};
+
 export default function AccountPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -32,10 +42,13 @@ export default function AccountPage() {
     ),
   );
   const [statsResult] = createSignal(snapshot.get("stats"));
+  const statsFailure = snapshot.get("reason");
 
   // A failed stats handshake is a setup problem, not page content. Clear the
   // one-shot query so a boundary retry does not rethrow, then hand the error to
-  // the boundary, which shows it and reports it to PostHog.
+  // the boundary, which shows it and reports it to PostHog. The worker sends a
+  // fixed reason code, which keeps the failure diagnosable without leaking the
+  // underlying cause.
   if (typeof window !== "undefined" && statsResult() === "failed") {
     window.history.replaceState(
       null,
@@ -43,9 +56,14 @@ export default function AccountPage() {
       window.location.pathname || "/account",
     );
     // Keep the conversion funnel event; the boundary reports the error itself.
-    capture("stats_sync_failed", { reason: null });
+    capture("stats_sync_failed", { reason: statsFailure });
+    const explanation = statsFailure
+      ? statsFailureMessages[statsFailure]
+      : undefined;
     throw new Error(
-      "Connecting Spotify listening stats did not complete. Try connecting again; if it keeps failing, report this error.",
+      `Connecting Spotify listening stats did not complete.${
+        explanation ? ` ${explanation}` : ""
+      } Try connecting again; if it keeps failing, report this error.`,
     );
   }
 
