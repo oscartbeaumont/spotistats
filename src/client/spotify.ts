@@ -35,10 +35,20 @@ export class SpotifyUnauthenticatedError extends Schema.TaggedError<SpotifyUnaut
 
 export class SpotifyApiError extends Schema.TaggedError<SpotifyApiError>()(
   "SpotifyApiError",
-  { status: Schema.Number, body: Schema.Unknown, message: Schema.String },
+  {
+    status: Schema.Number,
+    body: Schema.Unknown,
+    // Only a 429 carries Spotify's `Retry-After`, in milliseconds.
+    retryAfterMs: Schema.optional(Schema.NullOr(Schema.Number)),
+    message: Schema.String,
+  },
 ) {
-  constructor(readonly status: number, readonly body: unknown) {
-    super({ status, body, message: `Spotistats: ${status}` });
+  constructor(
+    readonly status: number,
+    readonly body: unknown,
+    readonly retryAfterMs: number | null = null,
+  ) {
+    super({ status, body, retryAfterMs, message: `Spotistats: ${status}` });
   }
 }
 
@@ -196,7 +206,54 @@ const Artist = Schema.Struct({
 });
 export type SpotifyArtist = typeof Artist.Type;
 
-const retryable = (status: number) => [429, 500, 502, 503].includes(status);
+const retryable = (status: number) => [500, 502, 503].includes(status);
+
+/** Longest wait this app will park a request for before failing to the page. */
+const maxRetryDelayMs = 5_000;
+
+/**
+ * How long Spotify asked us to wait, in milliseconds.
+ *
+ * `Retry-After` is either a number of seconds or an HTTP date.
+ */
+const retryAfter = (response: Response): number | null => {
+  const header = response.headers.get("Retry-After");
+  if (!header) return null;
+  const seconds = Number(header);
+  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1_000);
+  const date = Date.parse(header);
+  return Number.isNaN(date) ? null : Math.max(0, date - Date.now());
+};
+
+/**
+ * Backoff for transient failures.
+ *
+ * A 429 says when Spotify will accept requests again. Retrying on our own
+ * schedule ignored that and spent both retries inside the same limit window,
+ * so the request failed anyway. Honour the header instead.
+ */
+const retrySchedule = Schedule.exponential("500 millis").pipe(
+  Schedule.modifyDelay(({ input, duration }) =>
+    Effect.succeed(
+      input instanceof SpotifyApiError && input.retryAfterMs !== null
+        ? Math.min(input.retryAfterMs, maxRetryDelayMs)
+        : duration,
+    ),
+  ),
+);
+
+/** Whether a failed request is transient, and worth a second attempt. */
+const retryableError = (error: SpotifyError): boolean => {
+  if (error instanceof SpotifyRequestError) return true;
+  if (!(error instanceof SpotifyApiError)) return false;
+  if (retryable(error.status)) return true;
+  // A rate limit that asks for longer than the cap is shown to the page, which
+  // offers a retry, rather than parking the request on it.
+  return (
+    error.status === 429 &&
+    (error.retryAfterMs === null || error.retryAfterMs <= maxRetryDelayMs)
+  );
+};
 
 /**
  * The Spotify endpoint a URL hits, with ids masked.
@@ -270,7 +327,13 @@ const request = <S extends Schema.ConstraintDecoder<unknown>>(
             detail: String(cause),
           }),
       }).pipe(Effect.catchTag("SpotifyApiError", (error) => Effect.succeed(error.body)));
-      return yield* Effect.fail(new SpotifyApiError(response.status, body));
+      return yield* Effect.fail(
+        new SpotifyApiError(
+          response.status,
+          body,
+          response.status === 429 ? retryAfter(response) : null,
+        ),
+      );
     }
 
     const json = yield* Effect.tryPromise({
@@ -284,11 +347,10 @@ const request = <S extends Schema.ConstraintDecoder<unknown>>(
     return yield* decode(schema, json, url);
   }).pipe(
     Effect.retry({
-      schedule: Schedule.exponential("500 millis"),
+      schedule: retrySchedule,
       times: 2,
-      while: (error) =>
-        !options && (error instanceof SpotifyRequestError ||
-        (error instanceof SpotifyApiError && retryable(error.status))),
+      // A mutation is not safe to resend.
+      while: (error) => !options && retryableError(error),
     }),
   );
 
