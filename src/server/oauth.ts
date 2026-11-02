@@ -125,10 +125,10 @@ const resumedParam = "resumed";
  *
  * Redirect through the canonical origin before handing the browser to Spotify,
  * so the registered redirect URI is always the host the worker answers as. The
- * legacy `spotistats.js.org` alias is proxied here with the canonical host
- * already rewritten, and `localhost` becomes `127.0.0.1` for the development
- * redirect URI. The state itself is signed rather than host-scoped, so this hop
- * is only about the redirect URI.
+ * legacy `spotistats.js.org` alias redirects to this host at the edge, and
+ * `localhost` becomes `127.0.0.1` for the development redirect URI. The state
+ * itself is signed rather than host-scoped, so this hop is only about the
+ * redirect URI.
  */
 export async function statsLogin(request: Request): Promise<Response> {
   const requestUrl = new URL(request.url);

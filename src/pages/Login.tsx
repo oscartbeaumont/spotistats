@@ -1,11 +1,11 @@
 import { useLocation, useNavigate } from "@solidjs/router";
-import { createEffect, createSignal, For, onSettled, Show } from "solid-js";
+import { createEffect, createSignal, For, Show } from "solid-js";
 
 import { capture } from "~/client/analytics";
 import { createLoginUrl, loginError } from "~/client/auth";
 import { authReady, authStore } from "~/client/storage";
 import { SeoContent } from "~/components/SeoContent";
-import { handoverUrl, isPublicPath } from "~/lib/seo";
+import { isPublicPath } from "~/lib/seo";
 
 const steps = [
   "Connect your Spotify account",
@@ -128,16 +128,6 @@ export default function LoginPage() {
 
   const signIn = async (source: "login_page" | "seo_cta" = "login_page") => {
     if (signingIn()) return;
-    // The PKCE verifier lives in `localStorage`, which is per-origin, and
-    // Spotify returns to the origin that started the flow. A session started on
-    // the legacy alias would be stranded there, so hand the sign-in to the
-    // canonical origin first: the hop is hidden inside the Spotify round trip,
-    // so it costs the visitor nothing.
-    const handover = handoverUrl("/login", "?start=1", window.location.origin);
-    if (handover) {
-      window.location.href = handover;
-      return;
-    }
     setSigningIn(true);
     capture("login_started", { source });
     try {
@@ -149,16 +139,6 @@ export default function LoginPage() {
       setSigningIn(false);
     }
   };
-
-  // The hop above lands here to sign in on the canonical origin. Start the flow
-  // rather than asking for a second click, and drop the flag so a reload does
-  // not start it again.
-  onSettled(() => {
-    if (typeof window === "undefined") return;
-    if (!new URLSearchParams(window.location.search).has("start")) return;
-    window.history.replaceState(null, "", window.location.pathname);
-    void signIn();
-  });
 
   return (
     <div class="flex min-h-screen flex-col">

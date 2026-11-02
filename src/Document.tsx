@@ -39,9 +39,9 @@ export default function Document(props: { children?: JSX.Element }) {
               <div class="mb-3 text-xs font-black uppercase tracking-[0.2em] text-[#5c5c5c]">
                 JavaScript Required
               </div>
-              <h1 class="mb-4 text-4xl font-black uppercase tracking-tighter">
+              <p class="mb-4 text-4xl font-black uppercase tracking-tighter">
                 Spotistats needs JavaScript
-              </h1>
+              </p>
               <p class="text-sm leading-7 text-[#555]">
                 This app connects to Spotify in your browser and uses
                 JavaScript to load your music data. Enable JavaScript, then
