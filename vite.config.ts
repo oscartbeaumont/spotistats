@@ -42,12 +42,16 @@ function solidClientManifest(): Plugin {
       manifest._base = environment.config.base || "/";
 
       const code = readFileSync(bundlePath, "utf8");
-      const regionStart = code.indexOf("virtual:solid-manifest");
-      const regionHeader =
-        regionStart < 0 ? -1 : code.lastIndexOf("//#region", regionStart);
-      const regionEnd =
-        regionStart < 0 ? -1 : code.indexOf("//#endregion", regionStart);
-      if (regionStart < 0 || regionHeader < 0 || regionEnd < 0) {
+      const marker = code.indexOf("virtual:solid-manifest");
+      const declarationStart = marker < 0 ? -1 : code.indexOf("var ", marker);
+      const declaration =
+        declarationStart < 0
+          ? null
+          : /^var\s+([A-Za-z0-9_$]+)\s*=\s*\{/.exec(code.slice(declarationStart));
+      const declarationEnd = declaration
+        ? code.indexOf("\n};", declarationStart)
+        : -1;
+      if (!declaration || declarationEnd < 0) {
         throw new Error(
           "Could not find the Solid client manifest in the Worker bundle.",
         );
@@ -56,11 +60,8 @@ function solidClientManifest(): Plugin {
       // The fallback build names the virtual manifest variable after the
       // plugin's internal alias. A build that found a client manifest inlines
       // it as `manifest` instead.
-      const name = code.includes("_virtual_solid_manifest_default")
-        ? "_virtual_solid_manifest_default"
-        : "manifest";
-      const replacement = `//#region virtual:solid-manifest\nvar ${name} = ${JSON.stringify(manifest)};\n`;
-      const withManifest = `${code.slice(0, regionHeader)}${replacement}${code.slice(regionEnd)}`;
+      const replacement = `var ${declaration[1]} = ${JSON.stringify(manifest)};\n`;
+      const withManifest = `${code.slice(0, declarationStart)}${replacement}${code.slice(declarationEnd + "\n};".length)}`;
 
       // Solid appends a `$$moduleUrl` export to every SSR module. The Worker
       // entry re-exports it, but Workers module exports must be functions or
@@ -104,12 +105,12 @@ export default defineConfig({
   },
   plugins: [
     // Start mode with SSR. The plugin owns the client entry, the document
-    // shell and the server render. `external` hands the Worker entry to us,
-    // because the worker also runs the sync queue and the cron trigger.
+    // shell and the server render. `externalServer` hands the Worker entry to
+    // us, because the worker also runs the sync queue and the cron trigger.
     solid({
       ssr: true,
       start: {
-        external: true,
+        externalServer: true,
         app: "./src/App.tsx",
         document: "./src/Document.tsx",
         middleware: "./src/server/middleware.ts",
