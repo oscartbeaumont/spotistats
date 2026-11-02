@@ -2,10 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   canonicalUrl,
-  handoverUrl,
   isContentPath,
   isPublicPath,
-  onLegacyOrigin,
   titleForPath,
 } from "./seo";
 
@@ -37,7 +35,7 @@ describe("public route helpers", () => {
   });
 });
 
-describe("canonical origin", () => {
+describe("canonical URL", () => {
   it("names the canonical host whatever host the browser is on", () => {
     expect(canonicalUrl("/")).toBe("https://spotistats.otbeaumont.me/");
     expect(canonicalUrl("/account")).toBe(
@@ -46,26 +44,5 @@ describe("canonical origin", () => {
     expect(canonicalUrl("/login", "?start=1")).toBe(
       "https://spotistats.otbeaumont.me/login?start=1",
     );
-  });
-
-  it("hands over only the legacy alias, never a dev or preview origin", () => {
-    expect(onLegacyOrigin("https://spotistats.js.org")).toBe(true);
-    expect(onLegacyOrigin("https://spotistats.otbeaumont.me")).toBe(false);
-    expect(onLegacyOrigin("http://localhost:5173")).toBe(false);
-    expect(onLegacyOrigin("http://127.0.0.1:5173")).toBe(false);
-    expect(onLegacyOrigin("https://spotistats-preview.workers.dev")).toBe(false);
-  });
-
-  it("hands a path to the canonical origin only from the alias", () => {
-    expect(handoverUrl("/account", "", "https://spotistats.js.org")).toBe(
-      "https://spotistats.otbeaumont.me/account",
-    );
-    expect(
-      handoverUrl("/account", "?stats=failed", "https://spotistats.js.org"),
-    ).toBe("https://spotistats.otbeaumont.me/account?stats=failed");
-    // Everything else keeps its own origin, so a local session is never
-    // abandoned for production.
-    expect(handoverUrl("/account", "", "https://spotistats.otbeaumont.me")).toBeNull();
-    expect(handoverUrl("/account", "", "http://localhost:5173")).toBeNull();
   });
 });

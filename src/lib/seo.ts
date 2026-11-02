@@ -66,37 +66,12 @@ export const titleForPath = (path: string) => titleByPath(path);
 /**
  * The canonical URL for a path.
  *
- * Built from `siteUrl` rather than the current location, so it names the same
- * host from either one. The legacy `spotistats.js.org` alias is proxied to this
- * worker, which means the browser can be on a host the worker never sees; the
- * canonical tag is what keeps search engines on the canonical one.
+ * Built from `siteUrl` rather than the current location, so the canonical tag
+ * names the same host from any deployment. The legacy `spotistats.js.org` alias
+ * redirects to this host at the edge, so it is never the URL search engines
+ * index.
  */
 export const canonicalUrl = (path: string, search = "") => `${siteUrl}${path}${search}`;
-
-/**
- * Hosts that serve the app through a proxy to this worker.
- *
- * The browser sits on one of these while the worker answers as the canonical
- * host, so `localStorage` there is a different store from the canonical one and
- * everything the worker derives from `request.url` names the other host. Only
- * these origins are handed over: the canonical host, local development and
- * preview deploys are origins of their own and are left alone.
- */
-const legacyOrigins = new Set(["https://spotistats.js.org"]);
-
-/** Whether the browser is on a legacy alias that should hand work over. */
-export const onLegacyOrigin = (origin: string) => legacyOrigins.has(origin);
-
-/**
- * The canonical URL this request should be handed to, or `null` when the
- * browser should handle it where it is.
- *
- * Only the legacy alias hands over, and everything it hands over has to be a
- * whole page load: the canonical origin is a different origin, so the SPA
- * router cannot reach it.
- */
-export const handoverUrl = (path: string, search: string, origin: string) =>
-  onLegacyOrigin(origin) ? canonicalUrl(path, search) : null;
 
 /**
  * Routes that are reachable without a Spotify session. `/` and `/login` are the

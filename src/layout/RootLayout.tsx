@@ -9,7 +9,7 @@ import { Seo } from "~/components/Seo";
 import { hasSpotifyCallbackCode, logout } from "~/client/auth";
 import { discoveryEnabled } from "~/client/features";
 import { authReady, authStore } from "~/client/storage";
-import { handoverUrl, isContentPath, isPublicPath, titleForPath } from "~/lib/seo";
+import { isContentPath, isPublicPath, titleForPath } from "~/lib/seo";
 import LoginPage from "~/pages/Login";
 import { createShortcut, isEditableShortcutTarget } from "~/lib/shortcut";
 
@@ -51,15 +51,6 @@ export function RootLayout(props: {
       // out, so never bounce them to `/login`. This also stops opening `/`
       // from flashing the sign-in screen and then redirecting to `/login`.
       if (status === "authenticated" || isPublicPath(path)) return;
-      // A private route on the legacy alias belongs on the canonical origin.
-      // The session is stored per-origin, so staying would show a sign-in
-      // screen on the one host that can never hold the session the visitor
-      // already has on the other.
-      const handover = handoverUrl(path, window.location.search, window.location.origin);
-      if (handover) {
-        window.location.replace(handover);
-        return;
-      }
       navigate("/login", { replace: true });
     },
   );
