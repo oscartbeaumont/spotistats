@@ -24,6 +24,27 @@ describe("isInjectedScriptError", () => {
     ).toBe(true);
   });
 
+  it("drops a frame that names another route, as a single-page navigation reports it", () => {
+    expect(
+      isInjectedScriptError(
+        [
+          { filename: `${origin}/` },
+          { filename: `${origin}/favourites/albums` },
+        ],
+        `${origin}/favourites/tracks`,
+      ),
+    ).toBe(true);
+  });
+
+  it("drops same-origin frames that are not built chunks", () => {
+    expect(
+      isInjectedScriptError(
+        [{ filename: `${origin}/assets/logo.svg` }],
+        loginPage,
+      ),
+    ).toBe(true);
+  });
+
   it("drops `<anonymous>` frames, as Chromium reports inline code", () => {
     expect(
       isInjectedScriptError(
