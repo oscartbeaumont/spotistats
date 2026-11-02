@@ -31,7 +31,7 @@
     "@cloudflare/vite-plugin": "beta",
     "@solidjs/vite-plugin": "3.0.0-next.50",
     "@tailwindcss/vite": "^4.3.3",
-    "cf": "1.0.0-beta.19",
+    "cf": "1.0.0-beta.26",
     "tailwindcss": "^4.3.3",
     "typescript": "^6.0.3",
     "vite": "^8.3.4",
