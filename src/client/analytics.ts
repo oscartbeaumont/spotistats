@@ -35,15 +35,23 @@ function exceptionFrames(event: {
   return frames;
 }
 
+/** The extension of a built JavaScript chunk. */
+const scriptPath = /\.(?:c|m)?js$/;
+
 /**
  * Whether a frame names a script the app served.
  *
  * Injected and inline scripts are never bundled by the app, so their frames
  * name something else: Chrome iOS reports its injected content script and the
- * browser reports inline handlers as the page URL, Chromium reports inline and
- * string-evaluated frames as `<anonymous>`, and extensions use their own
- * scheme. A script the app served is a same-origin `http(s)` URL, or a path
- * that resolves to one, other than the document itself.
+ * browser reports inline handlers and string-evaluated code as the page URL
+ * (or, while a single-page app navigates, as one of its routes), Chromium
+ * reports them as `<anonymous>`, and extensions use their own scheme.
+ *
+ * A script the app served is therefore a same-origin `http(s)` URL that names
+ * a built chunk: a document, a route or inline code is an extensionless page
+ * path, while the bundles Vite emits end in `.js`. Matching the document path
+ * alone missed frames that named a route the app had navigated to without a
+ * reload, so those crashes were filed as app issues.
  */
 function namesAppScript(frame: ExceptionFrame, pageUrl: string): boolean {
   const filename = frame.filename ?? frame.source;
@@ -55,7 +63,7 @@ function namesAppScript(frame: ExceptionFrame, pageUrl: string): boolean {
     if (script.protocol !== "http:" && script.protocol !== "https:") {
       return false;
     }
-    return script.pathname !== document.pathname;
+    return scriptPath.test(script.pathname);
   } catch {
     return false;
   }
@@ -201,6 +209,12 @@ export interface AnalyticsEvents {
   favourites_range_changed: { range: FavouritesRange };
   favourites_kind_changed: { kind: "tracks" | "albums" };
   spotify_item_opened: { kind: "track" | "album"; surface: ItemSurface };
+  /**
+   * Spotify refused a request with a 429. A rate limit is an external
+   * condition the page can wait out, so it travels as an event rather than as
+   * an exception that files an app issue.
+   */
+  spotify_rate_limited: { surface: "favourites" };
 }
 
 /**
