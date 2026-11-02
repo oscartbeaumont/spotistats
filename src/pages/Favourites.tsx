@@ -16,9 +16,10 @@ import {
   getSavedAlbumsPage,
   getTopTracksPage,
   runSpotify,
+  SpotifyApiError,
   type SpotifyItem,
 } from "~/client/spotify";
-import { capture } from "~/client/analytics";
+import { capture, captureError } from "~/client/analytics";
 import { authStore } from "~/client/storage";
 import { PageHeader } from "~/components/PageHeader";
 import { errorMessage } from "~/lib/errors";
@@ -107,6 +108,29 @@ function FavouriteRow(props: {
   );
 }
 
+/** Why the list's first page is missing, with the one action that helps. */
+function LoadFailure(props: {
+  message: string;
+  rateLimited: boolean;
+  onRetry: () => void;
+}) {
+  return (
+    <div class="mt-6 border-4 border-red-800 p-4">
+      <p class="text-sm font-black uppercase tracking-[0.2em] text-red-700">
+        {props.rateLimited ? "RATE LIMITED_" : "COULD NOT LOAD_"}
+      </p>
+      <p class="mt-2 text-sm text-red-700">{props.message}</p>
+      <button
+        type="button"
+        onClick={props.onRetry}
+        class="mt-3 border-[3px] border-[#0a0a0a] px-3 py-1.5 text-[0.65rem] font-black uppercase tracking-widest transition hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
+      >
+        Retry
+      </button>
+    </div>
+  );
+}
+
 export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
   const navigate = useNavigate();
   const [range, setRange] = createSignal<Range>("short");
@@ -121,6 +145,12 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
   });
   const [loadingMore, setLoadingMore] = createSignal(false);
   const [pagingError, setPagingError] = createSignal<string | null>(null);
+  const [loadError, setLoadError] = createSignal<{
+    message: string;
+    rateLimited: boolean;
+  } | null>(null);
+  // Bumped by the retry button to re-run the first page.
+  const [attempt, setAttempt] = createSignal(0);
   let sentinel: HTMLDivElement | undefined;
   let observer: IntersectionObserver | undefined;
 
@@ -132,10 +162,34 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
   // The first page suspends, so `<Loading>` covers the initial load. Later
   // pages append to the tail, so a load never refetches the earlier pages.
   const firstPage = createMemo(async () => {
+    // A retry bumps `attempt`, which re-runs this memo's fetch.
+    attempt();
     if (props.kind === "albums" && saveData()) {
       return { items: [] as SpotifyItem[], next: null, nextOffset: 0 };
     }
-    return fetchPage(0);
+    try {
+      const page = await fetchPage(0);
+      setLoadError(null);
+      return page;
+    } catch (error) {
+      // A failed first page belongs to this list, not to the whole app: a rate
+      // limit in particular is worth waiting out. Catch it here so the list
+      // offers a retry instead of the system-error boundary taking the route.
+      const rateLimited =
+        error instanceof SpotifyApiError && error.status === 429;
+      if (rateLimited) {
+        capture("spotify_rate_limited", { surface: "favourites" });
+      } else {
+        captureError(error);
+      }
+      setLoadError({
+        message: rateLimited
+          ? "Spotify is rate limiting this account. Wait a moment, then try again."
+          : errorMessage(error),
+        rateLimited,
+      });
+      return { items: [] as SpotifyItem[], next: null, nextOffset: 0 };
+    }
   });
 
   const items = createMemo(() => {
@@ -198,6 +252,13 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
     setTail({ source: null, items: [], next: null, nextOffset: 0 });
     setRawSelected(0);
     setPagingError(null);
+  };
+
+  /** Re-runs the first page after a failure. */
+  const retryFirstPage = () => {
+    setLoadError(null);
+    resetPaging();
+    setAttempt((value) => value + 1);
   };
 
   const selectRange = (value: Range) => {
@@ -422,9 +483,22 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
         <Show
           when={items().length > 0}
           fallback={
-            <p class="py-8 text-sm font-bold uppercase tracking-widest text-[#5c5c5c]">
-              NO FAVOURITES FOUND_
-            </p>
+            <Show
+              when={loadError()}
+              fallback={
+                <p class="py-8 text-sm font-bold uppercase tracking-widest text-[#5c5c5c]">
+                  NO FAVOURITES FOUND_
+                </p>
+              }
+            >
+              {(failure) => (
+                <LoadFailure
+                  message={failure().message}
+                  rateLimited={failure().rateLimited}
+                  onRetry={retryFirstPage}
+                />
+              )}
+            </Show>
           }
         >
           <For each={items()}>

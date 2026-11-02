@@ -156,6 +156,54 @@ describe("saved album decoding", () => {
   });
 });
 
+describe("rate limit retries", () => {
+  const background = () => {
+    setAuthStore({
+      status: "authenticated",
+      accessToken: "Bearer token",
+      linkToUri: false,
+    });
+  };
+
+  it("retries a 429 once Spotify's Retry-After has passed", async () => {
+    background();
+    const profile = {
+      id: "user",
+      display_name: "User",
+      uri: "spotify:user:user",
+      external_urls: { spotify: "https://open.spotify.com/user/user" },
+      followers: { total: 0 },
+    };
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(null, { status: 429, headers: { "Retry-After": "0" } }),
+      )
+      .mockResolvedValueOnce(Response.json(profile));
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(runSpotify(getProfile())).resolves.toMatchObject({
+      id: "user",
+    });
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("fails at once when the asked-for wait is longer than the cap", async () => {
+    background();
+    const fetch = vi.fn(
+      async () =>
+        new Response(null, { status: 429, headers: { "Retry-After": "60" } }),
+    );
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(runSpotify(getProfile())).rejects.toMatchObject({
+      status: 429,
+      retryAfterMs: 60_000,
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("profile decoding", () => {
   const profile = {
     id: "user",
