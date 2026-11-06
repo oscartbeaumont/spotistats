@@ -1,6 +1,6 @@
 import { createSignal, onCleanup, onSettled } from "solid-js";
 
-import { captureError } from "~/client/analytics";
+import { captureError, isHandledError } from "~/client/analytics";
 import { errorMessage } from "~/lib/errors";
 
 export function AppError(props: { error?: unknown; reset?: () => void }) {
@@ -13,12 +13,35 @@ export function AppError(props: { error?: unknown; reset?: () => void }) {
   onSettled(() => {
     if (props.error !== undefined) captureError(props.error);
   });
+  // An expired session lands on the boundary on its way to the sign-in screen,
+  // so it gets an explanation instead of a crash report.
+  const sessionExpired = () => isHandledError(props.error);
   const errorText = () => {
     if (props.error instanceof Error) {
       return `${props.error.message}\n\n${props.error.stack ?? ""}`;
     }
     return errorMessage(props.error);
   };
+
+  if (sessionExpired()) {
+    return (
+      <main class="p-8 md:p-16 max-w-3xl">
+        <div class="text-xs uppercase tracking-[0.2em] mb-3 text-[#5c5c5c]">
+          Session Expired
+        </div>
+        <p class="text-sm mb-6 text-[#555]">
+          Your Spotify session ended. Log in again to pick up where you left
+          off.
+        </p>
+        <a
+          href="/login"
+          class="inline-block border-4 border-[#0a0a0a] bg-[#1DB954] px-4 py-2 text-xs font-black uppercase tracking-[0.16em] hover:bg-[#0a0a0a] hover:text-[#1DB954]"
+        >
+          Log in
+        </a>
+      </main>
+    );
+  }
 
   return (
     <main class="p-8 md:p-16 max-w-3xl">

@@ -3,7 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const posthog = vi.hoisted(() => ({ init: vi.fn() }));
 vi.mock("posthog-js", () => ({ default: posthog }));
 
-import { isInjectedScriptError } from "./analytics";
+import { isHandledError, isInjectedScriptError, isUnparseableScriptError } from "./analytics";
+import { SpotifyApiError, SpotifyUnauthenticatedError } from "./spotify";
 
 const origin = "https://spotistats.otbeaumont.me";
 const loginPage = `${origin}/login`;
@@ -96,6 +97,60 @@ describe("isInjectedScriptError", () => {
   });
 });
 
+describe("isUnparseableScriptError", () => {
+  it("drops Safari's identifier-after-number parse error", () => {
+    // https://github.com/oscartbeaumont/spotistats/issues/67
+    expect(
+      isUnparseableScriptError([
+        {
+          type: "SyntaxError",
+          value: "No identifiers allowed directly after numeric literal",
+        },
+      ]),
+    ).toBe(true);
+  });
+
+  it("drops Firefox's wording for the same parse error", () => {
+    expect(
+      isUnparseableScriptError([
+        {
+          type: "SyntaxError",
+          value: "identifier starts immediately after numeric literal",
+        },
+      ]),
+    ).toBe(true);
+  });
+
+  it("keeps a `JSON.parse` failure, which is the app's own bug", () => {
+    expect(
+      isUnparseableScriptError([
+        { type: "SyntaxError", value: "JSON Parse error: Unexpected token" },
+      ]),
+    ).toBe(false);
+  });
+
+  it("keeps other exceptions that mention a numeric literal", () => {
+    expect(
+      isUnparseableScriptError([
+        { type: "TypeError", value: "numeric literal is not a function" },
+      ]),
+    ).toBe(false);
+  });
+});
+
+describe("isHandledError", () => {
+  it("treats an expired session as handled", () => {
+    // A 401 signs the user out; it is not a crash to file.
+    expect(isHandledError(new SpotifyUnauthenticatedError())).toBe(true);
+  });
+
+  it("still reports real Spotify failures", () => {
+    expect(isHandledError(new SpotifyApiError(500, null))).toBe(false);
+    expect(isHandledError(new Error("boom"))).toBe(false);
+    expect(isHandledError(undefined)).toBe(false);
+  });
+});
+
 describe("analytics exception filter", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -138,6 +193,22 @@ describe("analytics exception filter", () => {
 
       const app = exception([{ filename: `${origin}/assets/app.js` }]);
       expect(config.before_send(app)).toBe(app);
+
+      // A browser parse error carries no frames to classify, so it needs its
+      // own rule.
+      const parseError = {
+        event: "$exception",
+        properties: {
+          $current_url: loginPage,
+          $exception_list: [
+            {
+              type: "SyntaxError",
+              value: "No identifiers allowed directly after numeric literal",
+            },
+          ],
+        },
+      };
+      expect(config.before_send(parseError)).toBeNull();
 
       const pageview = { event: "$pageview", properties: {} };
       expect(config.before_send(pageview)).toBe(pageview);
