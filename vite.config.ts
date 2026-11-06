@@ -1,4 +1,11 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -12,18 +19,74 @@ if (!process.env?.VITE_SPOTIFY_CLIENT_ID)
   process.env.VITE_SPOTIFY_CLIENT_ID = "1107a25b98c041bb90c9063553e5f1a8";
 
 /**
+ * Where the Solid plugin looks for a client manifest it can bake into the
+ * server bundle. The name is the plugin's convention, not this project's.
+ */
+const clientManifestPath = path.resolve("dist/client/.vite/manifest.json");
+
+/**
+ * The files a Vite manifest says the app can request.
+ *
+ * Every emitted chunk appears in the manifest, including dynamic and shared
+ * ones, so anything under `assets/` that is missing here is a leftover from an
+ * earlier build.
+ */
+function shippedFiles(manifest: Record<string, unknown>): Set<string> {
+  const shipped = new Set<string>();
+  for (const record of Object.values(manifest)) {
+    if (typeof record !== "object" || record === null) continue;
+    const { file, css, assets } = record as {
+      file?: unknown;
+      css?: unknown;
+      assets?: unknown;
+    };
+    for (const value of [
+      file,
+      ...(Array.isArray(css) ? css : []),
+      ...(Array.isArray(assets) ? assets : []),
+    ]) {
+      if (typeof value === "string") shipped.add(path.basename(value));
+    }
+  }
+  return shipped;
+}
+
+/**
  * `cf build` runs the Solid client build twice: an early client build, the
  * Worker/SSR build, then the deployable client build. The Solid server bundle
  * bakes the client asset manifest at build time, so the one it sees during the
  * middle build does not match the final client hashes.
  *
  * Patch the Worker bundle with the final client manifest after the last client
- * build, and keep the conventional `dist/client` manifest in sync for preview.
+ * build, keep the conventional `dist/client` manifest in sync for preview, and
+ * drop the chunks the early build left behind.
  */
 function solidClientManifest(): Plugin {
   return {
     name: "solid-client-manifest",
     apply: "build",
+    writeBundle(_outputOptions, bundle) {
+      if (this.environment?.name !== "client") return;
+
+      // The Solid plugin sources the manifest from a client build in the same
+      // process, or from `dist/client/.vite/manifest.json`. `cf build` runs the
+      // deployable client build after the Worker build, in its own process, so
+      // the Worker build only sees the file, and a fresh checkout has none. It
+      // then emits its dev manifest, which has no manifest object to patch.
+      //
+      // Publish each client manifest as it is written, so the early client
+      // build hands the Worker build the same manifest shape a single
+      // `vite build` would have given it.
+      const asset = bundle[".vite/manifest.json"];
+      if (asset?.type !== "asset") return;
+      mkdirSync(path.dirname(clientManifestPath), { recursive: true });
+      writeFileSync(
+        clientManifestPath,
+        typeof asset.source === "string"
+          ? asset.source
+          : Buffer.from(asset.source),
+      );
+    },
     closeBundle() {
       const environment = this.environment;
       if (environment?.name !== "client") return;
@@ -53,7 +116,7 @@ function solidClientManifest(): Plugin {
         : -1;
       if (!declaration || declarationEnd < 0) {
         throw new Error(
-          "Could not find the Solid client manifest in the Worker bundle.",
+          `Could not find the Solid client manifest in ${bundlePath}. The Solid plugin falls back to its dev manifest when it has no client manifest, and that one carries no object to replace here: check that ${clientManifestPath} exists before the Worker build.`,
         );
       }
 
@@ -79,9 +142,21 @@ function solidClientManifest(): Plugin {
 
       writeFileSync(bundlePath, patched);
 
-      const distManifest = path.resolve("dist/client/.vite/manifest.json");
-      mkdirSync(path.dirname(distManifest), { recursive: true });
-      writeFileSync(distManifest, JSON.stringify(manifest));
+      mkdirSync(path.dirname(clientManifestPath), { recursive: true });
+      writeFileSync(clientManifestPath, JSON.stringify(manifest));
+
+      // The early client build wrote its chunks into the same directory, and
+      // its hashes do not survive the Worker build, so nothing can request
+      // them. Drop them rather than uploading two builds' worth of assets.
+      const shipped = shippedFiles(manifest);
+      const assetsDir = path.join(outDir, "assets");
+      if (!existsSync(assetsDir)) return;
+      for (const name of readdirSync(assetsDir)) {
+        // Only scripts and their maps: `assets/` also holds the public images.
+        if (!/\.m?js(?:\.map)?$/.test(name)) continue;
+        if (shipped.has(name.replace(/\.map$/, ""))) continue;
+        rmSync(path.join(assetsDir, name));
+      }
     },
   };
 }

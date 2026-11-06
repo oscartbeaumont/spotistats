@@ -16,7 +16,7 @@
     "dev": "pnpm db:migrate:local && cf dev",
     "build": "cf workers types && tsc --noEmit && cf build",
     "preview": "cf build && vite preview",
-    "deploy": "cf deploy",
+    "ship": "cf deploy",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "cf-typegen": "cf workers types",
