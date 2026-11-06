@@ -11,6 +11,8 @@
 
 import type { InsightsRange } from "~/api";
 
+import { SpotifyUnauthenticatedError } from "./spotify";
+
 export type PostHogClient = typeof import("posthog-js")["default"];
 
 let client: Promise<PostHogClient> | undefined;
@@ -18,16 +20,26 @@ let client: Promise<PostHogClient> | undefined;
 /** One frame of a PostHog `$exception` stack. Client events use `filename`. */
 type ExceptionFrame = { filename?: string; source?: string };
 
-/** Every stack frame across an `$exception` event's exception list. */
-function exceptionFrames(event: {
+/** One entry of an `$exception` event's exception list. */
+interface Exception {
+  type?: string;
+  value?: string;
+  stacktrace?: { frames?: unknown };
+}
+
+/** The exceptions an `$exception` event carries. */
+function exceptionList(event: {
   properties?: Record<string, unknown>;
-}): ExceptionFrame[] {
+}): Exception[] {
   const list = event.properties?.["$exception_list"];
-  if (!Array.isArray(list)) return [];
+  return Array.isArray(list) ? (list as Exception[]) : [];
+}
+
+/** Every stack frame across an `$exception` event's exception list. */
+function exceptionFrames(exceptions: ReadonlyArray<Exception>): ExceptionFrame[] {
   const frames: ExceptionFrame[] = [];
-  for (const exception of list) {
-    const stack = (exception as { stacktrace?: { frames?: unknown } } | null)
-      ?.stacktrace;
+  for (const exception of exceptions) {
+    const stack = exception?.stacktrace;
     if (Array.isArray(stack?.frames)) {
       frames.push(...(stack.frames as ExceptionFrame[]));
     }
@@ -86,16 +98,60 @@ export function isInjectedScriptError(
   return frames.every((frame) => !namesAppScript(frame, pageUrl));
 }
 
+/**
+ * Every engine's wording for an identifier straight after a number literal.
+ * Safari says "No identifiers allowed directly after numeric literal", Firefox
+ * "identifier starts immediately after numeric literal", and V8 "Invalid or
+ * unexpected token" — which is shared with too many other failures to match on,
+ * so a V8 report is left alone.
+ */
+const afterNumericLiteral = /numeric literal/i;
+
+/**
+ * Whether the browser could not parse a script it downloaded.
+ *
+ * A `SyntaxError` with this wording means the engine found text such as `12px`
+ * outside a string. Nothing the app ships can contain that — the build compiles
+ * every chunk and would fail on it — so the script came from somewhere else: a
+ * browser extension, an injected script, or a truncated download. Safari
+ * reports these with no stack frames at all, so the frame-based filter below
+ * cannot classify them.
+ */
+export function isUnparseableScriptError(
+  exceptions: ReadonlyArray<Exception>,
+): boolean {
+  return exceptions.some(
+    (exception) =>
+      exception?.type === "SyntaxError" &&
+      typeof exception.value === "string" &&
+      afterNumericLiteral.test(exception.value),
+  );
+}
+
+/**
+ * Whether an error is expected and already handled.
+ *
+ * A 401 means the stored session expired or was revoked. The request clears the
+ * session and the layout sends the user to the sign-in screen, so the boundary
+ * only ever sees the error on the way there. That is the app working, not a
+ * crash worth an issue.
+ */
+export function isHandledError(error: unknown): boolean {
+  return error instanceof SpotifyUnauthenticatedError;
+}
+
 /** Whether PostHog should drop this event before it is sent. */
 function shouldDropEvent(event: {
   event?: string;
   properties?: Record<string, unknown>;
 }): boolean {
   if (event.event !== "$exception") return false;
+  const exceptions = exceptionList(event);
+  if (isUnparseableScriptError(exceptions)) return true;
   const currentUrl = event.properties?.["$current_url"];
   const pageUrl =
     typeof currentUrl === "string" ? currentUrl : window.location.href;
-  return isInjectedScriptError(exceptionFrames(event), pageUrl);
+  return isInjectedScriptError(exceptionFrames(exceptions), pageUrl);
 }
 
 /**
@@ -152,6 +208,9 @@ export function identifyUser(
  * development, alongside the rest of analytics.
  */
 export function captureError(error: unknown): void {
+  // An expired session is handled by signing the user out, so reporting it
+  // files an issue nobody can fix.
+  if (isHandledError(error)) return;
   void analytics()?.then((posthog) => posthog.captureException(error));
 }
 
