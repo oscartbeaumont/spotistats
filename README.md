@@ -120,8 +120,11 @@ pnpm typecheck   # TypeScript, no emit
 pnpm cf-typegen  # Regenerate .cloudflare/types/index.d.ts from cloudflare.config.ts
 pnpm build       # Regenerate types, type check, then build the client and the worker
 pnpm preview     # Build, then run the production build in workerd
-pnpm deploy      # Build and deploy with cf
+pnpm ship        # Build and deploy with cf
 ```
+
+`pnpm ship`, not `pnpm deploy`: `deploy` is pnpm's own workspace command, so it
+never reaches this script.
 
 # Database
 
