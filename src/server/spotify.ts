@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { Context, Effect, Layer, Schema } from "effect";
+import { Context, Effect, Layer, Schedule, Schema } from "effect";
 
 import { UpstreamError } from "~/api";
 
@@ -156,6 +156,20 @@ const tokenRequest = (body: URLSearchParams) =>
     return yield* decode(SpotifyToken, json);
   });
 
+/**
+ * A 5xx from the Spotify API is a transient outage, not a rejected request.
+ * The browser retries the same statuses for its own Spotify calls; the worker
+ * needs the same patience so one bad gateway response does not fail the page or
+ * file an issue for an outage the app cannot fix.
+ */
+const retryableUpstream = (error: UpstreamError | SpotifyUnauthorized): boolean =>
+  error._tag === "UpstreamError" &&
+  error.status !== null &&
+  error.status >= 500 &&
+  error.status <= 599;
+
+const apiRetrySchedule = Schedule.exponential("250 millis");
+
 const apiRequest = <S extends Schema.ConstraintDecoder<unknown>>(
   schema: S,
   url: string,
@@ -205,7 +219,13 @@ const apiRequest = <S extends Schema.ConstraintDecoder<unknown>>(
 
     const json = yield* readJson(response, "Failed to read Spotify API response");
     return yield* decode(schema, json);
-  });
+  }).pipe(
+    Effect.retry({
+      schedule: apiRetrySchedule,
+      times: 2,
+      while: retryableUpstream,
+    }),
+  );
 
 const make = Effect.gen(function* () {
   return {

@@ -71,3 +71,39 @@ it("does not retry a failure the server answered", async () => {
   ).rejects.toThrow("UpstreamError");
   expect(attempts).toBe(1);
 });
+
+/** The tagged error the worker's 502 decodes into, with Spotify's own status. */
+const upstreamFailure = (status: number) => ({
+  _tag: "UpstreamError" as const,
+  service: "spotify",
+  message: `Spotify API failed: ${status}`,
+  status,
+});
+
+it("retries a transient upstream failure instead of failing the page", async () => {
+  setAuthStore({ status: "authenticated", accessToken: "Bearer token", linkToUri: false });
+  let attempts = 0;
+  const result = await runApi(
+    Effect.gen(function* () {
+      attempts += 1;
+      if (attempts < 2) return yield* Effect.fail(upstreamFailure(503));
+      return "ok";
+    }),
+  );
+  expect(result).toBe("ok");
+  expect(attempts).toBe(2);
+});
+
+it("does not retry an upstream rejection", async () => {
+  setAuthStore({ status: "authenticated", accessToken: "Bearer token", linkToUri: false });
+  let attempts = 0;
+  await expect(
+    runApi(
+      Effect.gen(function* () {
+        attempts += 1;
+        return yield* Effect.fail(upstreamFailure(400));
+      }),
+    ),
+  ).rejects.toMatchObject({ _tag: "UpstreamError", status: 400 });
+  expect(attempts).toBe(1);
+});

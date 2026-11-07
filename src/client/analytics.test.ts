@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const posthog = vi.hoisted(() => ({ init: vi.fn() }));
 vi.mock("posthog-js", () => ({ default: posthog }));
 
-import { isHandledError, isInjectedScriptError, isUnparseableScriptError } from "./analytics";
+import { isHandledError, isInjectedScriptError, isUnparseableScriptError, isUpstreamOutage } from "./analytics";
 import { SpotifyApiError, SpotifyUnauthenticatedError } from "./spotify";
 
 const origin = "https://spotistats.otbeaumont.me";
@@ -138,10 +138,53 @@ describe("isUnparseableScriptError", () => {
   });
 });
 
+describe("isUpstreamOutage", () => {
+  const upstream = (service: string, status: number | null) => ({
+    _tag: "UpstreamError" as const,
+    service,
+    message: "failed",
+    status,
+  });
+
+  it("treats Spotify's 5xx as an outage", () => {
+    // https://github.com/oscartbeaumont/spotistats/issues/70
+    expect(isUpstreamOutage(upstream("spotify", 503))).toBe(true);
+    expect(isUpstreamOutage(upstream("spotify", 500))).toBe(true);
+  });
+
+  it("treats Spotify rate limiting as an outage", () => {
+    expect(isUpstreamOutage(upstream("spotify", 429))).toBe(true);
+  });
+
+  it("keeps a request Spotify rejected as an app issue", () => {
+    expect(isUpstreamOutage(upstream("spotify", 400))).toBe(false);
+  });
+
+  it("keeps an unexpected response shape as an app issue", () => {
+    // No status means the response did not decode, which the app must fix.
+    expect(isUpstreamOutage(upstream("spotify", null))).toBe(false);
+  });
+
+  it("leaves database failures alone", () => {
+    expect(isUpstreamOutage(upstream("database", 503))).toBe(false);
+  });
+});
+
 describe("isHandledError", () => {
   it("treats an expired session as handled", () => {
     // A 401 signs the user out; it is not a crash to file.
     expect(isHandledError(new SpotifyUnauthenticatedError())).toBe(true);
+  });
+
+  it("treats a Spotify outage as handled", () => {
+    expect(
+      isHandledError({
+        _tag: "UpstreamError",
+        service: "spotify",
+        message: "Spotify API failed: 503",
+        status: 503,
+      }),
+    ).toBe(true);
   });
 
   it("still reports real Spotify failures", () => {
