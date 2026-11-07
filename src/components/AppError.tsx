@@ -1,6 +1,6 @@
 import { createSignal, onCleanup, onSettled } from "solid-js";
 
-import { captureError, isHandledError } from "~/client/analytics";
+import { captureError, isSessionExpiredError, isUpstreamOutage } from "~/client/analytics";
 import { errorMessage } from "~/lib/errors";
 
 export function AppError(props: { error?: unknown; reset?: () => void }) {
@@ -15,7 +15,11 @@ export function AppError(props: { error?: unknown; reset?: () => void }) {
   });
   // An expired session lands on the boundary on its way to the sign-in screen,
   // so it gets an explanation instead of a crash report.
-  const sessionExpired = () => isHandledError(props.error);
+  const sessionExpired = () => isSessionExpiredError(props.error);
+  // Spotify being down is not a failure the user or the app caused, so explain
+  // it and offer a retry instead of the system-error page.
+  const upstreamOutage = () => isUpstreamOutage(props.error);
+  const retry = () => (props.reset ? props.reset() : window.location.reload());
   const errorText = () => {
     if (props.error instanceof Error) {
       return `${props.error.message}\n\n${props.error.stack ?? ""}`;
@@ -39,6 +43,27 @@ export function AppError(props: { error?: unknown; reset?: () => void }) {
         >
           Log in
         </a>
+      </main>
+    );
+  }
+
+  if (upstreamOutage()) {
+    return (
+      <main class="p-8 md:p-16 max-w-3xl">
+        <div class="text-xs uppercase tracking-[0.2em] mb-3 text-[#5c5c5c]">
+          Temporarily Unavailable
+        </div>
+        <p class="text-sm mb-6 text-[#555]">
+          Spotify is not answering right now. This is on Spotify's side, so try
+          again in a moment.
+        </p>
+        <button
+          type="button"
+          onClick={retry}
+          class="border-4 border-[#0a0a0a] px-4 py-2 text-xs font-black uppercase tracking-[0.16em] hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
+        >
+          Try again
+        </button>
       </main>
     );
   }

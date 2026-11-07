@@ -36,6 +36,24 @@ const transientTransport = (error: unknown): boolean =>
   HttpClientError.isHttpClientError(error) &&
   error.reason._tag === "TransportError";
 
+/**
+ * The worker answers 502 with an `UpstreamError` when Spotify or the database
+ * fails. A 5xx from Spotify is an outage the page can wait out, and the account
+ * routes are reads or idempotent writes, so give it the same retry as a dropped
+ * connection instead of sending the user to the error boundary.
+ */
+const transientUpstream = (error: unknown): boolean =>
+  typeof error === "object" &&
+  error !== null &&
+  "_tag" in error &&
+  error._tag === "UpstreamError" &&
+  "status" in error &&
+  typeof error.status === "number" &&
+  error.status >= 500;
+
+const transient = (error: unknown): boolean =>
+  transientTransport(error) || transientUpstream(error);
+
 export const runApi = <A, E>(effect: Effect.Effect<A, E, never>): Promise<A> => {
   const session = untrack(() => authStore());
   return Effect.runPromise(
@@ -43,7 +61,7 @@ export const runApi = <A, E>(effect: Effect.Effect<A, E, never>): Promise<A> => 
       Effect.retry({
         schedule: Schedule.exponential("250 millis"),
         times: 3,
-        while: transientTransport,
+        while: transient,
       }),
     ),
   ).catch((error: unknown) => {

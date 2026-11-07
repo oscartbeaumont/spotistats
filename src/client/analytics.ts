@@ -129,15 +129,54 @@ export function isUnparseableScriptError(
 }
 
 /**
+ * A failure the worker declares when Spotify or the database does not answer.
+ * The client receives it as the tagged `UpstreamError` from the shared API.
+ */
+interface UpstreamFailure {
+  _tag: "UpstreamError";
+  service: string;
+  status: number | null;
+}
+
+function isUpstreamError(error: unknown): error is UpstreamFailure {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "_tag" in error &&
+    error._tag === "UpstreamError"
+  );
+}
+
+/**
+ * Whether Spotify itself is unavailable or throttling the request.
+ *
+ * The app cannot fix an external outage, and the worker has already retried
+ * transient 5xx responses, so a failure that reaches here is worth explaining
+ * to the user but not worth filing as an app issue. A `null` status is
+ * deliberately excluded: that is an unexpected response shape, which is the
+ * app's problem to fix.
+ */
+export function isUpstreamOutage(error: unknown): boolean {
+  if (!isUpstreamError(error) || error.service !== "spotify") return false;
+  return error.status === 429 || (error.status !== null && error.status >= 500);
+}
+
+/** Whether the stored Spotify session expired and the app is signing out. */
+export function isSessionExpiredError(error: unknown): boolean {
+  return error instanceof SpotifyUnauthenticatedError;
+}
+
+/**
  * Whether an error is expected and already handled.
  *
  * A 401 means the stored session expired or was revoked. The request clears the
  * session and the layout sends the user to the sign-in screen, so the boundary
- * only ever sees the error on the way there. That is the app working, not a
- * crash worth an issue.
+ * only ever sees the error on the way there. A Spotify outage is the same: the
+ * boundary offers a retry, but there is no bug to fix. Neither is a crash worth
+ * an issue.
  */
 export function isHandledError(error: unknown): boolean {
-  return error instanceof SpotifyUnauthenticatedError;
+  return isSessionExpiredError(error) || isUpstreamOutage(error);
 }
 
 /** Whether PostHog should drop this event before it is sent. */
