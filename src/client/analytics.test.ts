@@ -3,7 +3,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const posthog = vi.hoisted(() => ({ init: vi.fn() }));
 vi.mock("posthog-js", () => ({ default: posthog }));
 
-import { isHandledError, isInjectedScriptError, isUnparseableScriptError, isUpstreamOutage } from "./analytics";
+import {
+  isChunkLoadError,
+  isHandledError,
+  isInjectedScriptError,
+  isUnparseableScriptError,
+  isUpstreamOutage,
+} from "./analytics";
 import { SpotifyApiError, SpotifyUnauthenticatedError } from "./spotify";
 
 const origin = "https://spotistats.otbeaumont.me";
@@ -170,6 +176,42 @@ describe("isUpstreamOutage", () => {
   });
 });
 
+describe("isChunkLoadError", () => {
+  it("recognises the browsers' dynamic-import failures", () => {
+    // https://github.com/oscartbeaumont/spotistats/issues/73
+    expect(
+      isChunkLoadError(
+        new TypeError("Importing a module script failed."),
+      ),
+    ).toBe(true);
+    expect(
+      isChunkLoadError(
+        new TypeError(
+          "Failed to fetch dynamically imported module: https://spotistats.otbeaumont.me/assets/Export-abc.js",
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      isChunkLoadError(
+        new TypeError(
+          "error loading dynamically imported module: https://spotistats.otbeaumont.me/assets/Export-abc.js",
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      isChunkLoadError(new Error("Unable to preload CSS for /assets/app.css")),
+    ).toBe(true);
+  });
+
+  it("keeps other failures as app issues", () => {
+    expect(
+      isChunkLoadError(new TypeError("undefined is not an object")),
+    ).toBe(false);
+    expect(isChunkLoadError(new Error("boom"))).toBe(false);
+    expect(isChunkLoadError(undefined)).toBe(false);
+  });
+});
+
 describe("isHandledError", () => {
   it("treats an expired session as handled", () => {
     // A 401 signs the user out; it is not a crash to file.
@@ -184,6 +226,12 @@ describe("isHandledError", () => {
         message: "Spotify API failed: 503",
         status: 503,
       }),
+    ).toBe(true);
+  });
+
+  it("treats a failed chunk load as handled", () => {
+    expect(
+      isHandledError(new TypeError("Importing a module script failed.")),
     ).toBe(true);
   });
 
@@ -252,6 +300,21 @@ describe("analytics exception filter", () => {
         },
       };
       expect(config.before_send(parseError)).toBeNull();
+
+      // A chunk load that recovery reloads past is not an app issue.
+      const chunkError = {
+        event: "$exception",
+        properties: {
+          $current_url: loginPage,
+          $exception_list: [
+            {
+              type: "TypeError",
+              value: "Importing a module script failed.",
+            },
+          ],
+        },
+      };
+      expect(config.before_send(chunkError)).toBeNull();
 
       const pageview = { event: "$pageview", properties: {} };
       expect(config.before_send(pageview)).toBe(pageview);

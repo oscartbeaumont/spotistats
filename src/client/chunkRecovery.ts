@@ -31,7 +31,7 @@ export function installChunkRecovery(
   now: () => number = Date.now,
   cooldownMs = COOLDOWN_MS,
 ): void {
-  target.addEventListener("vite:preloadError", (event) => {
+  target.addEventListener("vite:preloadError", () => {
     let last = 0;
     try {
       last = Number(storage.getItem(RELOAD_KEY) ?? 0);
@@ -40,8 +40,13 @@ export function installChunkRecovery(
     }
     if (Number.isFinite(last) && now() - last < cooldownMs) return;
 
-    // Keep the default so the error still surfaces if the reload does not help.
-    event.preventDefault?.();
+    // Do not prevent the default. Vite dispatches this event from the catch
+    // around the failed import, and when the event is prevented it resolves
+    // the import with `undefined` instead of rejecting. Solid's `lazy` then
+    // reads `undefined.default` and the boundary reports a confusing
+    // `TypeError: undefined is not an object (evaluating 'e.default')`.
+    // Letting the rejection through keeps the real chunk-load error, and the
+    // reload below still recovers from it.
     try {
       storage.setItem(RELOAD_KEY, String(now()));
     } catch {

@@ -167,16 +167,41 @@ export function isSessionExpiredError(error: unknown): boolean {
 }
 
 /**
+ * Every browser's wording for a dynamic import that did not load.
+ *
+ * A deploy replaces the hashed route chunks, and a mobile connection can drop
+ * the request for one. Vite turns the rejection into `vite:preloadError`,
+ * `installChunkRecovery` reloads, and the boundary sees the rejected import on
+ * the way out. There is no app bug to fix, so it must not file an issue.
+ */
+const chunkLoadFailure =
+  /dynamically imported module|importing a module script failed|unable to preload css/i;
+
+/** Whether an error is a failed lazy-chunk load that recovery reloads past. */
+export function isChunkLoadError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null || !("message" in error)) {
+    return false;
+  }
+  return (
+    typeof error.message === "string" && chunkLoadFailure.test(error.message)
+  );
+}
+
+/**
  * Whether an error is expected and already handled.
  *
  * A 401 means the stored session expired or was revoked. The request clears the
  * session and the layout sends the user to the sign-in screen, so the boundary
  * only ever sees the error on the way there. A Spotify outage is the same: the
- * boundary offers a retry, but there is no bug to fix. Neither is a crash worth
- * an issue.
+ * boundary offers a retry, but there is no bug to fix. A failed chunk load is
+ * recovered by a reload. None is a crash worth an issue.
  */
 export function isHandledError(error: unknown): boolean {
-  return isSessionExpiredError(error) || isUpstreamOutage(error);
+  return (
+    isSessionExpiredError(error) ||
+    isUpstreamOutage(error) ||
+    isChunkLoadError(error)
+  );
 }
 
 /** Whether PostHog should drop this event before it is sent. */
@@ -187,6 +212,15 @@ function shouldDropEvent(event: {
   if (event.event !== "$exception") return false;
   const exceptions = exceptionList(event);
   if (isUnparseableScriptError(exceptions)) return true;
+  if (
+    exceptions.some(
+      (exception) =>
+        typeof exception?.value === "string" &&
+        chunkLoadFailure.test(exception.value),
+    )
+  ) {
+    return true;
+  }
   const currentUrl = event.properties?.["$current_url"];
   const pageUrl =
     typeof currentUrl === "string" ? currentUrl : window.location.href;
