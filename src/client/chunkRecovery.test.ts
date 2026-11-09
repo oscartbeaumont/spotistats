@@ -33,7 +33,10 @@ describe("installChunkRecovery", () => {
     const { fire, reload } = harness();
     const event = fire();
     expect(reload).toHaveBeenCalledTimes(1);
-    expect(event.preventDefault).toHaveBeenCalled();
+    // Letting Vite's default run keeps the import rejected. Preventing it
+    // makes Vite resolve the import with `undefined`, which Solid's `lazy`
+    // turns into `undefined is not an object (evaluating 'e.default')`.
+    expect(event.preventDefault).not.toHaveBeenCalled();
   });
 
   it("does not reload again inside the cooldown", () => {
