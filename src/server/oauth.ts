@@ -91,11 +91,13 @@ const originFromRequest = (request: Request) => {
 const redirectUri = (request: Request) =>
   `${originFromRequest(request)}/account/stats/callback`;
 
-const failed = (reason: string) => {
+const failed = (reason: string, detail?: string) => {
   // Log for the worker console, and carry a short machine code in the URL so
   // the account page can report *why* the setup failed to PostHog. Only these
   // fixed codes are ever sent; the raw cause stays in the log.
-  console.warn(`Spotify stats setup failed: ${reason}`);
+  console.warn(
+    `Spotify stats setup failed: ${reason}${detail ? ` (${detail})` : ""}`,
+  );
   return new Response(null, {
     status: 302,
     headers: {
@@ -103,6 +105,22 @@ const failed = (reason: string) => {
     },
   });
 };
+
+/**
+ * Maps the `error` code on Spotify's redirect to the reason the account page
+ * shows. Spotify uses the same parameter for a user who cancels the consent
+ * screen and for a genuine failure, so they must not share a code: a
+ * cancellation is an expected outcome, while everything else is worth
+ * reporting. Only these fixed reasons reach the URL.
+ */
+const spotifyErrorReasons: Record<string, string> = {
+  access_denied: "spotify_denied",
+  server_error: "spotify_unavailable",
+  temporarily_unavailable: "spotify_unavailable",
+};
+
+export const spotifyErrorReason = (error: string): string =>
+  spotifyErrorReasons[error] ?? "spotify_rejected";
 
 /** Keeps the server log readable: the raw Cause nests the error too deep. */
 const describeCause = (cause: unknown): string => {
@@ -172,7 +190,12 @@ export function statsCallback(
     const tracking = yield* Tracking;
 
     const spotifyError = url.searchParams.get("error");
-    if (spotifyError) return failed("spotify_denied");
+    if (spotifyError) {
+      return failed(
+        spotifyErrorReason(spotifyError),
+        `Spotify returned ${spotifyError}`,
+      );
+    }
 
     const code = url.searchParams.get("code");
     const state = url.searchParams.get("state");
