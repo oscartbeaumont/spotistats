@@ -1,6 +1,15 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { Effect, Layer } from "effect";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createState, statsLogin, stateIsValid } from "./oauth";
+import {
+  createState,
+  spotifyErrorReason,
+  statsCallback,
+  statsLogin,
+  stateIsValid,
+} from "./oauth";
+import { Spotify, type SpotifyShape } from "./spotify";
+import { Tracking, type TrackingShape } from "./tracking";
 
 // `./oauth` reaches the worker env through `./spotify`; the client id builds
 // the authorize URL and the secret signs the OAuth state.
@@ -78,4 +87,53 @@ it("rejects a state older than the consent window", async () => {
   const state = await createState();
   vi.setSystemTime(new Date("2026-10-29T23:11:00Z"));
   expect(await stateIsValid(state)).toBe(false);
+});
+
+it("maps Spotify's error codes to fixed reasons", () => {
+  expect(spotifyErrorReason("access_denied")).toBe("spotify_denied");
+  expect(spotifyErrorReason("server_error")).toBe("spotify_unavailable");
+  expect(spotifyErrorReason("temporarily_unavailable")).toBe("spotify_unavailable");
+  expect(spotifyErrorReason("invalid_scope")).toBe("spotify_rejected");
+  // A code Spotify adds later must still be reportable, not read as a cancel.
+  expect(spotifyErrorReason("something_new")).toBe("spotify_rejected");
+});
+
+describe("stats callback errors", () => {
+  const callback = (query: string) =>
+    Effect.runPromise(
+      statsCallback(
+        new Request(
+          `https://spotistats.otbeaumont.me/account/stats/callback?${query}`,
+        ),
+      ).pipe(
+        Effect.provide(
+          Layer.merge(
+            Layer.succeed(Spotify, {} as SpotifyShape),
+            Layer.succeed(Tracking, {} as TrackingShape),
+          ),
+        ),
+      ),
+    );
+
+  it("treats a cancelled consent screen as a cancellation", async () => {
+    const response = await callback("error=access_denied&state=stale");
+    expect(response.status).toBe(302);
+    expect(locationOf(response)).toBe(
+      "/account?stats=failed&reason=spotify_denied",
+    );
+  });
+
+  it("does not read a Spotify outage as a cancellation", async () => {
+    const response = await callback("error=temporarily_unavailable");
+    expect(locationOf(response)).toBe(
+      "/account?stats=failed&reason=spotify_unavailable",
+    );
+  });
+
+  it("keeps an unrecognised Spotify error reportable", async () => {
+    const response = await callback("error=invalid_scope");
+    expect(locationOf(response)).toBe(
+      "/account?stats=failed&reason=spotify_rejected",
+    );
+  });
 });

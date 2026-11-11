@@ -328,6 +328,8 @@ export interface AnalyticsEvents {
   stats_sync_enabled: NoProperties;
   /** The sync handshake came back failed, with the reason the account shows. */
   stats_sync_failed: { reason: string | null };
+  /** Spotify denied the stats authorization, usually because the user cancelled. */
+  stats_sync_denied: NoProperties;
   stats_sync_disabled: NoProperties;
   stats_refresh_requested: NoProperties;
   account_data_deleted: NoProperties;

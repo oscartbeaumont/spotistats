@@ -19,10 +19,13 @@ import { downloadTextFile } from "~/lib/download";
 import { errorMessage } from "~/lib/errors";
 import { formatDate } from "~/lib/format";
 import { createShortcut, isEditableShortcutTarget } from "~/lib/shortcut";
+import { statsOutcome } from "~/lib/statsOutcome";
 
 /** Fixed reason codes the worker puts on a failed stats handshake. */
 const statsFailureMessages: Record<string, string> = {
   spotify_denied: "Spotify did not grant access.",
+  spotify_unavailable: "Spotify was unavailable during the handshake.",
+  spotify_rejected: "Spotify rejected the authorization request.",
   spotify_credentials: "Spotify rejected the app's credentials.",
   missing_code: "Spotify did not return an authorization code.",
   missing_state: "The Spotify handshake was missing its state.",
@@ -36,29 +39,33 @@ export default function AccountPage() {
   // Snapshot the one-shot result before the effect below clears the query. The
   // OAuth callback owns the URL, so read the browser's copy rather than the
   // router's: it stays in step after the clear below.
-  const snapshot = untrack(() =>
-    new URLSearchParams(
-      typeof window === "undefined" ? "" : window.location.search,
+  const [outcome] = createSignal(
+    untrack(() =>
+      statsOutcome(typeof window === "undefined" ? "" : window.location.search),
     ),
   );
-  const [statsResult] = createSignal(snapshot.get("stats"));
-  const statsFailure = snapshot.get("reason");
+  // A denied consent screen is the user's choice, not a bug. It gets an
+  // explanation on the page instead of the system-error boundary, which would
+  // file an issue nobody can act on.
+  const statsEnabled = () => outcome()?.kind === "enabled";
+  const statsDenied = () => outcome()?.kind === "denied";
 
   // A failed stats handshake is a setup problem, not page content. Clear the
   // one-shot query so a boundary retry does not rethrow, then hand the error to
   // the boundary, which shows it and reports it to PostHog. The worker sends a
   // fixed reason code, which keeps the failure diagnosable without leaking the
   // underlying cause.
-  if (typeof window !== "undefined" && statsResult() === "failed") {
+  const result = outcome();
+  if (typeof window !== "undefined" && result?.kind === "failed") {
     window.history.replaceState(
       null,
       "",
       window.location.pathname || "/account",
     );
     // Keep the conversion funnel event; the boundary reports the error itself.
-    capture("stats_sync_failed", { reason: statsFailure });
-    const explanation = statsFailure
-      ? statsFailureMessages[statsFailure]
+    capture("stats_sync_failed", { reason: result.reason });
+    const explanation = result.reason
+      ? statsFailureMessages[result.reason]
       : undefined;
     throw new Error(
       `Connecting Spotify listening stats did not complete.${
@@ -70,9 +77,10 @@ export default function AccountPage() {
   const stats = createMemo(() => accountApi.status());
 
   // The stats connect flow lands back here with its outcome in the query
-  // string. Report success once so the enable funnel is visible.
+  // string. Report each outcome once so the funnel is visible.
   onSettled(() => {
-    if (statsResult() === "enabled") capture("stats_sync_enabled", {});
+    if (statsEnabled()) capture("stats_sync_enabled", {});
+    else if (statsDenied()) capture("stats_sync_denied", {});
   });
 
   createEffect(
@@ -170,10 +178,20 @@ export default function AccountPage() {
     <main class="app-main p-8 md:p-12">
       <PageHeader title="Account" eyebrow="Stats Sync" />
 
-      <Show when={statsResult() === "enabled"}>
+      <Show when={statsEnabled()}>
         <pre class="overflow-auto p-4 text-xs mb-6 border-4 border-[#0a0a0a] bg-[#1DB954] text-[#0a0a0a]">
           <samp>
             Listening stats connected. Your recent plays will sync shortly.
+          </samp>
+        </pre>
+      </Show>
+
+      <Show when={statsDenied()}>
+        <pre class="overflow-auto p-4 text-xs mb-6 border-4 border-[#0a0a0a] bg-[#fff7c2] text-[#3b3200]">
+          <samp>
+            Spotify did not grant access, so listening stats were not
+            connected. If you cancelled the prompt, nothing changed; connect
+            again whenever you are ready.
           </samp>
         </pre>
       </Show>
