@@ -389,15 +389,12 @@ export default function ProfilePage() {
   // The stats callback sends a fresh connection here rather than to the
   // settings page, so the first thing the user sees is the feature itself.
   // Read the one-shot flag before the URL is cleaned below.
-  const [connected] = createSignal(
-    untrack(
-      () =>
-        statsOutcome(
-          typeof window === "undefined" ? "" : window.location.search,
-        )?.kind === "enabled",
-    ),
+  const connected = untrack(
+    () =>
+      statsOutcome(typeof window === "undefined" ? "" : window.location.search)
+        ?.kind === "enabled",
   );
-  const [welcome, setWelcome] = createSignal(connected());
+  const [welcome, setWelcome] = createSignal(connected);
   const [polls, setPolls] = createSignal(0);
   const timezone = browserTimezoneOffset();
   const [range, setRange] = createSignal<InsightsRange>("all");
@@ -594,7 +591,7 @@ export default function ProfilePage() {
   // The connection landed: report the conversion once, then drop the one-shot
   // flag from the URL so a reload does not replay it.
   onSettled(() => {
-    if (!connected()) return;
+    if (!connected) return;
     capture("stats_sync_enabled", {});
     window.history.replaceState(null, "", window.location.pathname || "/");
   });
@@ -623,13 +620,11 @@ export default function ProfilePage() {
   // the feature actually starts working.
   let firstSyncReported = false;
   createEffect(
-    () => phase(),
+    () => ({ phase: phase(), count: statsNow()?.listenCount ?? 0 }),
     (current) => {
-      if (firstSyncReported || current !== "ready") return;
+      if (firstSyncReported || current.phase !== "ready") return;
       firstSyncReported = true;
-      capture("stats_sync_first_sync", {
-        listenCount: statsNow()?.listenCount ?? 0,
-      });
+      capture("stats_sync_first_sync", { listenCount: current.count });
     },
   );
 
