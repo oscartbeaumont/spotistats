@@ -137,3 +137,47 @@ describe("stats callback errors", () => {
     );
   });
 });
+
+it("lands a new connection on the profile, where the feature shows itself", async () => {
+  const spotify = {
+    exchangeCode: () =>
+      Effect.succeed({
+        access_token: "token",
+        token_type: "Bearer",
+        expires_in: 3600,
+        refresh_token: "refresh",
+        scope: "user-read-email user-read-recently-played",
+      }),
+    profile: () =>
+      Effect.succeed({
+        id: "spotify-user",
+        display_name: "Listener",
+        email: "listener@example.com",
+        uri: "spotify:user:spotify-user",
+        external_urls: { spotify: "https://open.spotify.com/user/spotify-user" },
+        followers: { total: 0 },
+      }),
+  } as unknown as SpotifyShape;
+
+  const response = await Effect.runPromise(
+    statsCallback(
+      new Request(
+        `https://spotistats.otbeaumont.me/account/stats/callback?code=code&state=${await createState()}`,
+      ),
+    ).pipe(
+      Effect.provide(
+        Layer.merge(
+          Layer.succeed(Spotify, spotify),
+          Layer.succeed(Tracking, {
+            enable: () => Effect.void,
+          } as unknown as TrackingShape),
+        ),
+      ),
+    ),
+  );
+
+  expect(response.status).toBe(302);
+  // The settings page explains sync; the profile is where the payoff is, so a
+  // fresh connection has to land there to see what it just unlocked.
+  expect(locationOf(response)).toBe("/?stats=enabled");
+});

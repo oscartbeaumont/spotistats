@@ -209,9 +209,12 @@ export function statsCallback(
     const profile = yield* spotify.profile(token.access_token);
     yield* tracking.enable(profile, token);
 
+    // Land on the insights, not the settings page. The account page explains
+    // what sync is; the profile is where the user sees what they just unlocked,
+    // and it walks them through the first sync while it lands.
     return new Response(null, {
       status: 302,
-      headers: { Location: "/account?stats=enabled" },
+      headers: { Location: "/?stats=enabled" },
     });
   }).pipe(
     Effect.catchCause((cause) => {

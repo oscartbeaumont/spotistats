@@ -326,6 +326,12 @@ export interface AnalyticsEvents {
   logout: NoProperties;
   /** The conversion that matters most: listening-stats sync was turned on. */
   stats_sync_enabled: NoProperties;
+  /**
+   * The first sync stored plays, which is when the feature starts working.
+   * Reported separately from the connect click so the funnel can tell a
+   * connection that never produced data from one that did.
+   */
+  stats_sync_first_sync: { listenCount: number };
   /** The sync handshake came back failed, with the reason the account shows. */
   stats_sync_failed: { reason: string | null };
   /** Spotify denied the stats authorization, usually because the user cancelled. */

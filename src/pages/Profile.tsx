@@ -8,6 +8,7 @@ import {
   latest,
   onSettled,
   Show,
+  untrack,
 } from "solid-js";
 
 import { accountApi } from "~/client/api";
@@ -24,6 +25,7 @@ import {
   ProfileHeaderSkeleton,
   StatsRailSkeleton,
 } from "~/components/ProfileSkeleton";
+import { StatsWelcome } from "~/components/StatsWelcome";
 import { errorMessage } from "~/lib/errors";
 import { formatDate } from "~/lib/format";
 import {
@@ -35,6 +37,8 @@ import {
 import { createPreviewInsights } from "~/lib/previewInsights";
 import { createShortcut, isEditableShortcutTarget } from "~/lib/shortcut";
 import { reuseUnchanged } from "~/lib/stable";
+import { statsOutcome } from "~/lib/statsOutcome";
+import { welcomePhase } from "~/lib/statsWelcome";
 import { externalHref } from "~/lib/url";
 import type {
   InsightsQuery,
@@ -186,7 +190,7 @@ function StatsRail(props: {
                 Connect stats to keep recent plays here.
               </p>
               <a
-                href="/account"
+                href="/account/stats/login"
                 class="mt-3 inline-block text-[0.65rem] font-black uppercase tracking-widest underline"
               >
                 Connect stats →
@@ -381,6 +385,19 @@ export default function ProfilePage() {
   const [insightsTick, setInsightsTick] = createSignal(0);
   const [preview, setPreview] = createSignal<ListeningInsightsData | null>(null);
   const [refreshing, setRefreshing] = createSignal(false);
+  // The stats callback sends a fresh connection here rather than to the
+  // settings page, so the first thing the user sees is the feature itself.
+  // Read the one-shot flag before the URL is cleaned below.
+  const [connected] = createSignal(
+    untrack(
+      () =>
+        statsOutcome(
+          typeof window === "undefined" ? "" : window.location.search,
+        )?.kind === "enabled",
+    ),
+  );
+  const [welcome, setWelcome] = createSignal(connected());
+  const [polls, setPolls] = createSignal(0);
   const timezone = browserTimezoneOffset();
   const [range, setRange] = createSignal<InsightsRange>("all");
   const [fromDate, setFromDate] = createSignal(
@@ -426,6 +443,21 @@ export default function ProfilePage() {
       return null;
     }
   };
+  /**
+   * How far the first sync has got. Every forty polls (a minute at the welcome
+   * cadence) the panel stops claiming progress and offers a fresh attempt.
+   */
+  const firstSyncLimit = 40;
+  const phase = createMemo(() =>
+    welcomePhase({
+      seenStatus: statsNow() !== null,
+      listenCount: statsNow()?.listenCount ?? 0,
+      lastSuccessAt: statsNow()?.lastSuccessAt ?? null,
+      lastError: statsNow()?.lastError ?? null,
+      polls: polls(),
+      pollLimit: firstSyncLimit,
+    }),
+  );
   // The dashboard polls every 10s and each poll parses fresh objects, so
   // `<For>` would rebuild the recent list (and reload its covers) every time.
   // Reuse the previous object for a row that has not changed.
@@ -558,6 +590,48 @@ export default function ProfilePage() {
     }
   };
 
+  // The connection landed: report the conversion once, then drop the one-shot
+  // flag from the URL so a reload does not replay it.
+  onSettled(() => {
+    if (!connected()) return;
+    capture("stats_sync_enabled", {});
+    window.history.replaceState(null, "", window.location.pathname || "/");
+  });
+
+  // Watch the first sync land instead of leaving the page on zeros. The
+  // dashboard's own cadence is ten seconds, which is too slow to show anything
+  // happening; this polls only while the welcome panel is waiting.
+  createEffect(
+    () => welcome(),
+    (open) => {
+      if (!open) return;
+      const interval = setInterval(() => {
+        const current = phase();
+        if (current !== "connecting" && current !== "syncing") {
+          clearInterval(interval);
+          return;
+        }
+        setPolls((value) => value + 1);
+        setTick((value) => value + 1);
+      }, 1500);
+      return () => clearInterval(interval);
+    },
+  );
+
+  // Report the first sync separately from the connect click: it is the moment
+  // the feature actually starts working.
+  let firstSyncReported = false;
+  createEffect(
+    () => phase(),
+    (current) => {
+      if (firstSyncReported || current !== "ready") return;
+      firstSyncReported = true;
+      capture("stats_sync_first_sync", {
+        listenCount: statsNow()?.listenCount ?? 0,
+      });
+    },
+  );
+
   let lastListenCount: number | null = null;
   createEffect(
     () => statsNow()?.listenCount,
@@ -586,6 +660,16 @@ export default function ProfilePage() {
   return (
     <main class="app-main flex-1 p-8 md:p-16">
       <div class="space-y-8">
+        <Show when={welcome()}>
+          <StatsWelcome
+            phase={phase()}
+            listenCount={statsNow()?.listenCount ?? 0}
+            error={statsNow()?.lastError ?? null}
+            refreshing={refreshing()}
+            onRefresh={() => void refreshStats()}
+            onDismiss={() => setWelcome(false)}
+          />
+        </Show>
         <Show when={playingNow()?.is_playing && playingNow()?.item}>
           {(track) => (
             <a
@@ -772,7 +856,7 @@ function InsightsGate(props: {
           when={props.status.enabled}
           fallback={
             <a
-              href="/account"
+              href="/account/stats/login"
               class="border-4 border-[#0a0a0a] bg-[#0a0a0a] px-6 py-3 text-sm font-black uppercase tracking-wide text-[#f0ede8] transition hover:bg-[#1DB954] hover:text-black"
             >
               Connect listening stats →
