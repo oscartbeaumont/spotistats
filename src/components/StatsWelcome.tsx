@@ -43,7 +43,7 @@ export function StatsWelcome(props: {
       case "syncing":
         return "Your account is on. Spotify's recent-play window is coming in now, and this page fills in on its own, usually within a few seconds.";
       case "ready":
-        return `${props.listenCount.toLocaleString()} ${props.listenCount === 1 ? "play" : "plays"} imported. Below is the history Spotify does not keep: top artists, listening hours, streaks and the shape of your year.`;
+        return `${props.listenCount.toLocaleString()} ${props.listenCount === 1 ? "play" : "plays"} stored. Below is the history Spotify does not keep: top artists, listening hours, streaks and the shape of your year.`;
       case "empty":
         return "Sync ran, but Spotify had no recent plays to hand over. Play something in Spotify, then ask again.";
       case "slow":
@@ -122,12 +122,17 @@ export function StatsWelcome(props: {
 
       <div class="mt-5 flex flex-wrap gap-3">
         <Show when={props.phase === "ready"}>
-          <a
-            href="#insights"
+          <button
+            type="button"
+            onClick={() =>
+              document
+                .getElementById("insights")
+                ?.scrollIntoView({ behavior: "smooth", block: "start" })
+            }
             class="border-4 border-[#0a0a0a] bg-[#0a0a0a] px-6 py-3 text-sm font-black uppercase tracking-wide text-[#1DB954] transition hover:bg-[#f0ede8] hover:text-[#0a0a0a]"
           >
             See your insights ↓
-          </a>
+          </button>
         </Show>
         <Show when={waiting()}>
           <button
