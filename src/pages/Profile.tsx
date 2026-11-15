@@ -191,6 +191,7 @@ function StatsRail(props: {
               </p>
               <a
                 href="/account/stats/login"
+                rel="external"
                 class="mt-3 inline-block text-[0.65rem] font-black uppercase tracking-widest underline"
               >
                 Connect stats →
@@ -857,6 +858,7 @@ function InsightsGate(props: {
           fallback={
             <a
               href="/account/stats/login"
+              rel="external"
               class="border-4 border-[#0a0a0a] bg-[#0a0a0a] px-6 py-3 text-sm font-black uppercase tracking-wide text-[#f0ede8] transition hover:bg-[#1DB954] hover:text-black"
             >
               Connect listening stats →
