@@ -47,3 +47,10 @@ it("does not enable discovery on a production build without analytics", () => {
     import.meta.env.DEV = previous;
   }
 });
+
+it("keeps discovery hidden when the analytics chunk fails to load", async () => {
+  client.value = Promise.reject(new Error("chunk load failed"));
+  initFeatureFlags();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(discoveryEnabled()).toBe(false);
+});

@@ -148,20 +148,42 @@ const page = <S extends Schema.Constraint>(item: S) =>
 const Track = Schema.Struct({
   // Local files have no Spotify id.
   id: Schema.NullOr(Schema.String),
-  is_local: Schema.Boolean,
+  is_local: Schema.optional(Schema.Boolean),
   name: Schema.String,
   album: Schema.Struct({ name: Schema.String, release_date: Schema.String }),
   artists: Schema.Array(Schema.Struct({ id: Schema.NullOr(Schema.String), name: Schema.String })),
   duration_ms: Schema.Number,
   popularity: Schema.optional(Schema.NullOr(Schema.Number)),
 });
+export type PlaylistTrackItem = typeof Track.Type;
 
 export const PlaylistTrack = Schema.Struct({
   added_by: Schema.optional(Schema.NullOr(Schema.Struct({ id: Schema.String }))),
   added_at: Schema.NullOr(Schema.String),
-  track: Schema.optional(Schema.NullOr(Track)),
+  is_local: Schema.optional(Schema.Boolean),
+  // Spotify's playlist-items endpoint returns `item`; `track` is the
+  // deprecated alias the older endpoint still returns.
+  item: Schema.optional(Schema.NullOr(Schema.Unknown)),
+  track: Schema.optional(Schema.NullOr(Schema.Unknown)),
 });
 export type PlaylistTrack = typeof PlaylistTrack.Type;
+
+const decodePlaylistTrack = (value: unknown): PlaylistTrackItem | null =>
+  value == null
+    ? null
+    : Option.getOrNull(Schema.decodeUnknownOption(Track)(value));
+
+/**
+ * The track on a playlist entry, or `null` for a podcast episode, a local file
+ * that cannot be read, or a removed entry. Decoding each entry on its own keeps
+ * one unsupported item from failing the whole page.
+ */
+export function playlistTrack(entry: PlaylistTrack): PlaylistTrackItem | null {
+  if (entry.is_local === true) return null;
+  const track =
+    decodePlaylistTrack(entry.item) ?? decodePlaylistTrack(entry.track);
+  return track && track.is_local !== true ? track : null;
+}
 
 export type SpotifyPage<T> = {
   items: readonly T[];
@@ -446,7 +468,10 @@ export const getLikedTracksPage = (offset = 0) =>
 export const getPlaylistTracksPage = (playlistId: string, offset = 0) =>
   request(
     page(PlaylistTrack),
-    `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100&offset=${offset}`,
+    // The newer `/items` endpoint only serves playlists the user owns or
+    // collaborates on, while the export covers every followed playlist too.
+    // The deprecated alias still reads those, and 50 is the documented maximum.
+    `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=50&offset=${offset}`,
   );
 
 /** Only the synthetic library entry has no playlist ID. */

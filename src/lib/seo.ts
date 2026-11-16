@@ -45,7 +45,7 @@ export const siteFaq: readonly SiteFaq[] = [
   },
 ];
 
-const titleByPath = (path: string) => {
+export const titleForPath = (path: string) => {
   if (path === "/" || path === "/login") return siteTitle;
   if (path.startsWith("/favourites/tracks"))
     return "Favourite Spotify tracks — Spotistats";
@@ -60,8 +60,6 @@ const titleByPath = (path: string) => {
   if (path.startsWith("/security")) return "Security policy — Spotistats";
   return "Spotistats — Your Spotify, decoded";
 };
-
-export const titleForPath = (path: string) => titleByPath(path);
 
 /**
  * The canonical URL for a path.

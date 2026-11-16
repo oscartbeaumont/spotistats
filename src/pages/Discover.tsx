@@ -133,7 +133,10 @@ function Discover() {
       <Show when={draft()}>{(value) => (
         <section aria-label="Review selection" class="space-y-5">
           <div class="flex flex-wrap items-center justify-between gap-4 border-b-4 border-[#0a0a0a] pb-4">
-            <h2 class="text-2xl font-black uppercase tracking-tight">Your selection — {value().tracks.length} tracks</h2>
+            <h2 class="text-2xl font-black uppercase tracking-tight">
+              Your selection — {value().tracks.length}{" "}
+              {value().tracks.length === 1 ? "track" : "tracks"}
+            </h2>
             <span class="text-xs font-bold uppercase tracking-widest">Music supplied by Spotify</span>
           </div>
           <Show when={value().tracks.length === 0}>

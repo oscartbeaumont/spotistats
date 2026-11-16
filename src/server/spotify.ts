@@ -49,10 +49,16 @@ const SpotifyTrack = Schema.Struct({
 
 const PlayHistory = Schema.Struct({
   played_at: Schema.String,
-  context: Schema.NullOr(Schema.Struct({
-    type: Schema.optional(Schema.String),
-    uri: Schema.optional(Schema.String),
-  })),
+  // Spotify omits the context for some playback sources, so this cannot be a
+  // required nullable field.
+  context: Schema.optional(
+    Schema.NullOr(
+      Schema.Struct({
+        type: Schema.optional(Schema.String),
+        uri: Schema.optional(Schema.String),
+      }),
+    ),
+  ),
   track: SpotifyTrack,
 });
 export type PlayHistory = typeof PlayHistory.Type;
@@ -144,9 +150,22 @@ const tokenRequest = (body: URLSearchParams) =>
 
     if (!response.ok) {
       const detail = yield* readText(response, "Failed to read Spotify token error");
+      const message = `Spotify token request failed: ${detail}`;
+      // A rate limit or an outage is not the user's authorization being
+      // rejected. Reporting it as `SpotifyAuthRejected` would disable the
+      // account and demand a reconnect that cannot fix it.
+      if (response.status === 429 || response.status >= 500) {
+        return yield* Effect.fail(
+          new UpstreamError({
+            service: "spotify",
+            message,
+            status: response.status,
+          }),
+        );
+      }
       return yield* Effect.fail(
         new SpotifyAuthRejected({
-          message: `Spotify token request failed: ${detail}`,
+          message,
           status: response.status,
         }),
       );

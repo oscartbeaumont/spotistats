@@ -67,8 +67,11 @@ export function startPlaylistExports(playlists: readonly Playlist[]) {
     fresh.push(playlist);
   }
   if (fresh.length === 0) return;
+  const freshIds = new Set(fresh.map(exportJobId));
   setExportJobs((jobs) => [
-    ...jobs,
+    // Re-exporting a finished playlist replaces its old row instead of
+    // stacking a second job under the same id.
+    ...jobs.filter((job) => !freshIds.has(job.id)),
     ...fresh.map((playlist) => ({
       id: exportJobId(playlist),
       name: playlist.name,

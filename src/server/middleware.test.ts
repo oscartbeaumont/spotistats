@@ -5,7 +5,7 @@ vi.mock("./oauth", () => ({ statsLogin: vi.fn(), statsCallback: vi.fn() }));
 
 import middleware from "./middleware";
 
-const call = (path: string) => {
+const call = (path: string, method = "GET") => {
   const next = vi.fn(
     async () =>
       new Response("<html></html>", {
@@ -14,7 +14,7 @@ const call = (path: string) => {
       }),
   );
   const event = {
-    request: new Request(`https://spotistats.otbeaumont.me${path}`),
+    request: new Request(`https://spotistats.otbeaumont.me${path}`, { method }),
   } as unknown as Parameters<typeof middleware>[0];
   return middleware(event, next).then((response) => ({ response, next }));
 };
@@ -33,5 +33,19 @@ describe("static asset paths", () => {
     const { response, next } = await call("/favourites/albums");
     expect(response.status).toBe(200);
     expect(next).toHaveBeenCalledOnce();
+  });
+});
+
+describe("method guards", () => {
+  it("rejects a non-GET login without dropping the security headers", async () => {
+    const { response } = await call("/account/stats/login", "POST");
+    expect(response.status).toBe(405);
+    expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
+  });
+
+  it("rejects a non-GET callback without dropping the security headers", async () => {
+    const { response } = await call("/account/stats/callback", "POST");
+    expect(response.status).toBe(405);
+    expect(response.headers.get("X-Frame-Options")).toBe("DENY");
   });
 });

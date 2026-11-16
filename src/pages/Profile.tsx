@@ -12,7 +12,7 @@ import {
 } from "solid-js";
 
 import { accountApi } from "~/client/api";
-import { capture, identifyUser } from "~/client/analytics";
+import { capture, captureError, identifyUser } from "~/client/analytics";
 import {
   getCurrentlyPlaying,
   getProfile,
@@ -35,7 +35,7 @@ import {
   localDay,
 } from "~/lib/insights";
 import { createPreviewInsights } from "~/lib/previewInsights";
-import { createShortcut, isEditableShortcutTarget } from "~/lib/shortcut";
+import { createShortcut } from "~/lib/shortcut";
 import { reuseUnchanged } from "~/lib/stable";
 import { statsOutcome } from "~/lib/statsOutcome";
 import { welcomePhase } from "~/lib/statsWelcome";
@@ -583,6 +583,11 @@ export default function ProfilePage() {
     try {
       await queueRefresh();
       capture("stats_refresh_requested", {});
+    } catch (error) {
+      // The button used to reject into the void, so a failed refresh was
+      // silent. The next status poll shows the stored error; report this one.
+      console.error("Stats refresh failed", error);
+      captureError(error);
     } finally {
       setRefreshing(false);
     }
@@ -646,10 +651,7 @@ export default function ProfilePage() {
 
   createShortcut(
     ["r"],
-    (event) => {
-      if (isEditableShortcutTarget(event)) return;
-      void refreshStats();
-    },
+    () => void refreshStats(),
     { preventDefault: false },
   );
 

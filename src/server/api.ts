@@ -5,7 +5,7 @@ import { HttpApiBuilder, HttpApiError } from "effect/http-api";
 import { Api } from "~/api";
 
 import { Spotify, type SpotifyProfile } from "./spotify";
-import { Tracking } from "./tracking";
+import { Tracking, type TrackingShape } from "./tracking";
 import { readDiscoveryHistory, readKnownTracks } from "./discovery";
 
 /**
@@ -38,81 +38,69 @@ const withUser = <A, E, R>(
     return yield* handler(user);
   });
 
+/** Runs a handler with the authenticated Spotify user and tracking service. */
+const withTracking = <A, E, R>(
+  headers: { readonly authorization?: string | undefined },
+  handler: (
+    tracking: TrackingShape,
+    user: SpotifyProfile,
+  ) => Effect.Effect<A, E, R>,
+) =>
+  withUser(headers, (user) =>
+    Effect.flatMap(Tracking, (tracking) => handler(tracking, user)),
+  );
+
 export const AccountGroupLive = HttpApiBuilder.group(Api, "account", (handlers) =>
   handlers
     .handle("discoveryHistory", ({ headers }) =>
-      withUser(headers, (user) => Effect.gen(function* () {
-        return yield* readDiscoveryHistory(yield* SqlClient, user.id);
-      })),
+      withUser(headers, (user) =>
+        Effect.flatMap(SqlClient, (sql) => readDiscoveryHistory(sql, user.id)),
+      ),
     )
     .handle("discoveryKnown", ({ headers, payload }) =>
-      withUser(headers, (user) => Effect.gen(function* () {
-        return yield* readKnownTracks(yield* SqlClient, user.id, payload.ids);
-      })),
+      withUser(headers, (user) =>
+        Effect.flatMap(SqlClient, (sql) =>
+          readKnownTracks(sql, user.id, payload.ids),
+        ),
+      ),
     )
     .handle("status", ({ headers }) =>
-      withUser(headers, (user) =>
-        Effect.gen(function* () {
-          const tracking = yield* Tracking;
-          yield* tracking.markRead(user.id);
-          return yield* tracking.status(user.id);
-        }),
+      withTracking(headers, (tracking, user) =>
+        Effect.andThen(tracking.markRead(user.id), tracking.status(user.id)),
       ),
     )
     .handle("insights", ({ headers, query }) =>
-      withUser(headers, (user) =>
-        Effect.gen(function* () {
-          const tracking = yield* Tracking;
-          return yield* tracking.insights(user.id, {
-            tzOffset: query.tzOffset ?? 0,
-            range: query.range ?? "all",
-            fromMs: query.fromMs ?? null,
-            toMs: query.toMs ?? null,
-          });
+      withTracking(headers, (tracking, user) =>
+        tracking.insights(user.id, {
+          tzOffset: query.tzOffset ?? 0,
+          range: query.range ?? "all",
+          fromMs: query.fromMs ?? null,
+          toMs: query.toMs ?? null,
         }),
       ),
     )
     .handle("exportJson", ({ headers }) =>
-      withUser(headers, (user) =>
-        Effect.gen(function* () {
-          const tracking = yield* Tracking;
-          return yield* tracking.exportJson(user.id);
-        }),
-      ),
+      withTracking(headers, (tracking, user) => tracking.exportJson(user.id)),
     )
     .handle("exportCsv", ({ headers }) =>
-      withUser(headers, (user) =>
-        Effect.gen(function* () {
-          const tracking = yield* Tracking;
-          return yield* tracking.exportCsv(user.id);
-        }),
-      ),
+      withTracking(headers, (tracking, user) => tracking.exportCsv(user.id)),
     )
     .handle("refresh", ({ headers }) =>
-      withUser(headers, (user) =>
-        Effect.gen(function* () {
-          const tracking = yield* Tracking;
-          const queued = yield* tracking.enqueueRefresh(user.id);
-          return { queued } satisfies { queued: boolean };
-        }),
+      withTracking(headers, (tracking, user) =>
+        Effect.map(
+          tracking.enqueueRefresh(user.id),
+          (queued): { queued: boolean } => ({ queued }),
+        ),
       ),
     )
     .handle("disable", ({ headers }) =>
-      withUser(headers, (user) =>
-        Effect.gen(function* () {
-          const tracking = yield* Tracking;
-          yield* tracking.disable(user.id);
-          return yield* tracking.status(user.id);
-        }),
+      withTracking(headers, (tracking, user) =>
+        Effect.andThen(tracking.disable(user.id), tracking.status(user.id)),
       ),
     )
     .handle("deleteData", ({ headers }) =>
-      withUser(headers, (user) =>
-        Effect.gen(function* () {
-          const tracking = yield* Tracking;
-          yield* tracking.deleteData(user.id);
-          return yield* tracking.status(user.id);
-        }),
+      withTracking(headers, (tracking, user) =>
+        Effect.andThen(tracking.deleteData(user.id), tracking.status(user.id)),
       ),
     ),
 );

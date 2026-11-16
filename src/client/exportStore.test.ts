@@ -53,6 +53,20 @@ describe("export store", () => {
     expect(exportJobs().filter((job) => job.id === "p1")).toHaveLength(1);
   });
 
+  it("replaces a finished job instead of stacking a duplicate row", async () => {
+    deps.buildPlaylistCsv.mockResolvedValue({ csv: "csv", trackCount: 3 });
+    startPlaylistExports([{ id: "p1", name: "Morning Mix" }]);
+    await flush();
+    await flush();
+    expect(exportJobs()).toHaveLength(1);
+
+    startPlaylistExports([{ id: "p1", name: "Morning Mix" }]);
+    await flush();
+    await flush();
+    expect(exportJobs()).toHaveLength(1);
+    expect(exportJobs()[0]?.status).toBe("done");
+  });
+
   it("records a failed export", async () => {
     deps.buildPlaylistCsv.mockRejectedValue(new Error("rate limited"));
     startPlaylistExports([{ id: "p1", name: "Morning Mix" }]);

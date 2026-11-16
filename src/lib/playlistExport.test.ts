@@ -10,6 +10,14 @@ vi.mock("~/client/spotify", () => ({
   getExportTracksPage: spotify.getExportTracksPage,
   getAudioFeatures: spotify.getAudioFeatures,
   getArtists: spotify.getArtists,
+  playlistTrack: (entry: { is_local?: boolean; item?: unknown; track?: unknown }) => {
+    if (entry.is_local) return null;
+    const track = (entry.item ?? entry.track) as
+      | { is_local?: boolean }
+      | null
+      | undefined;
+    return track && track.is_local !== true ? track : null;
+  },
   // The real helper runs an Effect; the mocked getters already return promises.
   runSpotify: (value: unknown) => value,
 }));
@@ -92,5 +100,29 @@ describe("buildPlaylistCsv", () => {
     expect(seen.length).toBeGreaterThan(0);
     expect(seen.at(-1)).toBe(1);
     expect(seen.every((value) => value >= 0 && value <= 1)).toBe(true);
+  });
+
+  it("caps how many pages it asks Spotify for at once", async () => {
+    const pages = 8;
+    let inFlight = 0;
+    let peak = 0;
+    spotify.getExportTracksPage.mockImplementation(async (_playlist, offset: number) => {
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      inFlight -= 1;
+      return {
+        items: [trackRow(`t${offset}`, `Track ${offset}`)],
+        next: null,
+        total: pages * 50,
+        limit: 50,
+        offset,
+      };
+    });
+
+    const { trackCount } = await buildPlaylistCsv({ name: "Long Mix" });
+    expect(trackCount).toBe(pages);
+    expect(peak).toBeGreaterThan(1);
+    expect(peak).toBeLessThanOrEqual(4);
   });
 });

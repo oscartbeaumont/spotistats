@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 
-import { consumeSpotifyCallback, createLoginUrl } from "./auth";
+import { consumeSpotifyCallback, createLoginUrl, loginError } from "./auth";
 import { authStore, setAuthStore } from "./storage";
 
 vi.mock("./analytics", () => ({ capture: vi.fn(), resetAnalytics: vi.fn() }));
@@ -36,4 +36,67 @@ it("does not assume a requested scope was granted when Spotify omits it", async 
   setAuthStore({ status: "authenticating", stateToken: "state", codeVerifier: "verifier", linkToUri: false });
   await consumeSpotifyCallback();
   expect(authStore()).toMatchObject({ scopes: [] });
+});
+
+it("explains a cancelled sign-in instead of ignoring it", async () => {
+  const replaceState = vi.fn();
+  vi.stubGlobal("window", {
+    location: {
+      search: "?error=access_denied",
+      pathname: "/",
+      origin: "https://example.com",
+    },
+  });
+  vi.stubGlobal("history", { replaceState });
+  setAuthStore({
+    status: "authenticating",
+    stateToken: "state",
+    codeVerifier: "verifier",
+    linkToUri: false,
+  });
+
+  expect(await consumeSpotifyCallback()).toBe(true);
+  expect(authStore()).toEqual({ status: "empty" });
+  expect(loginError()).toContain("did not grant access");
+  expect(replaceState).toHaveBeenCalled();
+});
+
+it("explains a Spotify error during sign-in", async () => {
+  vi.stubGlobal("window", {
+    location: {
+      search: "?error=temporarily_unavailable",
+      pathname: "/",
+      origin: "https://example.com",
+    },
+  });
+  vi.stubGlobal("history", { replaceState: vi.fn() });
+  setAuthStore({
+    status: "authenticating",
+    stateToken: "state",
+    codeVerifier: "verifier",
+    linkToUri: false,
+  });
+
+  expect(await consumeSpotifyCallback()).toBe(true);
+  expect(loginError()).toContain("could not complete");
+});
+
+it("does not sign out an authenticated session over a stray error query", async () => {
+  vi.stubGlobal("window", {
+    location: {
+      search: "?error=access_denied",
+      pathname: "/",
+      origin: "https://example.com",
+    },
+  });
+  vi.stubGlobal("history", { replaceState: vi.fn() });
+  const session = {
+    status: "authenticated" as const,
+    accessToken: "Bearer token",
+    linkToUri: false,
+  };
+  setAuthStore(session);
+
+  expect(await consumeSpotifyCallback()).toBe(false);
+  expect(authStore()).toEqual(session);
 });

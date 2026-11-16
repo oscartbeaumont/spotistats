@@ -8,10 +8,11 @@ import {
 import { errorMessage } from "~/lib/errors";
 import { PageHeader } from "~/components/PageHeader";
 import { buildPlaylistCsv } from "~/lib/playlistExport";
-import { createShortcut, isEditableShortcutTarget } from "~/lib/shortcut";
+import { createShortcut } from "~/lib/shortcut";
 import { capture } from "~/client/analytics";
 import { authStore } from "~/client/storage";
 import {
+  activeExportCount,
   exportJobId,
   exportJobs,
   startPlaylistExports,
@@ -61,6 +62,7 @@ export default function ExportPage() {
     loadedPlaylists().filter((playlist) => isSelected(playlist));
 
   const exportSelected = () => {
+    if (backingUp()) return;
     const chosen = selectedPlaylists();
     if (chosen.length === 0) return;
     setExportError(null);
@@ -69,13 +71,18 @@ export default function ExportPage() {
   };
 
   const exportPlaylist = (playlist: Playlist) => {
+    if (backingUp()) return;
     setExportError(null);
     startPlaylistExports([playlist]);
   };
 
   async function backupAll() {
     const all = loadedPlaylists();
-    if (backingUp()) return;
+    // The header renders before the playlist list resolves. Starting here with
+    // an empty list downloaded a `Music.zip` that held only `user.json`.
+    // The background store also runs one export at a time for rate limits, so
+    // do not start a second batch on top of it.
+    if (backingUp() || activeExportCount() > 0 || all.length === 0) return;
     setBackingUp(true);
     setBackupProgress(0);
     setExportError(null);
@@ -132,43 +139,20 @@ export default function ExportPage() {
       ?.scrollIntoView({ block: "nearest" });
   }
 
-  createShortcut(["j"], (event) => {
-    if (isEditableShortcutTarget(event)) return;
-    moveFocus(1);
-  });
-  createShortcut(["k"], (event) => {
-    if (isEditableShortcutTarget(event)) return;
-    moveFocus(-1);
-  });
-  createShortcut(["ArrowDown"], (event) => {
-    if (isEditableShortcutTarget(event)) return;
-    moveFocus(1);
-  });
-  createShortcut(["ArrowUp"], (event) => {
-    if (isEditableShortcutTarget(event)) return;
-    moveFocus(-1);
-  });
-  createShortcut(["Enter"], (event) => {
-    if (isEditableShortcutTarget(event)) return;
+  createShortcut(["j"], () => moveFocus(1));
+  createShortcut(["k"], () => moveFocus(-1));
+  createShortcut(["ArrowDown"], () => moveFocus(1));
+  createShortcut(["ArrowUp"], () => moveFocus(-1));
+  createShortcut(["Enter"], () => {
     const focused = loadedPlaylists()[focusedIndex()];
     if (focused) exportPlaylist(focused);
   });
-  createShortcut([" "], (event) => {
-    if (isEditableShortcutTarget(event)) return;
+  createShortcut([" "], () => {
     const focused = loadedPlaylists()[focusedIndex()];
-    if (focused) {
-      event.preventDefault();
-      toggleSelected(focused);
-    }
+    if (focused) toggleSelected(focused);
   });
-  createShortcut(["b"], (event) => {
-    if (isEditableShortcutTarget(event)) return;
-    void backupAll();
-  });
-  createShortcut(["e"], (event) => {
-    if (isEditableShortcutTarget(event)) return;
-    exportSelected();
-  });
+  createShortcut(["b"], () => void backupAll());
+  createShortcut(["e"], exportSelected);
 
   return (
     <main class="app-main p-8 md:p-12">
@@ -179,14 +163,19 @@ export default function ExportPage() {
             <Show when={selectedPlaylists().length > 0}>
               <button
                 onClick={exportSelected}
-                class="font-black text-xs uppercase px-4 py-2 tracking-wide transition border-[3px] border-[#0a0a0a] bg-[#1DB954] hover:bg-[#0a0a0a] hover:text-[#1DB954]"
+                disabled={backingUp()}
+                class="font-black text-xs uppercase px-4 py-2 tracking-wide transition border-[3px] border-[#0a0a0a] bg-[#1DB954] hover:bg-[#0a0a0a] hover:text-[#1DB954] disabled:opacity-50"
               >
                 Export selected ({selectedPlaylists().length})
               </button>
             </Show>
             <button
               onClick={backupAll}
-              disabled={backingUp()}
+              disabled={
+                backingUp() ||
+                activeExportCount() > 0 ||
+                loadedPlaylists().length === 0
+              }
               class="font-black text-xs uppercase px-4 py-2 tracking-wide transition border-[3px] border-[#0a0a0a] hover:bg-[#0a0a0a] hover:text-[#f0ede8] disabled:opacity-50"
             >
               Backup All <span class="ml-2 text-[0.6rem] opacity-50">B</span> →
@@ -246,7 +235,8 @@ export default function ExportPage() {
                   type="button"
                   onFocus={() => setFocusedIndex(index())}
                   onClick={() => exportPlaylist(playlist)}
-                  class="flex min-w-0 flex-1 items-center gap-4 text-left outline-none"
+                  disabled={backingUp()}
+                  class="flex min-w-0 flex-1 items-center gap-4 text-left outline-none disabled:opacity-60"
                 >
                   <img
                     src={playlist.images?.[0]?.url ?? "/assets/placeholder.svg"}

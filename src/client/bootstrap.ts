@@ -24,7 +24,10 @@ export function bootstrapClient(): void {
       email: session.profile.email,
     });
   }
-  void consumeSpotifyCallback(session);
+  void consumeSpotifyCallback(session).catch((error) => {
+    // A broken callback must not become an unhandled boot rejection.
+    console.error("Spotify login callback failed", error);
+  });
 }
 
 // Register as early as possible: a lazy route chunk can fail during the first

@@ -131,7 +131,6 @@ export default function LoginPage() {
     setSigningIn(true);
     capture("login_started", { source });
     try {
-      localStorage.clear();
       window.location.href = await createLoginUrl(window.location.origin);
     } catch (error) {
       console.error("Could not start the Spotify login", error);

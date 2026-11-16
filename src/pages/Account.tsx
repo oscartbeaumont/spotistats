@@ -18,7 +18,7 @@ import { authorizationNeedsReconnect } from "~/lib/authorization";
 import { downloadTextFile } from "~/lib/download";
 import { errorMessage } from "~/lib/errors";
 import { formatDate } from "~/lib/format";
-import { createShortcut, isEditableShortcutTarget } from "~/lib/shortcut";
+import { createShortcut } from "~/lib/shortcut";
 import { statsOutcome } from "~/lib/statsOutcome";
 
 /** Fixed reason codes the worker puts on a failed stats handshake. */
@@ -55,7 +55,7 @@ export default function AccountPage() {
   // the boundary, which shows it and reports it to PostHog. The worker sends a
   // fixed reason code, which keeps the failure diagnosable without leaking the
   // underlying cause.
-  const result = outcome();
+  const result = untrack(() => outcome());
   if (typeof window !== "undefined" && result?.kind === "failed") {
     window.history.replaceState(
       null,
@@ -167,10 +167,7 @@ export default function AccountPage() {
 
   createShortcut(
     ["Shift", "D"],
-    (event) => {
-      if (isEditableShortcutTarget(event)) return;
-      void disableStats();
-    },
+    () => void disableStats(),
     { preventDefault: false },
   );
 

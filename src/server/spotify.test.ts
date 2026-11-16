@@ -23,6 +23,22 @@ const fetchProfile = () =>
     }).pipe(Effect.provide(SpotifyLive)),
   );
 
+const fetchRecentlyPlayed = () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const spotify = yield* Spotify;
+      return yield* spotify.recentlyPlayed("access-token");
+    }).pipe(Effect.provide(SpotifyLive)),
+  );
+
+const refreshToken = () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const spotify = yield* Spotify;
+      return yield* spotify.refreshToken("refresh-token");
+    }).pipe(Effect.provide(SpotifyLive)),
+  );
+
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Spotify profile decoding", () => {
@@ -39,8 +55,80 @@ describe("Spotify profile decoding", () => {
   });
 });
 
-describe("Spotify API retries", () => {
-  it("waits out a transient 5xx instead of failing the request", async () => {
+describe("recently played decoding", () => {
+  it("accepts a play that omits its playback context", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          items: [
+            {
+              played_at: "2026-01-01T00:00:00.000Z",
+              track: {
+                id: "track",
+                name: "Track",
+                duration_ms: 1000,
+                uri: "spotify:track:track",
+                album: { name: "Album", images: [] },
+                artists: [{ name: "Artist" }],
+              },
+            },
+          ],
+        }),
+      ),
+    );
+
+    const items = await fetchRecentlyPlayed();
+    expect(items).toHaveLength(1);
+    expect(items[0]?.context).toBeUndefined();
+  });
+});
+
+describe("token endpoint failures", () => {
+  it("treats a token endpoint outage as a transient upstream failure", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("unavailable", { status: 503 })),
+    );
+    await expect(refreshToken()).rejects.toMatchObject({
+      _tag: "UpstreamError",
+      service: "spotify",
+      status: 503,
+    });
+  });
+
+  it("treats a rate limit as transient", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response("slow down", {
+            status: 429,
+            headers: { "Retry-After": "60" },
+          }),
+      ),
+    );
+    await expect(refreshToken()).rejects.toMatchObject({
+      _tag: "UpstreamError",
+      status: 429,
+    });
+  });
+
+  it("keeps an invalid grant as an authorization rejection", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({ error: "invalid_grant" }, { status: 400 }),
+      ),
+    );
+    await expect(refreshToken()).rejects.toMatchObject({
+      _tag: "SpotifyAuthRejected",
+      status: 400,
+    });
+  });
+});
+
+describe("Spotify API retries", () => {  it("waits out a transient 5xx instead of failing the request", async () => {
     let calls = 0;
     vi.stubGlobal(
       "fetch",

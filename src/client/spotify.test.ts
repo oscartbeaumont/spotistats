@@ -8,6 +8,7 @@ import {
   getSavedAlbumsPage,
   isLikedSongs,
   PlaylistTrack,
+  playlistTrack,
   runSpotify,
   SpotifyProfile,
 } from "./spotify";
@@ -48,6 +49,33 @@ describe("playlist entry decoding", () => {
     };
     expect(Schema.decodeUnknownSync(PlaylistTrack)(entry)).toEqual(entry);
   });
+
+  it("reads the newer `item` field as well as the deprecated `track` alias", () => {
+    const fromItem = Schema.decodeUnknownSync(PlaylistTrack)({
+      added_at: null,
+      item: track,
+    });
+    expect(playlistTrack(fromItem)?.id).toBe("track");
+    const fromTrack = Schema.decodeUnknownSync(PlaylistTrack)({
+      added_at: null,
+      track,
+    });
+    expect(playlistTrack(fromTrack)?.id).toBe("track");
+  });
+
+  it("skips a podcast episode instead of failing the playlist", () => {
+    const episode = Schema.decodeUnknownSync(PlaylistTrack)({
+      added_at: null,
+      item: {
+        id: "episode",
+        name: "Episode",
+        type: "episode",
+        duration_ms: 1000,
+        uri: "spotify:episode:episode",
+      },
+    });
+    expect(playlistTrack(episode)).toBeNull();
+  });
 });
 
 describe("Spotify authentication races", () => {
@@ -76,7 +104,7 @@ describe("export playlist identity", () => {
     const fetch = vi.fn(async (_url: string, _init?: RequestInit) => Response.json({ items: [], next: null, total: 0, limit: 100, offset: 0 }));
     vi.stubGlobal("fetch", fetch);
     await runSpotify(getExportTracksPage({ id: "playlist-id", name: "Liked Songs" }, 100));
-    expect(fetch.mock.calls[0]?.[0]).toBe("https://api.spotify.com/v1/playlists/playlist-id/tracks?limit=100&offset=100");
+    expect(fetch.mock.calls[0]?.[0]).toBe("https://api.spotify.com/v1/playlists/playlist-id/tracks?limit=50&offset=100");
   });
 
   it("recognizes the synthetic library entry but not a malformed null-ID playlist", () => {

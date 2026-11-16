@@ -23,7 +23,7 @@ import { capture, captureError } from "~/client/analytics";
 import { authStore } from "~/client/storage";
 import { PageHeader } from "~/components/PageHeader";
 import { errorMessage } from "~/lib/errors";
-import { createShortcut, isEditableShortcutTarget } from "~/lib/shortcut";
+import { createShortcut } from "~/lib/shortcut";
 import { externalHref, spotifyUri } from "~/lib/url";
 
 type Range = "long" | "medium" | "short";
@@ -364,28 +364,12 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
       ?.scrollIntoView({ block: "nearest" });
   };
 
-  createShortcut(["j"], (event) => {
-    if (isEditableShortcutTarget(event)) return;
-    moveSelection(1);
-  });
-  createShortcut(["k"], (event) => {
-    if (isEditableShortcutTarget(event)) return;
-    moveSelection(-1);
-  });
-  createShortcut(["ArrowDown"], (event) => {
-    if (isEditableShortcutTarget(event)) return;
-    moveSelection(1);
-  });
-  createShortcut(["ArrowUp"], (event) => {
-    if (isEditableShortcutTarget(event)) return;
-    moveSelection(-1);
-  });
-  createShortcut(["Enter"], (event) => {
-    if (isEditableShortcutTarget(event)) return;
-    openItem(loadedItems()[selectedIndex()]);
-  });
-  createShortcut(["t"], (event) => {
-    if (isEditableShortcutTarget(event)) return;
+  createShortcut(["j"], () => moveSelection(1));
+  createShortcut(["k"], () => moveSelection(-1));
+  createShortcut(["ArrowDown"], () => moveSelection(1));
+  createShortcut(["ArrowUp"], () => moveSelection(-1));
+  createShortcut(["Enter"], () => openItem(loadedItems()[selectedIndex()]));
+  createShortcut(["t"], () => {
     capture("favourites_kind_changed", {
       kind: props.kind === "tracks" ? "albums" : "tracks",
     });
@@ -394,10 +378,7 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
   });
   if (props.kind === "tracks") {
     RANGES.forEach((value, index) => {
-      createShortcut([String(index + 1)], (event) => {
-        if (isEditableShortcutTarget(event)) return;
-        selectRange(value);
-      });
+      createShortcut([String(index + 1)], () => selectRange(value));
     });
   }
 

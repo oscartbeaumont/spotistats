@@ -14,6 +14,7 @@ describe("csvCell", () => {
     expect(csvCell("a,b")).toBe('"a,b"');
     expect(csvCell('a"b')).toBe('"a""b"');
     expect(csvCell("a\nb")).toBe('"a\nb"');
+    expect(csvCell("a\rb")).toBe('"a\rb"');
   });
 
   it("neutralises spreadsheet formulas", () => {

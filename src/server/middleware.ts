@@ -45,12 +45,12 @@ export default async function middleware(
   if (pathname === "/account/stats/login") {
     return request.method === "GET"
       ? withSecurityHeaders(await statsLogin(request))
-      : new Response("Method Not Allowed", { status: 405 });
+      : withSecurityHeaders(new Response("Method Not Allowed", { status: 405 }));
   }
 
   if (pathname === "/account/stats/callback") {
     if (request.method !== "GET") {
-      return new Response("Method Not Allowed", { status: 405 });
+      return withSecurityHeaders(new Response("Method Not Allowed", { status: 405 }));
     }
     const response = await Effect.runPromise(
       statsCallback(request).pipe(Effect.provide(ServicesLive), Effect.orDie),

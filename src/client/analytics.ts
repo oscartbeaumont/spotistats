@@ -256,7 +256,19 @@ function analytics(): Promise<PostHogClient> | undefined {
 }
 
 export function initAnalytics(): void {
-  void analytics();
+  void analytics()?.catch(() => {
+    // Analytics is best-effort. A blocked chunk or an unreachable host must
+    // never surface as an unhandled rejection.
+  });
+}
+
+/**
+ * Runs an analytics call, ignoring a failed PostHog load. Analytics is
+ * best-effort: a blocked chunk or an unreachable host must not break the app
+ * or surface as an unhandled rejection.
+ */
+function runAnalytics(action: (posthog: PostHogClient) => void): void {
+  void analytics()?.then(action).catch(() => {});
 }
 
 /**
@@ -272,7 +284,7 @@ export function identifyUser(
   id: string,
   properties: Record<string, unknown>,
 ): void {
-  void analytics()?.then((posthog) => posthog.identify(id, properties));
+  runAnalytics((posthog) => posthog.identify(id, properties));
 }
 
 /**
@@ -284,7 +296,7 @@ export function captureError(error: unknown): void {
   // An expired session is handled by signing the user out, so reporting it
   // files an issue nobody can fix.
   if (isHandledError(error)) return;
-  void analytics()?.then((posthog) => posthog.captureException(error));
+  runAnalytics((posthog) => posthog.captureException(error));
 }
 
 /**
@@ -292,13 +304,15 @@ export function captureError(error: unknown): void {
  * browser is not merged into the previous user's profile.
  */
 export function resetAnalytics(): void {
-  void analytics()?.then((posthog) => posthog.reset());
+  runAnalytics((posthog) => posthog.reset());
 }
 
 /** Where a failed login stopped, so the funnel can tell the modes apart. */
 export type LoginFailureReason =
   | "start_failed"
   | "state_mismatch"
+  | "denied"
+  | "unavailable"
   | "network_error"
   | "rejected"
   | "invalid_response";
@@ -365,5 +379,5 @@ export function capture<K extends keyof AnalyticsEvents>(
   event: K,
   properties: AnalyticsEvents[K],
 ): void {
-  void analytics()?.then((posthog) => posthog.capture(event, properties));
+  runAnalytics((posthog) => posthog.capture(event, properties));
 }

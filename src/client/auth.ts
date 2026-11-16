@@ -1,6 +1,10 @@
 import { createSignal, untrack } from "solid-js";
 
-import { capture, resetAnalytics } from "./analytics";
+import {
+  capture,
+  resetAnalytics,
+  type LoginFailureReason,
+} from "./analytics";
 import { authStore, setAuthStore, type AuthStore } from "./storage";
 import { spotifyClientId, spotifyScopes } from "./spotify";
 
@@ -79,8 +83,15 @@ export async function createLoginUrl(origin: string, playlistWrite = false) {
   return `https://accounts.spotify.com/authorize?${params.toString()}`;
 }
 
-export function hasSpotifyCallbackCode() {
-  return new URLSearchParams(window.location.search).has("code");
+export function hasSpotifyCallbackResult() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.has("code")) return true;
+  // Only a sign-in that was actually started can return an error, so a stray
+  // `?error=` on a signed-in page is not a reason to leave the session alone.
+  return (
+    params.has("error") &&
+    untrack(() => authStore()).status === "authenticating"
+  );
 }
 
 export async function consumeSpotifyCallback(
@@ -89,10 +100,38 @@ export async function consumeSpotifyCallback(
   const params = new URLSearchParams(window.location.search);
   const code = params.get("code");
   const returnedState = params.get("state");
+  const spotifyError = params.get("error");
+  const cleanUrl = () =>
+    history.replaceState(null, "", window.location.pathname || "/");
 
-  if (!code) return false;
+  if (!code) {
+    if (!spotifyError || store.status === "authenticated") return false;
+    // Cancelling or failing the consent screen used to land back on the login
+    // page with no explanation.
+    const denied = spotifyError === "access_denied";
+    capture("login_failed", { reason: denied ? "denied" : "unavailable" });
+    setLoginError(
+      denied
+        ? "Spotify did not grant access, so you are not signed in. Try again when you are ready."
+        : "Spotify could not complete the sign-in. Try again in a moment.",
+    );
+    setAuthStore({ status: "empty" });
+    cleanUrl();
+    return true;
+  }
 
-  const cleanUrl = () => history.replaceState(null, "", window.location.pathname || "/");
+  const failedLogin = (
+    reason: LoginFailureReason,
+    message: string,
+    detail: unknown,
+  ) => {
+    console.error("Spotify login failed:", detail);
+    capture("login_failed", { reason });
+    setLoginError(message);
+    setAuthStore({ status: "empty" });
+    cleanUrl();
+    return true;
+  };
 
   if (store.status !== "authenticating" || returnedState !== store.stateToken) {
     capture("login_failed", { reason: "state_mismatch" });
@@ -118,24 +157,19 @@ export async function consumeSpotifyCallback(
       body,
     });
   } catch (error) {
-    console.error("Spotify login network error:", error);
-    capture("login_failed", { reason: "network_error" });
-    setLoginError("Could not reach Spotify. Check your connection and try again.");
-    setAuthStore({ status: "empty" });
-    cleanUrl();
-    return true;
+    return failedLogin(
+      "network_error",
+      "Could not reach Spotify. Check your connection and try again.",
+      error,
+    );
   }
 
   if (!response.ok) {
-    console.error(
-      "Spotify login failed:",
+    return failedLogin(
+      "rejected",
+      "Spotify rejected the sign-in. Please try again.",
       await response.json().catch(() => ({ status: response.status })),
     );
-    capture("login_failed", { reason: "rejected" });
-    setLoginError("Spotify rejected the sign-in. Please try again.");
-    setAuthStore({ status: "empty" });
-    cleanUrl();
-    return true;
   }
 
   let token: { token_type: string; access_token: string; scope?: string };
@@ -146,12 +180,11 @@ export async function consumeSpotifyCallback(
     }
     token = { ...value, scope: typeof value === "object" && "scope" in value && typeof value.scope === "string" ? value.scope : undefined };
   } catch (error) {
-    console.error("Spotify login response error:", error);
-    capture("login_failed", { reason: "invalid_response" });
-    setLoginError("Spotify returned an unexpected sign-in response. Please try again.");
-    setAuthStore({ status: "empty" });
-    cleanUrl();
-    return true;
+    return failedLogin(
+      "invalid_response",
+      "Spotify returned an unexpected sign-in response. Please try again.",
+      error,
+    );
   }
 
   setLoginError(null);

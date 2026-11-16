@@ -22,9 +22,7 @@ const toHex = (bytes: Uint8Array) =>
   Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 
 const randomState = () =>
-  Array.from(crypto.getRandomValues(new Uint8Array(24)), (byte) =>
-    byte.toString(16).padStart(2, "0"),
-  ).join("");
+  toHex(crypto.getRandomValues(new Uint8Array(24)));
 
 /** Compares two hex strings without leaking where they first differ. */
 const stateMatches = (left: string, right: string) => {

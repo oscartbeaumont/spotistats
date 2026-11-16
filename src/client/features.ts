@@ -30,10 +30,13 @@ export function initFeatureFlags(): void {
     setDiscoveryEnabled(import.meta.env.DEV);
     return;
   }
-  void client.then((posthog) => {
-    // Identify reloads flags for the signed-in person, and this callback runs
-    // again each time, so a late flag load still reveals the feature.
-    posthog.onFeatureFlags(() => setDiscoveryEnabled(readFlag(posthog)));
-    setDiscoveryEnabled(readFlag(posthog));
-  });
+  void client
+    .then((posthog) => {
+      // Identify reloads flags for the signed-in person, and this callback runs
+      // again each time, so a late flag load still reveals the feature.
+      posthog.onFeatureFlags(() => setDiscoveryEnabled(readFlag(posthog)));
+      setDiscoveryEnabled(readFlag(posthog));
+    })
+    // A failed analytics chunk must keep the feature closed, not throw.
+    .catch(() => setDiscoveryEnabled(false));
 }

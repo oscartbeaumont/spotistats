@@ -32,7 +32,7 @@ export function csvCell(value: unknown) {
   if (typeof value === "number" && Number.isFinite(value)) return String(value);
   const text = String(value);
   const safe = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
-  return /[",\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+  return /[",\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
 }
 
 /** Makes an untrusted name safe to use as a single file name. */
