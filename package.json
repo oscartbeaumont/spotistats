@@ -34,10 +34,10 @@
     "solid-js": "next"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "beta",
+    "@cloudflare/vite-plugin": "2.0.0-rc.0",
     "@solidjs/vite-plugin": "3.0.0-next.57",
     "@tailwindcss/vite": "^4.3.5",
-    "cf": "1.0.0-beta.32",
+    "cf": "1.0.0-rc.0",
     "tailwindcss": "^4.3.5",
     "typescript": "^7.0.2",
     "vite": "^8.3.8",

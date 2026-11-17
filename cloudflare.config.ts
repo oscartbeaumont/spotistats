@@ -11,6 +11,8 @@ export default defineConfig(({ isPreview }) => ({
       enabled: true,
     },
     domains: ["spotistats.otbeaumont.me"],
+    // Pull request previews get their own versioned `workers.dev` URL.
+    previewUrls: true,
     // Worker Previews reject the `triggers` field, so the scheduled sync and the
     // queue consumer exist only on the production Worker. A preview still gets
     // the queue producer binding below, so uploads from it keep working.
