@@ -7,6 +7,7 @@ import type { ListeningInsights } from "~/api";
 
 const cover = (background: string, foreground: string, label: string) => {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><rect width="300" height="300" fill="${background}"/><circle cx="150" cy="150" r="95" fill="none" stroke="${foreground}" stroke-width="10"/><circle cx="150" cy="150" r="28" fill="${foreground}"/><text x="18" y="282" font-family="monospace" font-size="26" font-weight="bold" fill="${foreground}">${label}</text></svg>`;
+
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 };
 
@@ -19,14 +20,18 @@ const monthCounts = [180, 355, 240, 210, 330, 280, 415, 390, 460, 520, 480, 402]
 
 export function createPreviewInsights(now = Date.now()): ListeningInsights {
   const today = new Date(now);
+
   const trend = monthCounts.map((listens, index) => {
     const offset = index - (monthCounts.length - 1);
+
     const date = new Date(
       Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + offset, 1),
     );
+
     // Vary the average track length so the time line does not just mirror the
     // play bars in the sample data.
     const averageTrackMs = 168_000 + ((index * 41_000) % 96_000);
+
     return {
       bucket: monthKey(date),
       listens,

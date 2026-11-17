@@ -6,11 +6,13 @@ export function externalHref(
   value: string | null | undefined,
 ): string | undefined {
   if (!value) return undefined;
+
   try {
     if (safeProtocols.has(new URL(value).protocol)) return value;
   } catch {
     // Not an absolute URL; treat it as unsafe.
   }
+
   return undefined;
 }
 

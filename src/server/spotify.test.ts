@@ -1,11 +1,10 @@
 import { Effect, Schema } from "effect";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-// `./spotify` reads the worker env to build its Basic auth header; decoding a
-// profile never reaches it, so an empty env is enough.
-vi.mock("cloudflare:workers", () => ({ env: {} }));
-
 import { Spotify, SpotifyLive, SpotifyProfile } from "./spotify";
+
+/** The token endpoint only needs credentials to build its Basic auth header. */
+const credentials = { clientId: "test-client-id", clientSecret: "test-client-secret" };
 
 const profile = {
   id: "user",
@@ -19,24 +18,27 @@ const fetchProfile = () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const spotify = yield* Spotify;
+
       return yield* spotify.profile("access-token");
-    }).pipe(Effect.provide(SpotifyLive)),
+    }).pipe(Effect.provide(SpotifyLive(credentials))),
   );
 
 const fetchRecentlyPlayed = () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const spotify = yield* Spotify;
+
       return yield* spotify.recentlyPlayed("access-token");
-    }).pipe(Effect.provide(SpotifyLive)),
+    }).pipe(Effect.provide(SpotifyLive(credentials))),
   );
 
 const refreshToken = () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const spotify = yield* Spotify;
+
       return yield* spotify.refreshToken("refresh-token");
-    }).pipe(Effect.provide(SpotifyLive)),
+    }).pipe(Effect.provide(SpotifyLive(credentials))),
   );
 
 afterEach(() => vi.unstubAllGlobals());
@@ -134,6 +136,7 @@ describe("Spotify API retries", () => {  it("waits out a transient 5xx instead o
       "fetch",
       vi.fn(async () => {
         calls += 1;
+
         return calls < 3
           ? new Response("unavailable", { status: 503 })
           : Response.json(profile);
@@ -152,6 +155,7 @@ describe("Spotify API retries", () => {  it("waits out a transient 5xx instead o
       "fetch",
       vi.fn(async () => {
         calls += 1;
+
         return new Response("bad request", { status: 400 });
       }),
     );
@@ -169,6 +173,7 @@ describe("Spotify API retries", () => {  it("waits out a transient 5xx instead o
       "fetch",
       vi.fn(async () => {
         calls += 1;
+
         return new Response("slow down", {
           status: 429,
           headers: { "Retry-After": "60" },

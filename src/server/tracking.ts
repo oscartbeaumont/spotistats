@@ -1,4 +1,3 @@
-import { env } from "cloudflare:workers";
 import { Context, Effect, Layer } from "effect";
 import { SqlClient } from "effect/sql/SqlClient";
 
@@ -62,9 +61,21 @@ interface CountRow {
   count: number;
 }
 
+/** The body of a queued sync, shared by the producer and the consumer. */
+export interface SyncQueueMessage {
+  readonly spotifyUserId: string;
+}
+
+/** The worker's sync queue, injected so the service does not reach for `env`. */
+export class SyncQueue extends Context.Service<
+  SyncQueue,
+  Queue<SyncQueueMessage>
+>()("spotistats/SyncQueue") {}
+
 const make = Effect.gen(function* () {
   const sql = yield* SqlClient;
   const spotify = yield* Spotify;
+  const queue = yield* SyncQueue;
 
   const status = (spotifyUserId: string) =>
     Effect.gen(function* () {
@@ -105,6 +116,7 @@ const make = Effect.gen(function* () {
 
       const row = rows[0];
       const consentedAt = row?.consentedAt ?? null;
+
       return {
         enabled: !!row?.enabled,
         consentedAt,
@@ -130,6 +142,7 @@ const make = Effect.gen(function* () {
           }),
         );
       }
+
       const now = Date.now();
       yield* sql`
         INSERT INTO spotify_tracking_users
@@ -165,7 +178,7 @@ const make = Effect.gen(function* () {
 
       // A failed enqueue is not fatal: the cron trigger will pick the user up.
       yield* Effect.tryPromise({
-        try: () => env.SPOTIFY_SYNC_QUEUE.send({ spotifyUserId: profile.id }),
+        try: () => queue.send({ spotifyUserId: profile.id }),
         catch: queueError("Failed to enqueue sync"),
       }).pipe(
         Effect.catchCause((cause) =>
@@ -262,17 +275,20 @@ const make = Effect.gen(function* () {
       const rows = yield* sql<{ enabled: number }>`
         SELECT enabled FROM spotify_tracking_users WHERE spotify_user_id = ${spotifyUserId}
       `.pipe(Effect.mapError(databaseError("Failed to check tracking status")));
+
       if (!rows[0]?.enabled) return false;
       yield* Effect.tryPromise({
-        try: () => env.SPOTIFY_SYNC_QUEUE.send({ spotifyUserId }),
+        try: () => queue.send({ spotifyUserId }),
         catch: queueError("Failed to enqueue sync"),
       });
+
       return true;
     });
 
   const enqueueDue = (limit = 100) =>
     Effect.gen(function* () {
       const now = Date.now();
+
       const rows = yield* sql<{ spotifyUserId: string }>`
         SELECT u.spotify_user_id AS spotifyUserId
         FROM spotify_tracking_users u
@@ -281,14 +297,16 @@ const make = Effect.gen(function* () {
         ORDER BY s.next_sync_after
         LIMIT ${limit}
       `.pipe(Effect.mapError(databaseError("Failed to find due users")));
+
       if (rows.length === 0) return 0;
       yield* Effect.tryPromise({
         try: () =>
-          env.SPOTIFY_SYNC_QUEUE.sendBatch(
+          queue.sendBatch(
             rows.map((row) => ({ body: { spotifyUserId: row.spotifyUserId } })),
           ),
         catch: queueError("Failed to enqueue due syncs"),
       });
+
       return rows.length;
     });
 
@@ -297,7 +315,9 @@ const make = Effect.gen(function* () {
       const rows = yield* sql<{ refreshToken: string }>`
         SELECT refresh_token AS refreshToken FROM spotify_tokens WHERE spotify_user_id = ${spotifyUserId}
       `.pipe(Effect.mapError(databaseError("Failed to read refresh token")));
+
       const row = rows[0];
+
       if (!row) {
         return yield* Effect.fail(
           new UpstreamError({
@@ -307,7 +327,9 @@ const make = Effect.gen(function* () {
           }),
         );
       }
+
       const token = yield* spotify.refreshToken(row.refreshToken);
+
       if (token.refresh_token) {
         yield* sql`
           UPDATE spotify_tokens
@@ -315,6 +337,7 @@ const make = Effect.gen(function* () {
           WHERE spotify_user_id = ${spotifyUserId}
         `.pipe(Effect.mapError(databaseError("Failed to persist refreshed token")));
       }
+
       return token.access_token;
     });
 
@@ -323,6 +346,7 @@ const make = Effect.gen(function* () {
       const users = yield* sql<{ enabled: number }>`
         SELECT enabled FROM spotify_tracking_users WHERE spotify_user_id = ${spotifyUserId}
       `.pipe(Effect.mapError(databaseError("Failed to check tracking status")));
+
       if (!users[0]?.enabled) return;
 
       const state = yield* sql<{ lastPlayedAtMs: number | null }>`
@@ -330,6 +354,7 @@ const make = Effect.gen(function* () {
       `.pipe(Effect.mapError(databaseError("Failed to read sync state")));
 
       const accessToken = yield* refreshAccessToken(spotifyUserId);
+
       const items = yield* spotify.recentlyPlayed(
         accessToken,
         state[0]?.lastPlayedAtMs ?? undefined,
@@ -341,6 +366,7 @@ const make = Effect.gen(function* () {
       for (const item of items) {
         if (!item.track.id) continue;
         const playedAtMs = Date.parse(item.played_at);
+
         if (!Number.isFinite(playedAtMs)) continue;
         playedAtMsValues.push(playedAtMs);
         const image = item.track.album?.images?.[0]?.url ?? null;
@@ -412,10 +438,10 @@ const make = Effect.gen(function* () {
     enqueueRefresh,
     enqueueDue,
     sync,
-  } satisfies TrackingShape;
+  } satisfies TrackingService;
 });
 
-export interface TrackingShape {
+export interface TrackingService {
   readonly status: (spotifyUserId: string) => Effect.Effect<TrackingStatus, UpstreamError>;
   readonly insights: (
     spotifyUserId: string,
@@ -449,8 +475,11 @@ export interface TrackingShape {
   ) => Effect.Effect<void, UpstreamError | SpotifyUnauthorized | SpotifyAuthRejected>;
 }
 
-export class Tracking extends Context.Service<Tracking, TrackingShape>()(
+export class Tracking extends Context.Service<Tracking, TrackingService>()(
   "spotistats/Tracking",
 ) {}
 
-export const TrackingLive = Layer.effect(Tracking, make);
+export const TrackingLive = (queue: Queue<SyncQueueMessage>) =>
+  Layer.effect(Tracking, make).pipe(
+    Layer.provide(Layer.succeed(SyncQueue, queue)),
+  );

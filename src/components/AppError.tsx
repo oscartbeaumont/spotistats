@@ -20,10 +20,12 @@ export function AppError(props: { error?: unknown; reset?: () => void }) {
   // it and offer a retry instead of the system-error page.
   const upstreamOutage = () => isUpstreamOutage(props.error);
   const retry = () => (props.reset ? props.reset() : window.location.reload());
+
   const errorText = () => {
     if (props.error instanceof Error) {
       return `${props.error.message}\n\n${props.error.stack ?? ""}`;
     }
+
     return errorMessage(props.error);
   };
 

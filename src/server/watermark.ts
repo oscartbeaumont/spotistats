@@ -15,5 +15,6 @@ export function nextWatermark(
   if (playedAtMsValues.length === 0) return previous;
   const oldest = Math.min(...playedAtMsValues);
   const newest = Math.max(previous ?? 0, ...playedAtMsValues);
+
   return fetchedCount >= 50 ? oldest : newest;
 }

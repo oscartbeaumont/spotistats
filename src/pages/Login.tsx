@@ -14,10 +14,12 @@ const steps = [
 ];
 
 const timeBars = [18, 28, 22, 42, 34, 50, 30, 58, 44, 62, 38, 54, 26, 46, 34, 58];
+
 const hourBars = [
   22, 15, 10, 8, 6, 5, 9, 20, 36, 42, 38, 44, 40, 35, 31, 33, 41, 52, 68, 78,
   72, 61, 44, 29,
 ];
+
 const streakDays = [1, 1, 0, 1, 1, 1, 1];
 
 /** Decorative sample data. It is never fetched or persisted. */
@@ -130,6 +132,7 @@ export default function LoginPage() {
     if (signingIn()) return;
     setSigningIn(true);
     capture("login_started", { source });
+
     try {
       window.location.href = await createLoginUrl(window.location.origin);
     } catch (error) {

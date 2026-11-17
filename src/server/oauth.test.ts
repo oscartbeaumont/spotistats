@@ -8,20 +8,19 @@ import {
   statsLogin,
   stateIsValid,
 } from "./oauth";
-import { Spotify, type SpotifyShape } from "./spotify";
-import { Tracking, type TrackingShape } from "./tracking";
+import { Spotify } from "./spotify";
+import { Tracking } from "./tracking";
 
-// `./oauth` reaches the worker env through `./spotify`; the client id builds
-// the authorize URL and the secret signs the OAuth state.
-vi.mock("cloudflare:workers", () => ({
-  env: {
-    VITE_SPOTIFY_CLIENT_ID: "test-client-id",
-    SPOTIFY_CLIENT_SECRET: "test-client-secret",
-  },
-}));
+// The client id builds the authorize URL and the secret signs the OAuth state.
+const config = {
+  clientId: "test-client-id",
+  clientSecret: "test-client-secret",
+};
 
-const login = (url: string) => statsLogin(new Request(url));
+const login = (url: string) => statsLogin(new Request(url), config);
+
 const locationOf = (response: Response) => response.headers.get("Location") ?? "";
+
 const stateOf = (response: Response) =>
   new URL(locationOf(response)).searchParams.get("state") ?? "";
 
@@ -49,6 +48,7 @@ it("sends the user to Spotify with a signed state and no cookie", async () => {
   const response = await login(
     "https://spotistats.otbeaumont.me/account/stats/login?resumed=1",
   );
+
   const location = locationOf(response);
   expect(location.startsWith("https://accounts.spotify.com/authorize?")).toBe(true);
   expect(new URL(location).searchParams.get("redirect_uri")).toBe(
@@ -59,34 +59,35 @@ it("sends the user to Spotify with a signed state and no cookie", async () => {
   expect(response.headers.get("Set-Cookie")).toBeNull();
   const state = stateOf(response);
   expect(state.split(".")).toHaveLength(3);
-  expect(await stateIsValid(state)).toBe(true);
+  expect(await stateIsValid(state, config)).toBe(true);
 });
 
 it("does not bounce a resumed request again", async () => {
   const response = await login(
     "https://spotistats.otbeaumont.me/account/stats/login?resumed=1",
   );
+
   expect(locationOf(response)).not.toContain("/account/stats/login");
 });
 
 it("rejects a state signed with a different secret", async () => {
-  const state = await createState();
+  const state = await createState(config);
   const [nonce, issuedAt] = state.split(".");
   const forged = `${nonce}.${issuedAt}.${"0".repeat(64)}`;
-  expect(await stateIsValid(forged)).toBe(false);
+  expect(await stateIsValid(forged, config)).toBe(false);
 });
 
 it("rejects a malformed state", async () => {
-  expect(await stateIsValid("")).toBe(false);
-  expect(await stateIsValid("not-a-state")).toBe(false);
+  expect(await stateIsValid("", config)).toBe(false);
+  expect(await stateIsValid("not-a-state", config)).toBe(false);
 });
 
 it("rejects a state older than the consent window", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-10-29T23:00:00Z"));
-  const state = await createState();
+  const state = await createState(config);
   vi.setSystemTime(new Date("2026-10-29T23:11:00Z"));
-  expect(await stateIsValid(state)).toBe(false);
+  expect(await stateIsValid(state, config)).toBe(false);
 });
 
 it("maps Spotify's error codes to fixed reasons", () => {
@@ -105,11 +106,12 @@ describe("stats callback errors", () => {
         new Request(
           `https://spotistats.otbeaumont.me/account/stats/callback?${query}`,
         ),
+        config,
       ).pipe(
         Effect.provide(
           Layer.merge(
-            Layer.succeed(Spotify, {} as SpotifyShape),
-            Layer.succeed(Tracking, {} as TrackingShape),
+            Layer.mock(Spotify, {}),
+            Layer.mock(Tracking, {}),
           ),
         ),
       ),
@@ -157,20 +159,19 @@ it("lands a new connection on the profile, where the feature shows itself", asyn
         external_urls: { spotify: "https://open.spotify.com/user/spotify-user" },
         followers: { total: 0 },
       }),
-  } as unknown as SpotifyShape;
+  };
 
   const response = await Effect.runPromise(
     statsCallback(
       new Request(
-        `https://spotistats.otbeaumont.me/account/stats/callback?code=code&state=${await createState()}`,
+        `https://spotistats.otbeaumont.me/account/stats/callback?code=code&state=${await createState(config)}`,
       ),
+      config,
     ).pipe(
       Effect.provide(
         Layer.merge(
-          Layer.succeed(Spotify, spotify),
-          Layer.succeed(Tracking, {
-            enable: () => Effect.void,
-          } as unknown as TrackingShape),
+          Layer.mock(Spotify, spotify),
+          Layer.mock(Tracking, { enable: () => Effect.void }),
         ),
       ),
     ),

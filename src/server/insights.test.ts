@@ -1,4 +1,4 @@
-import { DatabaseSync, type SQLInputValue } from "node:sqlite";
+import { DatabaseSync } from "node:sqlite";
 import { readFileSync } from "node:fs";
 import { D1Client } from "@effect/sql-d1";
 import { Effect } from "effect";
@@ -7,11 +7,14 @@ import type { SqlClient } from "effect/sql/SqlClient";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { readInsights } from "./insights";
+import { SqliteD1 } from "./sqliteD1";
 
 let database: DatabaseSync;
 
 const start = Date.UTC(2026, 9, 1, 0, 0);
+
 const end = Date.UTC(2026, 9, 31, 23, 59, 59);
+
 const hour = 3_600_000;
 
 beforeEach(() => {
@@ -52,16 +55,8 @@ const addListen = (id: string, trackId: string, playedAtMs: number) =>
     .run(id, trackId, playedAtMs);
 
 const run = <A, E>(query: (sql: SqlClient) => Effect.Effect<A, E>) => {
-  const db = {
-    prepare: (text: string) => ({
-      bind: (...values: SQLInputValue[]) => ({
-        all: async () => {
-          if (values.length > 100) throw new Error("D1 binding limit exceeded");
-          return { results: database.prepare(text).all(...values) };
-        },
-      }),
-    }),
-  } as unknown as D1Client.D1ClientConfig["db"];
+  const db = new SqliteD1(database, { maxBindings: 100 });
+
   return Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {

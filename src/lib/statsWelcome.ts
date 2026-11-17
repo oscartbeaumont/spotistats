@@ -36,14 +36,18 @@ export interface WelcomeInput {
 export function welcomePhase(input: WelcomeInput): WelcomePhase {
   // Stored listens settle every other question: the feature is working.
   if (input.listenCount > 0) return "ready";
+
   if (!input.seenStatus) return "connecting";
+
   // A failure before the first success is the only failure worth reporting;
   // later ones leave earlier plays in place, so the feature still works.
   if (input.lastError !== null && input.lastSuccessAt === null) return "failed";
+
   if (input.polls >= input.pollLimit) {
     // A completed sync with nothing imported is Spotify's answer, not a delay.
     return input.lastSuccessAt !== null ? "empty" : "slow";
   }
+
   return "syncing";
 }
 

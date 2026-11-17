@@ -1,4 +1,3 @@
-import { env } from "cloudflare:workers";
 import { Effect } from "effect";
 
 import { Spotify } from "./spotify";
@@ -16,6 +15,12 @@ const statsScopes = ["user-read-email", "user-read-recently-played"];
 /** How long the browser may sit on Spotify's consent screen before the handshake expires. */
 const stateLifetimeMs = 10 * 60 * 1000;
 
+/** The credentials the stats handshake signs and starts with. */
+export interface StatsOAuthConfig {
+  readonly clientId: string;
+  readonly clientSecret: string;
+}
+
 const encoder = new TextEncoder();
 
 const toHex = (bytes: Uint8Array) =>
@@ -28,9 +33,11 @@ const randomState = () =>
 const stateMatches = (left: string, right: string) => {
   if (left.length !== right.length) return false;
   let difference = 0;
+
   for (let index = 0; index < left.length; index += 1) {
     difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
   }
+
   return difference === 0;
 };
 
@@ -46,43 +53,59 @@ const stateMatches = (left: string, right: string) => {
  * secret that is already required to exchange the code, so no new secret or
  * table is involved.
  */
-const signState = async (payload: string) => {
+const signState = async (clientSecret: string, payload: string) => {
   const key = await crypto.subtle.importKey(
     "raw",
-    encoder.encode(env.SPOTIFY_CLIENT_SECRET),
+    encoder.encode(clientSecret),
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"],
   );
+
   const signature = await crypto.subtle.sign(
     "HMAC",
     key,
     encoder.encode(payload),
   );
+
   return toHex(new Uint8Array(signature));
 };
 
-export const createState = async () => {
+export const createState = async (config: StatsOAuthConfig) => {
   const payload = `${randomState()}.${Date.now().toString(36)}`;
-  return `${payload}.${await signState(payload)}`;
+
+  return `${payload}.${await signState(config.clientSecret, payload)}`;
 };
 
 /** Whether `state` was minted by this worker and is still inside its window. */
-export const stateIsValid = async (state: string) => {
+export const stateIsValid = async (
+  state: string,
+  config: StatsOAuthConfig,
+) => {
   const parts = state.split(".");
+
   if (parts.length !== 3) return false;
   const [nonce, issuedAt, signature] = parts;
+
   if (!nonce || !issuedAt || !signature) return false;
   const issued = Number.parseInt(issuedAt, 36);
+
   if (!Number.isFinite(issued)) return false;
   const age = Date.now() - issued;
+
   if (age < 0 || age > stateLifetimeMs) return false;
-  return stateMatches(signature, await signState(`${nonce}.${issuedAt}`));
+
+  return stateMatches(
+    signature,
+    await signState(config.clientSecret, `${nonce}.${issuedAt}`),
+  );
 };
 
 const originFromRequest = (request: Request) => {
   const url = new URL(request.url);
+
   if (url.hostname === "localhost") url.hostname = "127.0.0.1";
+
   return url.origin;
 };
 
@@ -96,6 +119,7 @@ const failed = (reason: string, detail?: string) => {
   console.warn(
     `Spotify stats setup failed: ${reason}${detail ? ` (${detail})` : ""}`,
   );
+
   return new Response(null, {
     status: 302,
     headers: {
@@ -111,14 +135,14 @@ const failed = (reason: string, detail?: string) => {
  * cancellation is an expected outcome, while everything else is worth
  * reporting. Only these fixed reasons reach the URL.
  */
-const spotifyErrorReasons: Record<string, string> = {
-  access_denied: "spotify_denied",
-  server_error: "spotify_unavailable",
-  temporarily_unavailable: "spotify_unavailable",
-};
+const spotifyErrorReasons = new Map<string, string>([
+  ["access_denied", "spotify_denied"],
+  ["server_error", "spotify_unavailable"],
+  ["temporarily_unavailable", "spotify_unavailable"],
+]);
 
 export const spotifyErrorReason = (error: string): string =>
-  spotifyErrorReasons[error] ?? "spotify_rejected";
+  spotifyErrorReasons.get(error) ?? "spotify_rejected";
 
 /** Keeps the server log readable: the raw Cause nests the error too deep. */
 const describeCause = (cause: unknown): string => {
@@ -146,7 +170,10 @@ const resumedParam = "resumed";
  * itself is signed rather than host-scoped, so this hop is only about the
  * redirect URI.
  */
-export async function statsLogin(request: Request): Promise<Response> {
+export async function statsLogin(
+  request: Request,
+  config: StatsOAuthConfig,
+): Promise<Response> {
   const requestUrl = new URL(request.url);
   const normalized = new URL(originFromRequest(request));
   const canonical = new URL(requestUrl.toString());
@@ -163,10 +190,10 @@ export async function statsLogin(request: Request): Promise<Response> {
   }
 
   const params = new URLSearchParams({
-    client_id: env.VITE_SPOTIFY_CLIENT_ID,
+    client_id: config.clientId,
     response_type: "code",
     redirect_uri: redirectUri(request),
-    state: await createState(),
+    state: await createState(config),
     scope: statsScopes.join(" "),
     show_dialog: "true",
   });
@@ -181,6 +208,7 @@ export async function statsLogin(request: Request): Promise<Response> {
 
 export function statsCallback(
   request: Request,
+  config: StatsOAuthConfig,
 ): Effect.Effect<Response, never, Spotify | Tracking> {
   return Effect.gen(function* () {
     const url = new URL(request.url);
@@ -188,6 +216,7 @@ export function statsCallback(
     const tracking = yield* Tracking;
 
     const spotifyError = url.searchParams.get("error");
+
     if (spotifyError) {
       return failed(
         spotifyErrorReason(spotifyError),
@@ -197,9 +226,12 @@ export function statsCallback(
 
     const code = url.searchParams.get("code");
     const state = url.searchParams.get("state");
+
     if (!code) return failed("missing_code");
+
     if (!state) return failed("missing_state");
-    if (!(yield* Effect.promise(() => stateIsValid(state)))) {
+
+    if (!(yield* Effect.promise(() => stateIsValid(state, config)))) {
       return failed("invalid_state");
     }
 
@@ -217,11 +249,13 @@ export function statsCallback(
   }).pipe(
     Effect.catchCause((cause) => {
       const detail = describeCause(cause);
+
       // Spotify reports bad client credentials as `invalid_client`; surface it
       // as a distinct reason so the account page can point at the secret.
       const reason = detail.includes("invalid_client")
         ? "spotify_credentials"
         : "internal_error";
+
       return Effect.sync(() =>
         console.error("Spotify stats callback failed", detail),
       ).pipe(Effect.as(failed(reason)));

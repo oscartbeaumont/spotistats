@@ -1,5 +1,4 @@
 import { D1Client } from "@effect/sql-d1";
-import { env } from "cloudflare:workers";
 
 /** Cloudflare D1 provided as the Effect `SqlClient` service. */
-export const DatabaseLive = D1Client.layer({ db: env.DB });
+export const DatabaseLive = (db: D1Database) => D1Client.layer({ db });

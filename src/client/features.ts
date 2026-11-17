@@ -1,6 +1,6 @@
 import { createSignal } from "solid-js";
 
-import { posthogClient, type PostHogClient } from "./analytics";
+import { posthogClient } from "./analytics";
 
 /**
  * PostHog-gated features.
@@ -13,10 +13,22 @@ import { posthogClient, type PostHogClient } from "./analytics";
 /** The flag that releases music discovery. */
 export const discoveryFlag = "music-discovery";
 
+/**
+ * The PostHog surface feature flags need.
+ *
+ * Narrower than the full client so a test can pass a faithful double without
+ * loading PostHog.
+ */
+export interface FeatureFlagClient {
+  isFeatureEnabled(flag: string): boolean | undefined;
+  onFeatureFlags(callback: () => void): void;
+}
+
 const [discoveryEnabled, setDiscoveryEnabled] = createSignal(false);
+
 export { discoveryEnabled };
 
-const readFlag = (posthog: PostHogClient) =>
+const readFlag = (posthog: FeatureFlagClient) =>
   posthog.isFeatureEnabled(discoveryFlag) === true;
 
 /**
@@ -24,12 +36,17 @@ const readFlag = (posthog: PostHogClient) =>
  * in development, so a development build exposes discovery to be worked on
  * locally; production always reads the flag from PostHog.
  */
-export function initFeatureFlags(): void {
-  const client = posthogClient();
+export function initFeatureFlags(
+  loadClient: () => Promise<FeatureFlagClient> | undefined = posthogClient,
+): void {
+  const client = loadClient();
+
   if (!client) {
     setDiscoveryEnabled(import.meta.env.DEV);
+
     return;
   }
+
   void client
     .then((posthog) => {
       // Identify reloads flags for the signed-in person, and this callback runs

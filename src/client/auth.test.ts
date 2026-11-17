@@ -3,11 +3,6 @@ import { afterEach, expect, it, vi } from "vitest";
 import { consumeSpotifyCallback, createLoginUrl, loginError } from "./auth";
 import { authStore, setAuthStore } from "./storage";
 
-vi.mock("./analytics", () => ({ capture: vi.fn(), resetAnalytics: vi.fn() }));
-vi.mock("./storage", () => {
-  let store: unknown;
-  return { authStore: () => store, setAuthStore: vi.fn((next) => { store = next; }) };
-});
 afterEach(() => vi.unstubAllGlobals());
 
 it("keeps regular sign-in read-only and requests private playlist scope only on opt-in", async () => {
@@ -90,11 +85,13 @@ it("does not sign out an authenticated session over a stray error query", async 
     },
   });
   vi.stubGlobal("history", { replaceState: vi.fn() });
+
   const session = {
     status: "authenticated" as const,
     accessToken: "Bearer token",
     linkToUri: false,
   };
+
   setAuthStore(session);
 
   expect(await consumeSpotifyCallback()).toBe(false);

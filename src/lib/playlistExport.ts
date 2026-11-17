@@ -4,12 +4,32 @@ import {
   getExportTracksPage,
   playlistTrack,
   runSpotify,
+  type AudioFeatures,
   type Playlist,
   type PlaylistTrack,
+  type SpotifyArtist,
   type SpotifyPage,
 } from "~/client/spotify";
 
 import { csvCell } from "./download";
+
+/**
+ * The Spotify reads an export needs.
+ *
+ * Passed in rather than imported directly so the export can run against a
+ * faithful source in tests without replacing the Spotify module.
+ */
+export interface PlaylistExportSource {
+  tracksPage(playlist: Playlist, offset: number): Promise<SpotifyPage<PlaylistTrack>>;
+  audioFeatures(ids: string): Promise<ReadonlyArray<AudioFeatures | null>>;
+  artists(ids: string): Promise<ReadonlyArray<SpotifyArtist>>;
+}
+
+const spotifySource: PlaylistExportSource = {
+  tracksPage: (playlist, offset) => runSpotify(getExportTracksPage(playlist, offset)),
+  audioFeatures: (ids) => runSpotify(getAudioFeatures(ids)),
+  artists: (ids) => runSpotify(getArtists(ids)),
+};
 
 /**
  * Builds the CSV for one playlist.
@@ -34,38 +54,46 @@ async function mapLimit<T, R>(
   work: (item: T, index: number) => Promise<R>,
 ): Promise<R[]> {
   const results = new Array<R>(items.length);
+  const entries = items.map((item, index) => ({ item, index }));
   let next = 0;
+
   const workers = Array.from(
     { length: Math.max(1, Math.min(limit, items.length)) },
     async () => {
       for (;;) {
-        const index = next;
+        const entry = entries[next];
         next += 1;
-        if (index >= items.length) return;
-        results[index] = await work(items[index] as T, index);
+
+        if (entry === undefined) return;
+        results[entry.index] = await work(entry.item, entry.index);
       }
     },
   );
+
   await Promise.all(workers);
+
   return results;
 }
 
 export async function buildPlaylistCsv(
   playlist: Playlist,
   onProgress: (fraction: number) => void = () => {},
+  source: PlaylistExportSource = spotifySource,
 ): Promise<{ csv: string; trackCount: number }> {
-  const fetchPage = (offset: number) =>
-    runSpotify(getExportTracksPage(playlist, offset));
+  const fetchPage = (offset: number) => source.tracksPage(playlist, offset);
 
   const firstPage: SpotifyPage<PlaylistTrack> = await fetchPage(0);
+
   // A limit of zero would otherwise make the page count infinite.
   const pageCount =
     firstPage.limit > 0
       ? Math.max(1, Math.ceil(firstPage.total / firstPage.limit))
       : 1;
+
   // Three progress steps per page: the page itself, audio features, artists.
   const step = 1 / 3 / Math.max(pageCount, 1);
   let done = 0;
+
   const advance = () => {
     done += step;
     onProgress(Math.min(1, done));
@@ -77,31 +105,41 @@ export async function buildPlaylistCsv(
     async (index) => {
       const page =
         index === 0 ? firstPage : await fetchPage(index * firstPage.limit);
+
       advance();
+
       const entries = page.items.flatMap((entry) => {
         const track = playlistTrack(entry);
+
         return track ? [{ entry, track }] : [];
       });
+
       const ids = entries
         .map(({ track }) => track.id)
         .filter((id): id is string => Boolean(id))
         .join(",");
-      const audioFeatures = await runSpotify(getAudioFeatures(ids));
+
+      const audioFeatures = await source.audioFeatures(ids);
       advance();
+
       // A page holds at most 50 items, and each item has one primary artist.
       const artistIds = entries
         .map(({ track }) => track.artists[0]?.id)
         .filter((id): id is string => Boolean(id));
-      const artists = await runSpotify(getArtists(artistIds.join(",")));
+
+      const artists = await source.artists(artistIds.join(","));
       advance();
+
       return { entries, audioFeatures, artists };
     },
   );
 
   let csv = playlistCsvHeader;
   let trackCount = 0;
+
   for (const page of pages) {
     const artistById = new Map(page.artists.map((artist) => [artist.id, artist]));
+
     for (const [index, { entry, track }] of page.entries.entries()) {
       const audio = page.audioFeatures[index];
       const primaryArtistId = track.artists[0]?.id;
@@ -137,6 +175,8 @@ export async function buildPlaylistCsv(
       trackCount += 1;
     }
   }
+
   onProgress(1);
+
   return { csv, trackCount };
 }

@@ -75,11 +75,13 @@ interface InsightsState {
 
 const localDateStart = (value: string) => {
   const ms = new Date(`${value}T00:00:00`).getTime();
+
   return Number.isFinite(ms) ? ms : null;
 };
 
 const localDateEnd = (value: string) => {
   const ms = new Date(`${value}T23:59:59.999`).getTime();
+
   return Number.isFinite(ms) ? ms : null;
 };
 
@@ -386,6 +388,7 @@ export default function ProfilePage() {
   const [insightsTick, setInsightsTick] = createSignal(0);
   const [preview, setPreview] = createSignal<ListeningInsightsData | null>(null);
   const [refreshing, setRefreshing] = createSignal(false);
+
   // The stats callback sends a fresh connection here rather than to the
   // settings page, so the first thing the user sees is the feature itself.
   // Read the one-shot flag before the URL is cleaned below.
@@ -394,27 +397,36 @@ export default function ProfilePage() {
       statsOutcome(typeof window === "undefined" ? "" : window.location.search)
         ?.kind === "enabled",
   );
+
   const [welcome, setWelcome] = createSignal(connected);
   const [polls, setPolls] = createSignal(0);
   const timezone = browserTimezoneOffset();
   const [range, setRange] = createSignal<InsightsRange>("all");
+
   const [fromDate, setFromDate] = createSignal(
     localDay(Date.now() - 29 * DAY_MS, timezone),
   );
+
   const [toDate, setToDate] = createSignal(localDay(Date.now(), timezone));
 
   const profile = createMemo(() => runSpotify(getProfile()));
+
   const stats = createMemo(() => {
     tick();
+
     return fetchStatus();
   });
+
   const currentlyPlaying = createMemo(() => {
     tick();
+
     return runSpotify(getCurrentlyPlaying());
   });
+
   const insights = createMemo(() => {
     insightsTick();
     const selected = range();
+
     return fetchInsights({
       tzOffset: timezone,
       range: selected,
@@ -434,6 +446,7 @@ export default function ProfilePage() {
       return null;
     }
   };
+
   const statsNow = () => {
     try {
       return latest(stats) ?? null;
@@ -441,11 +454,13 @@ export default function ProfilePage() {
       return null;
     }
   };
+
   /**
    * How far the first sync has got. Every forty polls (a minute at the welcome
    * cadence) the panel stops claiming progress and offers a fresh attempt.
    */
   const firstSyncLimit = 40;
+
   const phase = createMemo(() =>
     welcomePhase({
       seenStatus: statsNow() !== null,
@@ -456,21 +471,28 @@ export default function ProfilePage() {
       pollLimit: firstSyncLimit,
     }),
   );
+
   // The dashboard polls every 10s and each poll parses fresh objects, so
   // `<For>` would rebuild the recent list (and reload its covers) every time.
   // Reuse the previous object for a row that has not changed.
   let previousRecent: TrackingStatus["recent"] = [];
+
   const stableStats = createMemo(() => {
     const status = statsNow();
+
     if (!status) return null;
+
     const recent = reuseUnchanged(
       previousRecent,
       status.recent,
       (item) => `${item.playedAtMs}:${item.name}`,
     );
+
     previousRecent = recent;
+
     return { ...status, recent };
   });
+
   const playingNow = () => {
     try {
       return latest(currentlyPlaying) ?? null;
@@ -478,6 +500,7 @@ export default function ProfilePage() {
       return null;
     }
   };
+
   const insightsNow = () => {
     try {
       return latest(insights) ?? null;
@@ -485,6 +508,7 @@ export default function ProfilePage() {
       return null;
     }
   };
+
   const insightsPending = () => {
     try {
       return isPending(insights);
@@ -492,17 +516,21 @@ export default function ProfilePage() {
       return false;
     }
   };
+
   const readyInsights = () => {
     const state = insightsNow();
     const status = statsNow();
+
     return state && status ? { state, status } : null;
   };
 
   const reloadInsights = () => setInsightsTick((value) => value + 1);
+
   const showPreview = () => {
     setPreview(createPreviewInsights());
     capture("insights_preview_opened", {});
   };
+
   const exitPreview = () => {
     setPreview(null);
     capture("insights_preview_exited", {});
@@ -512,14 +540,19 @@ export default function ProfilePage() {
     setRange(next);
     capture("insights_range_changed", { range: next });
   };
+
   const changeFromDate = (value: string) => {
     setFromDate(value);
+
     if (value && toDate() && value > toDate()) setToDate(value);
   };
+
   const changeToDate = (value: string) => {
     setToDate(value);
+
     if (value && fromDate() && value < fromDate()) setFromDate(value);
   };
+
   const rangeLabel = () => {
     switch (range()) {
       case "week":
@@ -569,6 +602,7 @@ export default function ProfilePage() {
 
   onSettled(() => {
     const interval = setInterval(() => setTick((value) => value + 1), 10000);
+
     return () => clearInterval(interval);
   });
 
@@ -577,9 +611,11 @@ export default function ProfilePage() {
     setTick((value) => value + 1);
     reloadInsights();
   });
+
   const refreshStats = async () => {
     if (refreshing() || !statsNow()?.enabled) return;
     setRefreshing(true);
+
     try {
       await queueRefresh();
       capture("stats_refresh_requested", {});
@@ -608,15 +644,20 @@ export default function ProfilePage() {
     () => welcome(),
     (open) => {
       if (!open) return;
+
       const interval = setInterval(() => {
         const current = phase();
+
         if (current !== "connecting" && current !== "syncing") {
           clearInterval(interval);
+
           return;
         }
+
         setPolls((value) => value + 1);
         setTick((value) => value + 1);
       }, 1500);
+
       return () => clearInterval(interval);
     },
   );
@@ -637,11 +678,14 @@ export default function ProfilePage() {
   createEffect(
     () => statsNow()?.listenCount,
     (count) => {
-      if (typeof count !== "number") return;
+      if (count === undefined) return;
+
       if (lastListenCount === null) {
         lastListenCount = count;
+
         return;
       }
+
       if (count !== lastListenCount) {
         lastListenCount = count;
         reloadInsights();

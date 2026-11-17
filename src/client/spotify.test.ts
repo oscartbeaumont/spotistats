@@ -13,16 +13,6 @@ import {
   SpotifyProfile,
 } from "./spotify";
 
-vi.mock("./storage", () => {
-  let store: unknown;
-  return {
-    authStore: () => store,
-    setAuthStore: vi.fn((next) => {
-      store = typeof next === "function" ? next(store) : next;
-    }),
-  };
-});
-
 afterEach(() => vi.unstubAllGlobals());
 
 describe("playlist entry decoding", () => {
@@ -47,6 +37,7 @@ describe("playlist entry decoding", () => {
       added_at: "2020-01-01",
       track: { ...track, id: null, is_local: true, artists: [{ id: null, name: "Local" }] },
     };
+
     expect(Schema.decodeUnknownSync(PlaylistTrack)(entry)).toEqual(entry);
   });
 
@@ -55,11 +46,14 @@ describe("playlist entry decoding", () => {
       added_at: null,
       item: track,
     });
+
     expect(playlistTrack(fromItem)?.id).toBe("track");
+
     const fromTrack = Schema.decodeUnknownSync(PlaylistTrack)({
       added_at: null,
       track,
     });
+
     expect(playlistTrack(fromTrack)?.id).toBe("track");
   });
 
@@ -74,6 +68,7 @@ describe("playlist entry decoding", () => {
         uri: "spotify:episode:episode",
       },
     });
+
     expect(playlistTrack(episode)).toBeNull();
   });
 });
@@ -123,7 +118,7 @@ describe("saved album decoding", () => {
     artists: [{ name: "Artist" }],
   };
 
-  const respond = (body: unknown) => {
+  const respond = (body: Schema.Json) => {
     setAuthStore({
       status: "authenticated",
       accessToken: "Bearer token",
@@ -132,7 +127,7 @@ describe("saved album decoding", () => {
     vi.stubGlobal("fetch", vi.fn(async () => Response.json(body)));
   };
 
-  const page = (items: unknown[], offset = 0, next: string | null = null) => ({
+  const page = (items: Schema.Json[], offset = 0, next: string | null = null) => ({
     items,
     next,
     total: items.length,
@@ -195,6 +190,7 @@ describe("rate limit retries", () => {
 
   it("retries a 429 once Spotify's Retry-After has passed", async () => {
     background();
+
     const profile = {
       id: "user",
       display_name: "User",
@@ -202,12 +198,14 @@ describe("rate limit retries", () => {
       external_urls: { spotify: "https://open.spotify.com/user/user" },
       followers: { total: 0 },
     };
+
     const fetch = vi
       .fn()
       .mockResolvedValueOnce(
         new Response(null, { status: 429, headers: { "Retry-After": "0" } }),
       )
       .mockResolvedValueOnce(Response.json(profile));
+
     vi.stubGlobal("fetch", fetch);
 
     await expect(runSpotify(getProfile())).resolves.toMatchObject({
@@ -218,10 +216,12 @@ describe("rate limit retries", () => {
 
   it("fails at once when the asked-for wait is longer than the cap", async () => {
     background();
+
     const fetch = vi.fn(
       async () =>
         new Response(null, { status: 429, headers: { "Retry-After": "60" } }),
     );
+
     vi.stubGlobal("fetch", fetch);
 
     await expect(runSpotify(getProfile())).rejects.toMatchObject({

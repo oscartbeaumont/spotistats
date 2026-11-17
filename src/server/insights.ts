@@ -89,6 +89,7 @@ export const readInsights = (
 ) =>
   Effect.gen(function* () {
     const now = Date.now();
+
     const { fromMs, toMs } = resolveStatsWindow(
       query.range,
       query.tzOffset,
@@ -96,6 +97,7 @@ export const readInsights = (
       query.toMs,
       now,
     );
+
     const modifier = timezoneModifier(query.tzOffset);
     const trendUnit = toMs - fromMs <= 31 * DAY_MS ? "day" : "month";
 
@@ -241,14 +243,18 @@ export const readInsights = (
     `.pipe(Effect.mapError(databaseError("Failed to count one-play tracks")));
 
     const hours = Array.from({ length: 24 }, () => 0);
+
     for (const row of hourRows) {
       const hour = Number(row.bucket);
+
       if (Number.isInteger(hour) && hour >= 0 && hour < 24) hours[hour] = row.listens;
     }
 
     const weekdays = Array.from({ length: 7 }, () => 0);
+
     for (const row of weekdayRows) {
       const day = Number(row.bucket);
+
       if (Number.isInteger(day) && day >= 0 && day < 7) weekdays[day] = row.listens;
     }
 
@@ -259,6 +265,7 @@ export const readInsights = (
 
     const endDay = localDay(toMs, query.tzOffset);
     const endMonth = endDay.slice(0, 7);
+
     const trendKeys =
       trendUnit === "day"
         ? dayKeysBetween(localDay(fromMs, query.tzOffset), endDay)
@@ -269,7 +276,9 @@ export const readInsights = (
             endMonth,
             36,
           );
+
     const trendCounts = new Map(trendRows.map((row) => [row.bucket, row]));
+
     const trend = trendKeys.map((bucket) => ({
       bucket,
       listens: trendCounts.get(bucket)?.listens ?? 0,
@@ -337,6 +346,7 @@ const exportPageSize = 500;
 const readExportRows = (sql: SqlClient, spotifyUserId: string) =>
   Effect.gen(function* () {
     const rows: ExportedListen[] = [];
+
     for (let offset = 0; ; offset += exportPageSize) {
       const page = yield* sql<ExportRow>`
         SELECT
@@ -357,15 +367,19 @@ const readExportRows = (sql: SqlClient, spotifyUserId: string) =>
         ORDER BY l.played_at_ms ASC, l.id ASC
         LIMIT ${exportPageSize} OFFSET ${offset}
       `.pipe(Effect.mapError(databaseError("Failed to read the listening export")));
+
       rows.push(...page);
+
       if (page.length < exportPageSize) break;
     }
+
     return rows;
   });
 
 export const readExport = (sql: SqlClient, spotifyUserId: string) =>
   Effect.gen(function* () {
     const listens = yield* readExportRows(sql, spotifyUserId);
+
     return {
       exportedAt: Date.now(),
       spotifyUserId,
@@ -381,6 +395,7 @@ export const exportCsv = (sql: SqlClient, spotifyUserId: string) =>
   readExportRows(sql, spotifyUserId).pipe(
     Effect.map((rows) => {
       let csv = csvHeader;
+
       for (const row of rows) {
         csv +=
           [
@@ -398,6 +413,7 @@ export const exportCsv = (sql: SqlClient, spotifyUserId: string) =>
             .map(csvCell)
             .join(",") + "\n";
       }
+
       return csv;
     }),
   );

@@ -1,3 +1,4 @@
+import { Schema } from "effect";
 import { createSignal, For, onSettled, Show } from "solid-js";
 
 import { createLoginUrl } from "~/client/auth";
@@ -14,7 +15,17 @@ import { externalHref } from "~/lib/url";
 import NotFoundPage from "./NotFound";
 
 const control = "min-w-0 w-full border-[3px] border-[#0a0a0a] px-4 py-3 text-sm font-bold disabled:opacity-50";
+
 const button = `${control} uppercase tracking-widest transition hover:bg-[#0a0a0a] hover:text-[#f0ede8]`;
+
+/** The `<select>` values, decoded rather than asserted from the DOM string. */
+const DiscoveryModeValue = Schema.Literals(["new", "rediscover", "blend"]);
+
+const MoodValue = Schema.Literals(["any", "chill", "focus", "workout", "upbeat"]);
+
+const isDiscoveryMode = Schema.is(DiscoveryModeValue);
+
+const isMood = Schema.is(MoodValue);
 
 /**
  * The route stays registered, but the flag decides whether the feature exists
@@ -35,10 +46,13 @@ function Discover() {
   const [draft, setDraft] = createSignal<DiscoveryDraft | null>(null);
   const [busy, setBusy] = createSignal(true);
   const [error, setError] = createSignal<string | null>(null);
+
   const hasPermission = () => {
     const session = authStore();
+
     return session.status === "authenticated" && session.scopes?.includes("playlist-modify-private");
   };
+
   const editable = () => draft()?.stage === "review" && !busy();
   const persist = (next: DiscoveryDraft) => { writeDiscoveryDraft(next); setDraft(next); };
 
@@ -46,11 +60,14 @@ function Discover() {
     void (async () => {
       try {
         const previous = readDiscoveryDraft();
+
         if (previous) {
           const session = authStore();
           const profile = await runSpotify(getProfile());
           const current = authStore();
+
           if (session.status !== "authenticated" || current.status !== "authenticated" || session.accessToken !== current.accessToken) return;
+
           if (profile.id === previous.ownerId) setDraft(previous);
           else clearDiscoveryDraft();
         }
@@ -61,10 +78,13 @@ function Discover() {
 
   const generate = async () => {
     if (busy()) return;
+
     if (draft()?.stage === "creating" && !confirm("Spotify may already have created your playlist. Check Spotify first. Discard this saved attempt and generate another selection?")) return;
+
     if (draft()?.stage === "filling" && !confirm("Your Spotify playlist exists but may be incomplete. Discard this saved attempt instead of retrying it?")) return;
     setBusy(true);
     setError(null);
+
     try {
       const result = await generateDiscovery(mode(), mood());
       persist({ ...result, name: `Spotistats — ${mood() === "any" ? mode() : mood()}`, playlist: null, stage: "review" });
@@ -76,8 +96,10 @@ function Discover() {
     if (busy()) return;
     setBusy(true);
     setError(null);
+
     try {
       const current = draft();
+
       if (current) writeDiscoveryDraft(current);
       window.location.href = await createLoginUrl(window.location.origin, true);
     } catch (cause) { setError(discoveryError(cause)); setBusy(false); }
@@ -85,9 +107,11 @@ function Discover() {
 
   const save = async () => {
     const current = draft();
+
     if (!current || busy()) return;
     setBusy(true);
     setError(null);
+
     try { await saveDiscoveryPlaylist(current, setDraft); }
     catch (cause) { setError(discoveryError(cause)); }
     finally { setBusy(false); }
@@ -104,7 +128,11 @@ function Discover() {
       <section aria-label="Discovery options" class="mb-8 grid gap-5 border-4 border-[#0a0a0a] p-5 md:grid-cols-[1fr_1fr_auto] md:items-end">
         <label class="grid min-w-0 gap-2 text-xs font-black uppercase tracking-widest">
           Selection
-          <select class={`${control} bg-transparent`} value={mode()} disabled={busy()} onChange={(event) => setMode(event.currentTarget.value as DiscoveryMode)}>
+          <select class={`${control} bg-transparent`} value={mode()} disabled={busy()} onChange={(event) => {
+            const value = event.currentTarget.value;
+
+            if (isDiscoveryMode(value)) setMode(value);
+          }}>
             <option value="new">New to your history</option>
             <option value="rediscover">Rediscover</option>
             <option value="blend">Blend</option>
@@ -112,7 +140,11 @@ function Discover() {
         </label>
         <label class="grid min-w-0 gap-2 text-xs font-black uppercase tracking-widest">
           Mood / activity
-          <select class={`${control} bg-transparent`} value={mood()} disabled={busy()} onChange={(event) => setMood(event.currentTarget.value as Mood)}>
+          <select class={`${control} bg-transparent`} value={mood()} disabled={busy()} onChange={(event) => {
+            const value = event.currentTarget.value;
+
+            if (isMood(value)) setMood(value);
+          }}>
             <option value="any">Any mood</option>
             <option value="chill">Chill — lower energy</option>
             <option value="focus">Focus — instrumental</option>

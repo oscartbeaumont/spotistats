@@ -1,45 +1,66 @@
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { UpstreamError } from "../api";
-import type { TrackingShape } from "./tracking";
-import worker from "./index";
-import { SpotifyAuthRejected } from "./spotify";
+import { SpotifyAuthRejected, SpotifyUnauthorized } from "./spotify";
+import { Tracking } from "./tracking";
+import { createWorker } from "./worker";
 
-// `./spotify` reads the worker env to build its Basic auth header; these tests
-// only need its error classes, so an empty env is enough.
-vi.mock("cloudflare:workers", () => ({ env: {} }));
+type SyncFailure = UpstreamError | SpotifyAuthRejected | SpotifyUnauthorized;
 
-const service = vi.hoisted(() => ({
-  sync: vi.fn(),
-  recordSyncFailure: vi.fn(),
-  requireReauth: vi.fn(),
-}));
+const service = {
+  sync: vi.fn((_spotifyUserId: string): Effect.Effect<void, SyncFailure> => Effect.void),
+  recordSyncFailure: vi.fn(
+    (
+      _spotifyUserId: string,
+      _message: string,
+      _retryAfterSeconds: number | null,
+    ): Effect.Effect<void, UpstreamError> => Effect.void,
+  ),
+  requireReauth: vi.fn(
+    (_spotifyUserId: string, _message: string): Effect.Effect<void, UpstreamError> =>
+      Effect.void,
+  ),
+};
 
-vi.mock("virtual:solid-ssr-handler", () => ({ handleRequest: vi.fn() }));
-vi.mock("./tracking", async () => {
-  const { Context } = await import("effect");
-  class Tracking extends Context.Service<Tracking, TrackingShape>()("test/Tracking") {}
-  return { Tracking };
-});
-vi.mock("./handler", async () => {
-  const { Layer } = await import("effect");
-  const { Tracking } = await import("./tracking");
-  return { ServicesLive: Layer.succeed(Tracking, service as unknown as TrackingShape) };
+const worker = createWorker({
+  services: Layer.mock(Tracking, service),
+  handleRequest: async () => new Response(null, { status: 204 }),
 });
 
 beforeEach(() => {
   service.sync.mockReset();
   service.recordSyncFailure.mockReset();
   service.requireReauth.mockReset();
+  service.sync.mockReturnValue(Effect.void);
 });
+
 afterEach(() => vi.restoreAllMocks());
 
+/** One queue message, with the retry hook the worker reports through. */
+const message = (spotifyUserId: string): Message => ({
+  id: spotifyUserId,
+  timestamp: new Date(0),
+  body: { spotifyUserId },
+  attempts: 1,
+  retry: vi.fn(),
+  ack: vi.fn(),
+});
+
+const batchOf = (...messages: readonly Message[]): MessageBatch => ({
+  messages,
+  queue: "spotistats",
+  metadata: {
+    metrics: { backlogCount: messages.length, backlogBytes: 0 },
+  },
+  retryAll: vi.fn(),
+  ackAll: vi.fn(),
+});
+
 const queue = (spotifyUserId: string) => {
-  const message = { body: { spotifyUserId }, retry: vi.fn() };
-  return worker
-    .queue({ messages: [message] } as unknown as MessageBatch<unknown>)
-    .then(() => message);
+  const queued = message(spotifyUserId);
+
+  return worker.queue(batchOf(queued)).then(() => queued);
 };
 
 it("retries only the message whose failure cannot be persisted", async () => {
@@ -47,9 +68,9 @@ it("retries only the message whose failure cannot be persisted", async () => {
   service.sync.mockImplementation((id: string) => id === "failed" ? Effect.fail(error) : Effect.void);
   service.recordSyncFailure.mockReturnValue(Effect.fail(error));
   vi.spyOn(console, "error").mockImplementation(() => {});
-  const failed = { body: { spotifyUserId: "failed" }, retry: vi.fn() };
-  const successful = { body: { spotifyUserId: "successful" }, retry: vi.fn() };
-  await worker.queue({ messages: [failed, successful] } as unknown as MessageBatch<unknown>);
+  const failed = message("failed");
+  const successful = message("successful");
+  await worker.queue(batchOf(failed, successful));
   expect(failed.retry).toHaveBeenCalledOnce();
   expect(successful.retry).not.toHaveBeenCalled();
   expect(service.sync).toHaveBeenCalledWith("successful");
@@ -58,9 +79,9 @@ it("retries only the message whose failure cannot be persisted", async () => {
 it("leaves a persisted transient failure to the cron retry schedule", async () => {
   service.sync.mockReturnValue(Effect.fail(new UpstreamError({ service: "spotify", message: "Unavailable", status: 503 })));
   service.recordSyncFailure.mockReturnValue(Effect.void);
-  const message = { body: { spotifyUserId: "failed" }, retry: vi.fn() };
-  await worker.queue({ messages: [message] } as unknown as MessageBatch<unknown>);
-  expect(message.retry).not.toHaveBeenCalled();
+  const queued = message("failed");
+  await worker.queue(batchOf(queued));
+  expect(queued.retry).not.toHaveBeenCalled();
   expect(service.recordSyncFailure).toHaveBeenCalledWith("failed", "spotify: Unavailable", null);
 });
 
@@ -75,13 +96,13 @@ it("asks for a reconnect when Spotify expires the stored authorization", async (
   );
   service.requireReauth.mockReturnValue(Effect.void);
   vi.spyOn(console, "error").mockImplementation(() => {});
-  const message = await queue("expired");
+  const queued = await queue("expired");
   expect(service.requireReauth).toHaveBeenCalledWith(
     "expired",
     expect.stringContaining("six months"),
   );
   expect(service.recordSyncFailure).not.toHaveBeenCalled();
-  expect(message.retry).not.toHaveBeenCalled();
+  expect(queued.retry).not.toHaveBeenCalled();
 });
 
 it("keeps retrying rejected requests instead of disabling the account", async () => {
@@ -97,14 +118,14 @@ it("keeps retrying rejected requests instead of disabling the account", async ()
     ),
   );
   service.recordSyncFailure.mockReturnValue(Effect.void);
-  const message = await queue("bad-request");
+  const queued = await queue("bad-request");
   expect(service.recordSyncFailure).toHaveBeenCalledWith(
     "bad-request",
     "spotify: Spotify API failed: 400 Invalid timestamp",
     null,
   );
   expect(service.requireReauth).not.toHaveBeenCalled();
-  expect(message.retry).not.toHaveBeenCalled();
+  expect(queued.retry).not.toHaveBeenCalled();
 });
 
 it("keeps the account enabled when the app's own credentials are rejected", async () => {

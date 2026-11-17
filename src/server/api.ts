@@ -3,9 +3,10 @@ import { SqlClient } from "effect/sql/SqlClient";
 import { HttpApiBuilder, HttpApiError } from "effect/http-api";
 
 import { Api } from "~/api";
+import type { RefreshResult } from "~/api";
 
 import { Spotify, type SpotifyProfile } from "./spotify";
-import { Tracking, type TrackingShape } from "./tracking";
+import { Tracking, type TrackingService } from "./tracking";
 import { readDiscoveryHistory, readKnownTracks } from "./discovery";
 
 /**
@@ -16,6 +17,7 @@ const resolveUser = (authorization: string | undefined) =>
   Effect.gen(function* () {
     if (!authorization) return yield* Effect.fail(new HttpApiError.Unauthorized({}));
     const spotify = yield* Spotify;
+
     return yield* spotify.profile(authorization.replace(/^Bearer\s+/i, ""));
   }).pipe(
     Effect.catchTag("SpotifyUnauthorized", () =>
@@ -35,6 +37,7 @@ const withUser = <A, E, R>(
 ) =>
   Effect.gen(function* () {
     const user = yield* resolveUser(headers.authorization);
+
     return yield* handler(user);
   });
 
@@ -42,7 +45,7 @@ const withUser = <A, E, R>(
 const withTracking = <A, E, R>(
   headers: { readonly authorization?: string | undefined },
   handler: (
-    tracking: TrackingShape,
+    tracking: TrackingService,
     user: SpotifyProfile,
   ) => Effect.Effect<A, E, R>,
 ) =>
@@ -89,7 +92,7 @@ export const AccountGroupLive = HttpApiBuilder.group(Api, "account", (handlers) 
       withTracking(headers, (tracking, user) =>
         Effect.map(
           tracking.enqueueRefresh(user.id),
-          (queued): { queued: boolean } => ({ queued }),
+          (queued): RefreshResult => ({ queued }),
         ),
       ),
     )

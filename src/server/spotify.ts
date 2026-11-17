@@ -1,5 +1,4 @@
-import { env } from "cloudflare:workers";
-import { Context, Effect, Layer, Schedule, Schema } from "effect";
+import { Context, Effect, Layer, Predicate, Schedule, Schema } from "effect";
 
 import { UpstreamError } from "~/api";
 
@@ -17,6 +16,7 @@ export const SpotifyToken = Schema.Struct({
   refresh_token: Schema.optional(Schema.String),
   scope: Schema.String,
 });
+
 export type SpotifyToken = typeof SpotifyToken.Type;
 
 export const SpotifyProfile = Schema.Struct({
@@ -30,6 +30,7 @@ export const SpotifyProfile = Schema.Struct({
   followers: Schema.Struct({ total: Schema.Number }),
   images: Schema.optional(Schema.NullOr(Schema.Array(Schema.Struct({ url: Schema.String })))),
 });
+
 export type SpotifyProfile = typeof SpotifyProfile.Type;
 
 const SpotifyTrack = Schema.Struct({
@@ -61,6 +62,7 @@ const PlayHistory = Schema.Struct({
   ),
   track: SpotifyTrack,
 });
+
 export type PlayHistory = typeof PlayHistory.Type;
 
 const RecentlyPlayed = Schema.Struct({ items: Schema.Array(PlayHistory) });
@@ -82,12 +84,23 @@ export class SpotifyAuthRejected extends Schema.TaggedError<SpotifyAuthRejected>
   { message: Schema.String, status: Schema.Number },
 ) {}
 
-const basicAuth = () =>
-  btoa(`${env.VITE_SPOTIFY_CLIENT_ID}:${env.SPOTIFY_CLIENT_SECRET}`);
+/** The app credentials the Spotify token endpoint authenticates with. */
+export interface SpotifyCredentialsValue {
+  readonly clientId: string;
+  readonly clientSecret: string;
+}
+
+export class SpotifyCredentials extends Context.Service<
+  SpotifyCredentials,
+  SpotifyCredentialsValue
+>()("spotistats/SpotifyCredentials") {}
+
+const basicAuth = (credentials: SpotifyCredentialsValue) =>
+  btoa(`${credentials.clientId}:${credentials.clientSecret}`);
 
 const decode = <S extends Schema.ConstraintDecoder<unknown>>(
   schema: S,
-  body: unknown,
+  body: Schema.Json,
 ): Effect.Effect<S["Type"], UpstreamError> =>
   Schema.decodeUnknownEffect(schema)(body).pipe(
     Effect.mapError(
@@ -114,12 +127,21 @@ const readText = (
       }),
   });
 
+/**
+ * The parsed JSON body.
+ *
+ * SAFETY: `Response.json()` resolves with `JSON.parse`'s output, which is JSON
+ * by construction; a malformed body rejects instead of resolving.
+ */
+const jsonBody = (response: Response): Promise<Schema.Json> =>
+  response.json() as Promise<Schema.Json>;
+
 const readJson = (
   response: Response,
   operation: string,
-): Effect.Effect<unknown, UpstreamError> =>
+): Effect.Effect<Schema.Json, UpstreamError> =>
   Effect.tryPromise({
-    try: () => response.json(),
+    try: () => jsonBody(response),
     catch: (cause) =>
       new UpstreamError({
         service: "spotify",
@@ -128,14 +150,17 @@ const readJson = (
       }),
   });
 
-const tokenRequest = (body: URLSearchParams) =>
+const tokenRequest = (
+  credentials: SpotifyCredentialsValue,
+  body: URLSearchParams,
+) =>
   Effect.gen(function* () {
     const response = yield* Effect.tryPromise({
       try: () =>
         fetch("https://accounts.spotify.com/api/token", {
           method: "POST",
           headers: {
-            Authorization: `Basic ${basicAuth()}`,
+            Authorization: `Basic ${basicAuth(credentials)}`,
             "Content-Type": "application/x-www-form-urlencoded",
           },
           body,
@@ -151,6 +176,7 @@ const tokenRequest = (body: URLSearchParams) =>
     if (!response.ok) {
       const detail = yield* readText(response, "Failed to read Spotify token error");
       const message = `Spotify token request failed: ${detail}`;
+
       // A rate limit or an outage is not the user's authorization being
       // rejected. Reporting it as `SpotifyAuthRejected` would disable the
       // account and demand a reconnect that cannot fix it.
@@ -163,6 +189,7 @@ const tokenRequest = (body: URLSearchParams) =>
           }),
         );
       }
+
       return yield* Effect.fail(
         new SpotifyAuthRejected({
           message,
@@ -172,6 +199,7 @@ const tokenRequest = (body: URLSearchParams) =>
     }
 
     const json = yield* readJson(response, "Failed to read Spotify token response");
+
     return yield* decode(SpotifyToken, json);
   });
 
@@ -182,7 +210,7 @@ const tokenRequest = (body: URLSearchParams) =>
  * file an issue for an outage the app cannot fix.
  */
 const retryableUpstream = (error: UpstreamError | SpotifyUnauthorized): boolean =>
-  error._tag === "UpstreamError" &&
+  Predicate.isTagged(error, "UpstreamError") &&
   error.status !== null &&
   error.status >= 500 &&
   error.status <= 599;
@@ -216,6 +244,7 @@ const apiRequest = <S extends Schema.ConstraintDecoder<unknown>>(
 
     if (response.status === 429) {
       const retryAfter = Number(response.headers.get("Retry-After") ?? "60");
+
       return yield* Effect.fail(
         new UpstreamError({
           service: "spotify",
@@ -227,6 +256,7 @@ const apiRequest = <S extends Schema.ConstraintDecoder<unknown>>(
 
     if (!response.ok) {
       const detail = yield* readText(response, "Failed to read Spotify API error");
+
       return yield* Effect.fail(
         new UpstreamError({
           service: "spotify",
@@ -237,6 +267,7 @@ const apiRequest = <S extends Schema.ConstraintDecoder<unknown>>(
     }
 
     const json = yield* readJson(response, "Failed to read Spotify API response");
+
     return yield* decode(schema, json);
   }).pipe(
     Effect.retry({
@@ -247,9 +278,12 @@ const apiRequest = <S extends Schema.ConstraintDecoder<unknown>>(
   );
 
 const make = Effect.gen(function* () {
+  const credentials = yield* SpotifyCredentials;
+
   return {
     exchangeCode: (code: string, redirectUri: string) =>
       tokenRequest(
+        credentials,
         new URLSearchParams({
           grant_type: "authorization_code",
           code,
@@ -258,6 +292,7 @@ const make = Effect.gen(function* () {
       ),
     refreshToken: (refreshToken: string) =>
       tokenRequest(
+        credentials,
         new URLSearchParams({
           grant_type: "refresh_token",
           refresh_token: refreshToken,
@@ -268,15 +303,17 @@ const make = Effect.gen(function* () {
     recentlyPlayed: (accessToken: string, after?: number) => {
       const url = new URL("https://api.spotify.com/v1/me/player/recently-played");
       url.searchParams.set("limit", "50");
+
       if (after !== undefined) url.searchParams.set("after", String(after));
+
       return apiRequest(RecentlyPlayed, url.toString(), accessToken).pipe(
         Effect.map((data) => data.items),
       );
     },
-  } satisfies SpotifyShape;
+  } satisfies SpotifyService;
 });
 
-export interface SpotifyShape {
+export interface SpotifyService {
   readonly exchangeCode: (
     code: string,
     redirectUri: string,
@@ -293,8 +330,11 @@ export interface SpotifyShape {
   ) => Effect.Effect<ReadonlyArray<PlayHistory>, UpstreamError | SpotifyUnauthorized>;
 }
 
-export class Spotify extends Context.Service<Spotify, SpotifyShape>()(
+export class Spotify extends Context.Service<Spotify, SpotifyService>()(
   "spotistats/Spotify",
 ) {}
 
-export const SpotifyLive = Layer.effect(Spotify, make);
+export const SpotifyLive = (credentials: SpotifyCredentialsValue) =>
+  Layer.effect(Spotify, make).pipe(
+    Layer.provide(Layer.succeed(SpotifyCredentials, credentials)),
+  );

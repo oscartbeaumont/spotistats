@@ -1,4 +1,5 @@
 import { useNavigate } from "@solidjs/router";
+import { Schema } from "effect";
 import {
   createEffect,
   createMemo,
@@ -37,6 +38,8 @@ interface Page {
   nextOffset: number;
 }
 
+const emptyPage = (): Page => ({ items: [], next: null, nextOffset: 0 });
+
 /**
  * The pages appended after the first, plus the first page they extend.
  *
@@ -51,16 +54,11 @@ interface Tail {
   nextOffset: number;
 }
 
-const hasSaveData = () => {
-  if (!("connection" in navigator)) return false;
-  const connection = navigator.connection;
-  return (
-    typeof connection === "object" &&
-    connection !== null &&
-    "saveData" in connection &&
-    connection.saveData === true
+const hasSaveData = () =>
+  "connection" in navigator &&
+  Schema.is(Schema.Struct({ saveData: Schema.Literal(true) }))(
+    navigator.connection,
   );
-};
 
 function FavouriteRow(props: {
   item: SpotifyItem;
@@ -73,6 +71,7 @@ function FavouriteRow(props: {
     props.item.type === "track"
       ? props.item.album?.images?.[0]?.url
       : props.item.images?.[0]?.url;
+
   const subtitle = () =>
     props.item.type === "track" || props.item.type === "album"
       ? props.item.artists?.map((artist) => artist.name).join(", ")
@@ -137,18 +136,22 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
   const [rawSelected, setRawSelected] = createSignal(0);
   const [atBottom, setAtBottom] = createSignal(false);
   const [saveData, setSaveData] = createSignal(false);
+
   const [tail, setTail] = createSignal<Tail>({
     source: null,
     items: [],
     next: null,
     nextOffset: 0,
   });
+
   const [loadingMore, setLoadingMore] = createSignal(false);
   const [pagingError, setPagingError] = createSignal<string | null>(null);
+
   const [loadError, setLoadError] = createSignal<{
     message: string;
     rateLimited: boolean;
   } | null>(null);
+
   // Bumped by the retry button to re-run the first page.
   const [attempt, setAttempt] = createSignal(0);
   let sentinel: HTMLDivElement | undefined;
@@ -164,12 +167,15 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
   const firstPage = createMemo(async () => {
     // A retry bumps `attempt`, which re-runs this memo's fetch.
     attempt();
+
     if (props.kind === "albums" && saveData()) {
-      return { items: [] as SpotifyItem[], next: null, nextOffset: 0 };
+      return emptyPage();
     }
+
     try {
       const page = await fetchPage(0);
       setLoadError(null);
+
       return page;
     } catch (error) {
       // A failed first page belongs to this list, not to the whole app: a rate
@@ -177,24 +183,28 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
       // offers a retry instead of the system-error boundary taking the route.
       const rateLimited =
         error instanceof SpotifyApiError && error.status === 429;
+
       if (rateLimited) {
         capture("spotify_rate_limited", { surface: "favourites" });
       } else {
         captureError(error);
       }
+
       setLoadError({
         message: rateLimited
           ? "Spotify is rate limiting this account. Wait a moment, then try again."
           : errorMessage(error),
         rateLimited,
       });
-      return { items: [] as SpotifyItem[], next: null, nextOffset: 0 };
+
+      return emptyPage();
     }
   });
 
   const items = createMemo(() => {
     const page = firstPage();
     const current = tail();
+
     return [...page.items, ...(current.source === page ? current.items : [])];
   });
 
@@ -209,8 +219,10 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
 
   const hasMore = () => {
     const page = firstPageNow();
+
     if (!page) return true;
     const current = tail();
+
     return current.source === page ? current.next !== null : page.next !== null;
   };
 
@@ -223,8 +235,10 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
    */
   const nextPageOffset = () => {
     const page = firstPageNow();
+
     if (!page) return 0;
     const current = tail();
+
     return current.source === page ? current.nextOffset : page.nextOffset;
   };
 
@@ -271,14 +285,18 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
   const loadMore = async (offset: number) => {
     if (loadingMore() || !hasMore()) return;
     const source = firstPageNow();
+
     if (!source) return;
     setLoadingMore(true);
+
     try {
       const page = await fetchPage(offset);
+
       // A range or kind change while this was in flight owns the list now.
       if (firstPageNow() !== source) return;
       setTail((previous) => {
         const base = previous.source === source ? previous.items : [];
+
         return {
           source,
           items: [...base, ...page.items],
@@ -304,9 +322,11 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
       (entries) => setAtBottom(entries.some((entry) => entry.isIntersecting)),
       { rootMargin: "500px" },
     );
+
     // The sentinel may mount after this runs (the first page suspends), so the
     // ref callback observes it as a fallback.
     if (sentinel) observer.observe(sentinel);
+
     return () => observer?.disconnect();
   });
 
@@ -316,6 +336,7 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
   createEffect(
     () => {
       const pending = isPending(items);
+
       // Track only the trigger and the offset. `loadMore` writes `loadingMore`
       // and the tail, so reading either here would make this effect re-run from
       // its own write; its guards live inside `loadMore` instead. The offset
@@ -336,6 +357,7 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
 
   const itemUrl = (item: SpotifyItem) => {
     const store = authStore();
+
     return store.status === "authenticated" && store.linkToUri
       ? (spotifyUri(item.uri) ?? externalHref(item.external_urls.spotify))
       : externalHref(item.external_urls.spotify);
@@ -344,11 +366,13 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
   const openItem = (item: SpotifyItem | undefined) => {
     if (!item) return;
     const url = itemUrl(item);
+
     if (!url) return;
     capture("spotify_item_opened", {
       kind: item.type === "album" ? "album" : "track",
       surface: "favourites",
     });
+
     if (url.startsWith("spotify:")) window.location.href = url;
     else window.open(url, "_blank", "noopener");
   };
@@ -358,6 +382,7 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
       0,
       Math.min(selectedIndex() + delta, loadedItems().length - 1),
     );
+
     setRawSelected(next);
     document
       .getElementById(`favourite-${next}`)
@@ -376,6 +401,7 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
     navigate(props.kind === "tracks" ? "/favourites/albums" : "/favourites/tracks");
     resetPaging();
   });
+
   if (props.kind === "tracks") {
     RANGES.forEach((value, index) => {
       createShortcut([String(index + 1)], () => selectRange(value));
@@ -426,7 +452,7 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
                     ["short", "Month"],
                     ["medium", "6 Months"],
                     ["long", "All Time"],
-                  ] as [Range, string][]
+                  ] satisfies [Range, string][]
                 }
               >
                 {([optionRange, label], index) => (

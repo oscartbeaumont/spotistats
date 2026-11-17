@@ -1,36 +1,39 @@
 import { afterEach, expect, it, vi } from "vitest";
 
-const client = vi.hoisted(() => ({ value: undefined as unknown }));
-vi.mock("./analytics", () => ({ posthogClient: () => client.value }));
+import { discoveryEnabled, initFeatureFlags, type FeatureFlagClient } from "./features";
 
-import { discoveryEnabled, initFeatureFlags } from "./features";
+let client: Promise<FeatureFlagClient> | undefined;
 
 afterEach(() => {
-  client.value = undefined;
+  client = undefined;
   vi.resetModules();
 });
 
+const loadClient = () => client;
+
 it("keeps discovery hidden when PostHog cannot answer", async () => {
-  client.value = Promise.resolve({
+  client = Promise.resolve({
     isFeatureEnabled: () => undefined,
     onFeatureFlags: () => {},
   });
-  initFeatureFlags();
-  await client.value;
+  initFeatureFlags(loadClient);
+  await client;
   expect(discoveryEnabled()).toBe(false);
 });
 
 it("reveals discovery once the flag resolves for the person", async () => {
   let fire: (() => void) | undefined;
+
   const posthog = {
     isFeatureEnabled: vi.fn(() => false),
     onFeatureFlags: (callback: () => void) => {
       fire = callback;
     },
   };
-  client.value = Promise.resolve(posthog);
-  initFeatureFlags();
-  await client.value;
+
+  client = Promise.resolve(posthog);
+  initFeatureFlags(loadClient);
+  await client;
   expect(discoveryEnabled()).toBe(false);
   posthog.isFeatureEnabled.mockReturnValue(true);
   fire?.();
@@ -40,6 +43,7 @@ it("reveals discovery once the flag resolves for the person", async () => {
 it("does not enable discovery on a production build without analytics", () => {
   const previous = import.meta.env.DEV;
   import.meta.env.DEV = false;
+
   try {
     initFeatureFlags();
     expect(discoveryEnabled()).toBe(false);
@@ -49,8 +53,8 @@ it("does not enable discovery on a production build without analytics", () => {
 });
 
 it("keeps discovery hidden when the analytics chunk fails to load", async () => {
-  client.value = Promise.reject(new Error("chunk load failed"));
-  initFeatureFlags();
+  client = Promise.reject(new Error("chunk load failed"));
+  initFeatureFlags(loadClient);
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(discoveryEnabled()).toBe(false);
 });

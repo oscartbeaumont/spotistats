@@ -4,7 +4,9 @@ import { onSettled } from "solid-js";
 
 export function isEditableShortcutTarget(event: KeyboardEvent | null) {
   const target = event?.target;
+
   if (!(target instanceof HTMLElement)) return false;
+
   return (
     target.isContentEditable ||
     ["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName)
@@ -41,6 +43,7 @@ const matches = (keys: ReadonlyArray<string>, event: KeyboardEvent) => {
   }
 
   if (plain.length !== 1) return false;
+
   if (
     alt !== event.altKey ||
     control !== event.ctrlKey ||
@@ -49,7 +52,9 @@ const matches = (keys: ReadonlyArray<string>, event: KeyboardEvent) => {
   ) {
     return false;
   }
+
   const key = plain[0];
+
   return key !== undefined && key.toLowerCase() === event.key.toLowerCase();
 };
 
@@ -62,14 +67,19 @@ export function createShortcut(
     const listener = (event: KeyboardEvent) => {
       // Ignore OS auto-repeat; the shortcut fires once per press.
       if (event.repeat) return;
+
       // Check the target before calling preventDefault, or a keystroke in an
       // input would be swallowed before the handler can bail out.
       if (!options?.allowEditable && isEditableShortcutTarget(event)) return;
+
       if (!matches(keys, event)) return;
+
       if (options?.preventDefault !== false) event.preventDefault();
       handler(event);
     };
+
     window.addEventListener("keydown", listener);
+
     return () => window.removeEventListener("keydown", listener);
   });
 }

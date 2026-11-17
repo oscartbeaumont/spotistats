@@ -13,6 +13,7 @@ export const readDiscoveryHistory = Effect.fn("readDiscoveryHistory")(function* 
     GROUP BY spotify_track_id ORDER BY COUNT(*) DESC, MAX(played_at_ms) DESC, spotify_track_id ASC
     LIMIT 5
   `.pipe(Effect.mapError(databaseError));
+
   const rediscovery = yield* sql<DiscoveryTrack>`
     SELECT t.spotify_track_id AS id, t.name AS name,
       COALESCE(t.artist_names, '') AS artistNames, t.image_url AS imageUrl,
@@ -24,18 +25,22 @@ export const readDiscoveryHistory = Effect.fn("readDiscoveryHistory")(function* 
     ORDER BY COUNT(*) DESC, MAX(l.played_at_ms) ASC, l.spotify_track_id ASC
     LIMIT 100
   `.pipe(Effect.mapError(databaseError));
+
   return { seeds: seeds.map((row) => row.id), rediscovery } satisfies DiscoveryHistory;
 });
 
 export const readKnownTracks = Effect.fn("readKnownTracks")(function* (sql: SqlClient, userId: string, ids: readonly string[]) {
   const known: string[] = [];
+
   // D1 permits 100 bindings per statement; leave room for the account filter.
   for (let offset = 0; offset < ids.length; offset += 90) {
     const rows = yield* sql<{ id: string }>`
       SELECT DISTINCT spotify_track_id AS id FROM spotify_listens
       WHERE spotify_user_id = ${userId} AND ${sql.in("spotify_track_id", ids.slice(offset, offset + 90))}
     `.pipe(Effect.mapError(databaseError));
+
     known.push(...rows.map((row) => row.id));
   }
+
   return known;
 });

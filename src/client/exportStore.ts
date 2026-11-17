@@ -28,6 +28,7 @@ export interface ExportJob {
 }
 
 const [exportJobs, setExportJobs] = createSignal<readonly ExportJob[]>([]);
+
 export { exportJobs };
 
 export const isExportActive = (job: ExportJob) =>
@@ -39,8 +40,28 @@ export const activeExportCount = () => exportJobs().filter(isExportActive).lengt
 export const exportJobId = (playlist: Playlist) =>
   playlist.id ?? `liked:${playlist.name}`;
 
+/**
+ * The side effects an export performs.
+ *
+ * Injected so the queue can be exercised with faithful doubles without
+ * replacing the modules that own the CSV build and the download.
+ */
+export interface ExportDependencies {
+  buildPlaylistCsv: typeof buildPlaylistCsv;
+  downloadTextFile: typeof downloadTextFile;
+  safeFileName: typeof safeFileName;
+}
+
+const realDependencies: ExportDependencies = {
+  buildPlaylistCsv,
+  downloadTextFile,
+  safeFileName,
+};
+
 const queue: string[] = [];
+
 const pending = new Map<string, Playlist>();
+
 let draining = false;
 
 const update = (id: string, patch: Partial<ExportJob>) =>
@@ -52,20 +73,27 @@ const update = (id: string, patch: Partial<ExportJob>) =>
  * Queues an export for each playlist that is not already queued or running.
  * Returns immediately; the jobs run in the background.
  */
-export function startPlaylistExports(playlists: readonly Playlist[]) {
+export function startPlaylistExports(
+  playlists: readonly Playlist[],
+  dependencies: ExportDependencies = realDependencies,
+) {
   const known = new Set([
     ...exportJobs().filter(isExportActive).map((job) => job.id),
     ...queue,
   ]);
+
   const fresh: Playlist[] = [];
+
   for (const playlist of playlists) {
     const id = exportJobId(playlist);
+
     if (known.has(id)) continue;
     known.add(id);
     pending.set(id, playlist);
     queue.push(id);
     fresh.push(playlist);
   }
+
   if (fresh.length === 0) return;
   const freshIds = new Set(fresh.map(exportJobId));
   setExportJobs((jobs) => [
@@ -80,7 +108,7 @@ export function startPlaylistExports(playlists: readonly Playlist[]) {
       error: null,
     })),
   ]);
-  void drain();
+  void drain(dependencies);
 }
 
 /** Drops the finished jobs from the panel; running jobs are kept. */
@@ -88,14 +116,17 @@ export function clearFinishedExports() {
   setExportJobs((jobs) => jobs.filter(isExportActive));
 }
 
-async function drain() {
+async function drain(dependencies: ExportDependencies) {
   if (draining) return;
   draining = true;
+
   try {
     for (;;) {
       const id = queue.shift();
+
       if (id === undefined) break;
       const playlist = pending.get(id);
+
       if (!playlist) {
         update(id, {
           status: "error",
@@ -103,12 +134,15 @@ async function drain() {
         });
         continue;
       }
+
       update(id, { status: "running", progress: 0 });
+
       try {
-        const { csv, trackCount } = await buildPlaylistCsv(playlist, (fraction) =>
+        const { csv, trackCount } = await dependencies.buildPlaylistCsv(playlist, (fraction) =>
           update(id, { progress: fraction }),
         );
-        downloadTextFile(`${safeFileName(playlist.name)}.csv`, csv);
+
+        dependencies.downloadTextFile(`${dependencies.safeFileName(playlist.name)}.csv`, csv);
         capture("playlist_exported", {
           kind: isLikedSongs(playlist) ? "liked_songs" : "playlist",
           trackCount,

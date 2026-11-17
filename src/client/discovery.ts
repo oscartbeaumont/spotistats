@@ -25,6 +25,17 @@ import {
 } from "./spotify";
 import { authStore } from "./storage";
 
+/**
+ * The account reads discovery performs.
+ *
+ * Passed in so tests can supply faithful doubles without replacing the API
+ * module.
+ */
+export interface DiscoveryAccountReads {
+  discoveryHistory: typeof accountApi.discoveryHistory;
+  discoveryKnown: typeof accountApi.discoveryKnown;
+}
+
 /** Spotify sometimes returns a track that cannot be played in this market. */
 const usable = (
   track: CatalogTrack | null,
@@ -51,9 +62,11 @@ const candidate = (
 
 const currentToken = () => {
   const store = authStore();
+
   if (store.status !== "authenticated") {
     throw new Error("Sign in to Spotify first.");
   }
+
   return store.accessToken;
 };
 
@@ -61,11 +74,14 @@ const currentToken = () => {
 async function unstoredRecommendations(
   seeds: readonly string[],
   mood: Mood,
+  accountReads: DiscoveryAccountReads,
 ): Promise<DiscoveryCandidate[]> {
   const recommendations = await runSpotify(
     getRecommendations(seeds, moodAttributes[mood]),
   );
+
   const tracks = recommendations.tracks.slice(0, 100).filter(usable);
+
   const ids = [
     ...new Set(
       tracks.flatMap((track) => [
@@ -74,19 +90,24 @@ async function unstoredRecommendations(
       ]),
     ),
   ];
-  const known = new Set(await accountApi.discoveryKnown(ids));
+
+  const known = new Set(await accountReads.discoveryKnown(ids));
+
   for (let offset = 0; offset < ids.length; offset += 50) {
     const batch = ids.slice(offset, offset + 50);
     const flags = await runSpotify(getSavedTrackFlags(batch));
+
     if (flags.length !== batch.length) {
       throw new Error(
         "Spotify returned an incomplete library check. Please try again.",
       );
     }
+
     flags.forEach((saved, index) => {
       if (saved) known.add(batch[index]!);
     });
   }
+
   return tracks
     .filter(
       (track) =>
@@ -117,6 +138,7 @@ async function rediscoveredTracks(
             history.rediscovery.map((track) => track.id).join(","),
           ),
         );
+
   if (features && features.length !== history.rediscovery.length) {
     throw new Error(
       "Spotify returned incomplete audio features. Please try again.",
@@ -126,17 +148,23 @@ async function rediscoveredTracks(
   const eligible = history.rediscovery.filter((_, index) =>
     matchesMood(mood, features?.[index]),
   );
+
   const tracks: DiscoveryCandidate[] = [];
+
   for (let offset = 0; offset < eligible.length; offset += 50) {
     const batch = eligible.slice(offset, offset + 50);
+
     const catalog = await runSpotify(
       getCatalogTracks(batch.map((track) => track.id)),
     );
+
     if (catalog.tracks.length !== batch.length) {
       throw new Error("Spotify returned an incomplete track lookup. Please try again.");
     }
+
     catalog.tracks.forEach((track, index) => {
       const previous = batch[index];
+
       if (!previous || !usable(track)) return;
       tracks.push(
         candidate(
@@ -147,23 +175,31 @@ async function rediscoveredTracks(
       );
     });
   }
+
   return tracks;
 }
 
-export async function generateDiscovery(mode: DiscoveryMode, mood: Mood) {
+export async function generateDiscovery(
+  mode: DiscoveryMode,
+  mood: Mood,
+  accountReads: DiscoveryAccountReads = accountApi,
+) {
   const token = currentToken();
+
   const [profile, history] = await Promise.all([
     runSpotify(getProfile()),
-    accountApi.discoveryHistory(),
+    accountReads.discoveryHistory(),
   ]);
 
   let seeds = history.seeds;
+
   if (mode !== "rediscover" && seeds.length === 0) {
     seeds = (await runSpotify(getDiscoveryTopTracks())).items
       .filter(usable)
       .slice(0, 5)
       .map((track) => track.id);
   }
+
   if (mode !== "rediscover") {
     if (seeds.length === 0) {
       throw new Error(
@@ -173,13 +209,15 @@ export async function generateDiscovery(mode: DiscoveryMode, mood: Mood) {
   }
 
   const fresh =
-    mode === "rediscover" ? [] : await unstoredRecommendations(seeds, mood);
+    mode === "rediscover" ? [] : await unstoredRecommendations(seeds, mood, accountReads);
+
   const old =
     mode === "new" ? [] : await rediscoveredTracks(history, mood);
 
   if (currentToken() !== token) {
     throw new Error("Your Spotify session changed. Generate a new selection.");
   }
+
   return {
     ownerId: profile.id,
     tracks: selectDiscoveryTracks(fresh, old, mode),
@@ -193,6 +231,7 @@ export const DiscoveryDraft = Schema.Struct({
   playlist: Schema.NullOr(CreatedPlaylist),
   stage: Schema.Literals(["review", "creating", "filling", "saved"]),
 });
+
 export type DiscoveryDraft = typeof DiscoveryDraft.Type;
 
 const draftKey = "spotistats-discovery-draft";
@@ -200,6 +239,7 @@ const draftKey = "spotistats-discovery-draft";
 export function readDiscoveryDraft(): DiscoveryDraft | null {
   try {
     const raw = sessionStorage.getItem(draftKey);
+
     return raw
       ? Schema.decodeUnknownSync(DiscoveryDraft)(JSON.parse(raw))
       : null;
@@ -223,42 +263,51 @@ export async function saveDiscoveryPlaylist(
 ) {
   const token = currentToken();
   const profile = await runSpotify(getProfile());
+
   if (currentToken() !== token) {
     throw new Error(
       "Your Spotify session changed. Reopen discovery before retrying.",
     );
   }
+
   if (profile.id !== draft.ownerId) {
     throw new Error(
       "This selection belongs to a different Spotify account. Generate a new one.",
     );
   }
+
   if (!draft.tracks.length) throw new Error("Select at least one track.");
+
   if (draft.stage === "creating") {
     throw new Error(
       "Spotify may have created the playlist, but its response was lost. Check your Spotify playlists before starting over.",
     );
   }
+
   if (draft.stage === "saved") return;
 
   const persist = (next: DiscoveryDraft) => {
     writeDiscoveryDraft(next);
     update(next);
+
     return next;
   };
 
   if (!draft.playlist) {
     draft = persist({ ...draft, stage: "creating" });
+
     // Never retry this POST: Spotify may have created it even if the response
     // was lost.
     const playlist = await runSpotify(
       createPrivatePlaylist(draft.name.trim() || "Spotistats discovery"),
     );
+
     if (currentToken() !== token) {
       throw new Error(
         "Your Spotify session changed. Check Spotify for the playlist before starting over.",
       );
     }
+
     draft = { ...draft, playlist, stage: "filling" };
     // Keep the returned ID in memory even if storage fills after creation.
     update(draft);
@@ -270,27 +319,33 @@ export async function saveDiscoveryPlaylist(
       "Your Spotify session changed. Reopen discovery before retrying.",
     );
   }
+
   await runSpotify(
     setDiscoveryPlaylistTracks(
       draft.playlist!.id,
       draft.tracks.map((track) => track.id),
     ),
   );
+
   if (currentToken() !== token) {
     throw new Error(
       "Your Spotify session changed. Check Spotify for the saved playlist.",
     );
   }
+
   persist({ ...draft, stage: "saved" });
 }
 
-export function discoveryError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
+export function discoveryError(cause: unknown) {
+  const message = cause instanceof Error ? cause.message : String(cause);
+
   if (message.includes("403") || message.includes("404")) {
     return "Spotify denied this operation. Recommendations and audio features are restricted for some apps. If saving, reconnect with playlist permission. No substitute results were generated.";
   }
+
   if (message.includes("429")) {
     return "Spotify is rate limiting requests. Wait a little before trying again.";
   }
+
   return message;
 }

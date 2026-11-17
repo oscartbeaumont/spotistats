@@ -16,22 +16,29 @@ export function reuseUnchanged<T>(
   key: (item: T) => string,
 ): T[] {
   const byKey = new Map(previous.map((item) => [key(item), item]));
+
   return next.map((item) => {
     const old = byKey.get(key(item));
+
     return old !== undefined && shallowEqual(old, item) ? old : item;
   });
 }
 
+function isObjectLike<A>(value: A): value is A & object {
+  return typeof value === "object" && value !== null;
+}
+
 /** One level deep: enough for the flat row objects the lists carry. */
-export function shallowEqual(a: unknown, b: unknown): boolean {
-  if (a === b) return true;
-  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) {
-    return false;
-  }
-  const aRecord = a as Record<string, unknown>;
-  const bRecord = b as Record<string, unknown>;
-  const aKeys = Object.keys(aRecord);
-  const bKeys = Object.keys(bRecord);
-  if (aKeys.length !== bKeys.length) return false;
-  return aKeys.every((name) => aRecord[name] === bRecord[name]);
+export function shallowEqual<A, B>(a: A, b: B): boolean {
+  if (Object.is(a, b)) return true;
+
+  if (!isObjectLike(a) || !isObjectLike(b)) return false;
+
+  const aEntries = Object.entries(a);
+  const bEntries = new Map(Object.entries(b));
+
+  return (
+    aEntries.length === bEntries.size &&
+    aEntries.every(([name, value]) => bEntries.get(name) === value)
+  );
 }

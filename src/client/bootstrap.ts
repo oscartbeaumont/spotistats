@@ -16,6 +16,7 @@ export function bootstrapClient(): void {
   const session = hydrateAuthStore();
   initAnalytics();
   initFeatureFlags();
+
   // Re-identify from the cached profile so feature flags resolve for the
   // signed-in person on any route, not only after visiting the profile page.
   if (session.status === "authenticated" && session.profile?.id) {
@@ -24,6 +25,7 @@ export function bootstrapClient(): void {
       email: session.profile.email,
     });
   }
+
   void consumeSpotifyCallback(session).catch((error) => {
     // A broken callback must not become an unhandled boot rejection.
     console.error("Spotify login callback failed", error);

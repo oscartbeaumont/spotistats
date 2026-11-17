@@ -1,4 +1,5 @@
 import { useLocation, useNavigate } from "@solidjs/router";
+import { Match } from "effect";
 import { createEffect, Errored, Loading, Show } from "solid-js";
 import type { JSX } from "@solidjs/web";
 
@@ -28,8 +29,10 @@ export function RootLayout(props: {
   const navigate = useNavigate();
   const publicPage = () => isPublicPath(location.pathname);
   const contentPage = () => isContentPath(location.pathname);
+
   const canonicalPath = () =>
     location.pathname === "/login" ? "/" : location.pathname;
+
   const loadingFallback = () =>
     location.pathname === "/" ? <ProfileSkeleton /> : <LoadingScreen />;
 
@@ -42,11 +45,14 @@ export function RootLayout(props: {
     ({ path, status, ready }) => {
       // Wait for the client to load the session before redirecting.
       if (!ready) return;
+
       // Everything below reads the browser's URL and session, so it only runs
       // once the client owns the page.
       if (typeof window === "undefined") return;
+
       // A Spotify login callback owns the URL until it is consumed.
       if (hasSpotifyCallbackResult()) return;
+
       // Public routes (the sign-in screen and the policy pages) render signed
       // out, so never bounce them to `/login`. This also stops opening `/`
       // from flashing the sign-in screen and then redirecting to `/login`.
@@ -56,11 +62,13 @@ export function RootLayout(props: {
   );
 
   const isActive = (href: string) =>
-    href === "/"
-      ? location.pathname === "/"
-      : href === "/favourites/tracks"
-        ? location.pathname.startsWith("/favourites/")
-        : location.pathname === href;
+    Match.value(href).pipe(
+      Match.when("/", () => location.pathname === "/"),
+      Match.when("/favourites/tracks", () =>
+        location.pathname.startsWith("/favourites/"),
+      ),
+      Match.orElse(() => location.pathname === href),
+    );
 
   const linkClass = (href: string) =>
     `shrink-0 whitespace-nowrap font-black text-[0.65rem] sm:text-sm uppercase px-1 sm:px-4 py-2 tracking-wide transition ${
@@ -85,6 +93,7 @@ export function RootLayout(props: {
     { path: "/account", key: "4" },
     { path: "/discover", key: "5", enabled: discoveryEnabled },
   ];
+
   for (const shortcut of shortcuts) {
     for (const modifier of ["Alt", "Control", "Meta"]) {
       createShortcut([modifier, shortcut.key], () => {

@@ -1,3 +1,4 @@
+import { env } from "cloudflare:workers";
 import { Layer } from "effect";
 import { HttpRouter, HttpServer } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
@@ -14,14 +15,24 @@ import { TrackingLive } from "./tracking";
  *
  * `ServicesLive` provides the database, Spotify and tracking services for the
  * queue and cron handlers. `apiHandler` is the fetch-shaped handler for the
- * shared `HttpApi`.
+ * shared `HttpApi`. This is the only server module that reads the worker
+ * bindings, so the services and their tests take their inputs explicitly.
  */
 
-const PlatformLive = Layer.merge(DatabaseLive, SpotifyLive);
+/** The credentials the OAuth handshake and token endpoint share. */
+export const statsOAuthConfig = {
+  clientId: env.VITE_SPOTIFY_CLIENT_ID,
+  clientSecret: env.SPOTIFY_CLIENT_SECRET,
+} as const;
+
+const PlatformLive = Layer.merge(
+  DatabaseLive(env.DB),
+  SpotifyLive(statsOAuthConfig),
+);
 
 export const ServicesLive = Layer.mergeAll(
   PlatformLive,
-  TrackingLive.pipe(Layer.provide(PlatformLive)),
+  TrackingLive(env.SPOTIFY_SYNC_QUEUE).pipe(Layer.provide(PlatformLive)),
 );
 
 const AppLive = HttpApiBuilder.layer(Api).pipe(

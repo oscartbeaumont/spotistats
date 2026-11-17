@@ -27,6 +27,7 @@ export function authorizationNeedsReconnect(
   now: number,
 ): boolean {
   const expiresAt = authorizationExpiry(consentedAt);
+
   return expiresAt !== null && expiresAt - now <= reconnectWarningMs;
 }
 

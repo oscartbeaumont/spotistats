@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { DatabaseSync, type SQLInputValue } from "node:sqlite";
+import { DatabaseSync } from "node:sqlite";
 import { D1Client } from "@effect/sql-d1";
 import { Effect } from "effect";
 import { Reactivity } from "effect/reactivity";
@@ -7,18 +7,24 @@ import type { SqlClient } from "effect/sql/SqlClient";
 import { afterEach, beforeEach, expect, it } from "vitest";
 
 import { readDiscoveryHistory, readKnownTracks } from "./discovery";
+import { SqliteD1 } from "./sqliteD1";
 
 let database: DatabaseSync;
+
 let bindings: number[];
+
 const now = Date.UTC(2026, 9, 22);
+
 const day = 86_400_000;
 
 beforeEach(() => {
   database = new DatabaseSync(":memory:");
   database.exec(readFileSync(new URL("../../migrations/0001_spotify_tracking.sql", import.meta.url), "utf8"));
+
   for (const id of ["owner", "other"]) database.prepare("INSERT INTO spotify_tracking_users (spotify_user_id, consented_at, created_at, updated_at) VALUES (?, 0, 0, 0)").run(id);
   bindings = [];
 });
+
 afterEach(() => database.close());
 
 function listen(user: string, id: string, daysAgo: number) {
@@ -29,17 +35,11 @@ function listen(user: string, id: string, daysAgo: number) {
 
 const run = <A, E>(query: (sql: SqlClient) => Effect.Effect<A, E>) => {
   // Execute the real D1 driver's compiled SQL in SQLite, enforcing D1's bind cap.
-  const db = {
-    prepare: (text: string) => ({
-      bind: (...values: SQLInputValue[]) => ({
-        all: async () => {
-          bindings.push(values.length);
-          if (values.length > 100) throw new Error("D1 binding limit exceeded");
-          return { results: database.prepare(text).all(...values) };
-        },
-      }),
-    }),
-  } as unknown as D1Client.D1ClientConfig["db"];
+  const db = new SqliteD1(database, {
+    maxBindings: 100,
+    onBind: (count) => bindings.push(count),
+  });
+
   return Effect.runPromise(Effect.scoped(Effect.gen(function* () {
     return yield* query(yield* D1Client.make({ db }));
   })).pipe(Effect.provide(Reactivity.layer)));
@@ -66,6 +66,7 @@ it("bounds seed and rediscovery results", async () => {
     listen("owner", String(index), 100);
     listen("owner", String(index), 101);
   }
+
   const result = await run((sql) => readDiscoveryHistory(sql, "owner", now));
   expect(result.seeds).toHaveLength(5);
   expect(result.rediscovery).toHaveLength(100);

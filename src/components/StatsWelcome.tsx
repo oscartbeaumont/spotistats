@@ -11,6 +11,18 @@ import { welcomeSteps, type WelcomePhase } from "~/lib/statsWelcome";
  * the insights as soon as there is something real to show. It is dismissible,
  * so it never becomes a permanent fixture for people who already know the page.
  */
+/** The accent each step carries once the sync has reached it. */
+const stepClass = (state: "done" | "active" | "todo") => {
+  switch (state) {
+    case "done":
+      return "bg-[#0a0a0a] text-[#1DB954]";
+    case "active":
+      return "bg-[#f0ede8]";
+    case "todo":
+      return "opacity-70";
+  }
+};
+
 export function StatsWelcome(props: {
   phase: WelcomePhase;
   listenCount: number;
@@ -95,13 +107,9 @@ export function StatsWelcome(props: {
         <For each={welcomeSteps(props.phase)}>
           {(step) => (
             <li
-              class={`flex items-center gap-2 border-[3px] border-[#0a0a0a] px-3 py-2 text-[0.6rem] font-black uppercase tracking-widest ${
-                step.state === "done"
-                  ? "bg-[#0a0a0a] text-[#1DB954]"
-                  : step.state === "active"
-                    ? "bg-[#f0ede8]"
-                    : "opacity-70"
-              }`}
+              class={`flex items-center gap-2 border-[3px] border-[#0a0a0a] px-3 py-2 text-[0.6rem] font-black uppercase tracking-widest ${stepClass(
+                step.state,
+              )}`}
             >
               <span
                 aria-hidden="true"

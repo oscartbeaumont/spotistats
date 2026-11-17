@@ -1,7 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-
-const posthog = vi.hoisted(() => ({ init: vi.fn() }));
-vi.mock("posthog-js", () => ({ default: posthog }));
+import type { CaptureResult, Properties } from "posthog-js";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   isChunkLoadError,
@@ -9,10 +7,12 @@ import {
   isInjectedScriptError,
   isUnparseableScriptError,
   isUpstreamOutage,
+  shouldDropEvent,
 } from "./analytics";
 import { SpotifyApiError, SpotifyUnauthenticatedError } from "./spotify";
 
 const origin = "https://spotistats.otbeaumont.me";
+
 const loginPage = `${origin}/login`;
 
 describe("isInjectedScriptError", () => {
@@ -243,83 +243,77 @@ describe("isHandledError", () => {
 });
 
 describe("analytics exception filter", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    vi.resetModules();
-    posthog.init.mockClear();
+  const exception = (
+    frames: ReadonlyArray<{ filename?: string }>,
+    properties: Properties = {},
+  ): CaptureResult => ({
+    uuid: "event",
+    event: "$exception",
+    properties: {
+      $current_url: loginPage,
+      ...properties,
+      $exception_list: [{ stacktrace: { frames } }],
+    },
   });
 
-  it("drops injected-script exceptions before they reach PostHog", async () => {
+  it("drops injected-script exceptions before they reach PostHog", () => {
+    const injected = exception([{ filename: loginPage }]);
+    expect(shouldDropEvent(injected)).toBe(true);
+
+    // No `$current_url` on the event: fall back to the live page URL.
     vi.stubGlobal("window", { location: { href: loginPage } });
-    const dev = import.meta.env.DEV;
-    import.meta.env.DEV = false;
-    try {
-      const analytics = await import("./analytics");
-      analytics.initAnalytics();
-      await vi.waitFor(() => expect(posthog.init).toHaveBeenCalledTimes(1));
 
-      const config = posthog.init.mock.calls[0]?.[1] as {
-        before_send: (event: unknown) => unknown;
-      };
-      const exception = (
-        frames: unknown[],
-        properties: Record<string, unknown> = {},
-      ) => ({
-        event: "$exception",
-        properties: {
-          $current_url: loginPage,
-          ...properties,
-          $exception_list: [{ stacktrace: { frames } }],
-        },
-      });
+    const withoutUrl = exception([{ filename: loginPage }], {
+      $current_url: undefined,
+    });
 
-      const injected = exception([{ filename: loginPage }]);
-      expect(config.before_send(injected)).toBeNull();
+    expect(shouldDropEvent(withoutUrl)).toBe(true);
+    vi.unstubAllGlobals();
 
-      // No `$current_url` on the event: fall back to the live page URL.
-      const withoutUrl = exception([{ filename: loginPage }], {
-        $current_url: undefined,
-      });
-      expect(config.before_send(withoutUrl)).toBeNull();
+    const app = exception([{ filename: `${origin}/assets/app.js` }]);
+    expect(shouldDropEvent(app)).toBe(false);
 
-      const app = exception([{ filename: `${origin}/assets/app.js` }]);
-      expect(config.before_send(app)).toBe(app);
+    // A browser parse error carries no frames to classify, so it needs its
+    // own rule.
+    const parseError: CaptureResult = {
+      uuid: "parse",
+      event: "$exception",
+      properties: {
+        $current_url: loginPage,
+        $exception_list: [
+          {
+            type: "SyntaxError",
+            value: "No identifiers allowed directly after numeric literal",
+          },
+        ],
+      },
+    };
 
-      // A browser parse error carries no frames to classify, so it needs its
-      // own rule.
-      const parseError = {
-        event: "$exception",
-        properties: {
-          $current_url: loginPage,
-          $exception_list: [
-            {
-              type: "SyntaxError",
-              value: "No identifiers allowed directly after numeric literal",
-            },
-          ],
-        },
-      };
-      expect(config.before_send(parseError)).toBeNull();
+    expect(shouldDropEvent(parseError)).toBe(true);
 
-      // A chunk load that recovery reloads past is not an app issue.
-      const chunkError = {
-        event: "$exception",
-        properties: {
-          $current_url: loginPage,
-          $exception_list: [
-            {
-              type: "TypeError",
-              value: "Importing a module script failed.",
-            },
-          ],
-        },
-      };
-      expect(config.before_send(chunkError)).toBeNull();
+    // A chunk load that recovery reloads past is not an app issue.
+    const chunkError: CaptureResult = {
+      uuid: "chunk",
+      event: "$exception",
+      properties: {
+        $current_url: loginPage,
+        $exception_list: [
+          {
+            type: "TypeError",
+            value: "Importing a module script failed.",
+          },
+        ],
+      },
+    };
 
-      const pageview = { event: "$pageview", properties: {} };
-      expect(config.before_send(pageview)).toBe(pageview);
-    } finally {
-      import.meta.env.DEV = dev;
-    }
+    expect(shouldDropEvent(chunkError)).toBe(true);
+
+    const pageview: CaptureResult = {
+      uuid: "pageview",
+      event: "$pageview",
+      properties: {},
+    };
+
+    expect(shouldDropEvent(pageview)).toBe(false);
   });
 });

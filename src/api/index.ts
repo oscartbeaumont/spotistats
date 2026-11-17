@@ -38,11 +38,13 @@ export const TrackingStatus = Schema.Struct({
   listenCount: Schema.Number,
   recent: Schema.Array(RecentListen),
 });
+
 export type TrackingStatus = typeof TrackingStatus.Type;
 
 export const RefreshResult = Schema.Struct({
   queued: Schema.Boolean,
 });
+
 export type RefreshResult = typeof RefreshResult.Type;
 
 const TopTrack = Schema.Struct({
@@ -69,12 +71,14 @@ export const DiscoveryTrack = Schema.Struct({
   listens: Schema.Number,
   lastPlayedAtMs: Schema.Number,
 });
+
 export type DiscoveryTrack = typeof DiscoveryTrack.Type;
 
 export const DiscoveryHistory = Schema.Struct({
   seeds: Schema.Array(Schema.String),
   rediscovery: Schema.Array(DiscoveryTrack),
 });
+
 export type DiscoveryHistory = typeof DiscoveryHistory.Type;
 
 export const InsightsRange = Schema.Literals([
@@ -84,6 +88,7 @@ export const InsightsRange = Schema.Literals([
   "sixMonths",
   "custom",
 ]);
+
 export type InsightsRange = typeof InsightsRange.Type;
 
 export interface InsightsQuery {
@@ -138,6 +143,7 @@ export const ListeningInsights = Schema.Struct({
     Schema.Struct({ date: Schema.String, listens: Schema.Number }),
   ),
 });
+
 export type ListeningInsights = typeof ListeningInsights.Type;
 
 const ExportedListen = Schema.Struct({
@@ -161,7 +167,9 @@ export const ListeningExport = Schema.Struct({
   listenCount: Schema.Number,
   listens: Schema.Array(ExportedListen),
 });
+
 export type ListeningExport = typeof ListeningExport.Type;
+
 export type ExportedListen = typeof ExportedListen.Type;
 
 /** A CSV response is sent as text so a large export never becomes a JSON tree. */
@@ -248,4 +256,5 @@ export const AccountGroup = HttpApiGroup.make("account").add(
 );
 
 export const Api = HttpApi.make("spotistats").add(AccountGroup);
+
 export type Api = typeof Api;

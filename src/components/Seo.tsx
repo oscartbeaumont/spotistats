@@ -24,6 +24,7 @@ export function Seo(props: {
 }) {
   const description = () => props.description ?? siteDescription;
   const canonical = () => canonicalUrl(props.path);
+
   const robots = () =>
     props.publicPage
       ? "index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1"

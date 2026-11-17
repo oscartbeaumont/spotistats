@@ -1,17 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const deps = vi.hoisted(() => ({
+import type { ExportDependencies } from "./exportStore";
+
+const deps = {
   buildPlaylistCsv: vi.fn(),
   downloadTextFile: vi.fn(),
-}));
-
-vi.mock("~/lib/playlistExport", () => ({
-  buildPlaylistCsv: deps.buildPlaylistCsv,
-}));
-vi.mock("~/lib/download", () => ({
-  downloadTextFile: deps.downloadTextFile,
   safeFileName: (name: string) => name,
-}));
+} satisfies ExportDependencies;
 
 import {
   clearFinishedExports,
@@ -30,12 +25,13 @@ describe("export store", () => {
 
   it("runs each queued playlist and records a download", async () => {
     deps.buildPlaylistCsv.mockImplementation(
-      async (_playlist: unknown, onProgress: (fraction: number) => void) => {
+      async (_playlist, onProgress: (fraction: number) => void) => {
         onProgress(0.5);
+
         return { csv: "csv", trackCount: 3 };
       },
     );
-    startPlaylistExports([{ name: "Morning Mix" }, { name: "Deep Focus" }]);
+    startPlaylistExports([{ name: "Morning Mix" }, { name: "Deep Focus" }], deps);
     await flush();
     await flush();
     const jobs = exportJobs();
@@ -46,8 +42,8 @@ describe("export store", () => {
 
   it("does not queue the same playlist twice", async () => {
     deps.buildPlaylistCsv.mockResolvedValue({ csv: "csv", trackCount: 3 });
-    startPlaylistExports([{ id: "p1", name: "Morning Mix" }]);
-    startPlaylistExports([{ id: "p1", name: "Morning Mix" }]);
+    startPlaylistExports([{ id: "p1", name: "Morning Mix" }], deps);
+    startPlaylistExports([{ id: "p1", name: "Morning Mix" }], deps);
     await flush();
     await flush();
     expect(exportJobs().filter((job) => job.id === "p1")).toHaveLength(1);
@@ -55,12 +51,12 @@ describe("export store", () => {
 
   it("replaces a finished job instead of stacking a duplicate row", async () => {
     deps.buildPlaylistCsv.mockResolvedValue({ csv: "csv", trackCount: 3 });
-    startPlaylistExports([{ id: "p1", name: "Morning Mix" }]);
+    startPlaylistExports([{ id: "p1", name: "Morning Mix" }], deps);
     await flush();
     await flush();
     expect(exportJobs()).toHaveLength(1);
 
-    startPlaylistExports([{ id: "p1", name: "Morning Mix" }]);
+    startPlaylistExports([{ id: "p1", name: "Morning Mix" }], deps);
     await flush();
     await flush();
     expect(exportJobs()).toHaveLength(1);
@@ -69,7 +65,7 @@ describe("export store", () => {
 
   it("records a failed export", async () => {
     deps.buildPlaylistCsv.mockRejectedValue(new Error("rate limited"));
-    startPlaylistExports([{ id: "p1", name: "Morning Mix" }]);
+    startPlaylistExports([{ id: "p1", name: "Morning Mix" }], deps);
     await flush();
     await flush();
     const [job] = exportJobs();
@@ -79,7 +75,7 @@ describe("export store", () => {
 
   it("drops finished jobs on clear", async () => {
     deps.buildPlaylistCsv.mockResolvedValue({ csv: "csv", trackCount: 3 });
-    startPlaylistExports([{ id: "p1", name: "Morning Mix" }]);
+    startPlaylistExports([{ id: "p1", name: "Morning Mix" }], deps);
     await flush();
     await flush();
     expect(exportJobs()).toHaveLength(1);

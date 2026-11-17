@@ -13,6 +13,7 @@
  */
 
 const RELOAD_KEY = "spotistats:chunk-reload-at";
+
 const COOLDOWN_MS = 10_000;
 
 interface ReloadTarget {
@@ -33,11 +34,13 @@ export function installChunkRecovery(
 ): void {
   target.addEventListener("vite:preloadError", () => {
     let last = 0;
+
     try {
       last = Number(storage.getItem(RELOAD_KEY) ?? 0);
     } catch {
       // Storage can be blocked; treat it as "never reloaded".
     }
+
     if (Number.isFinite(last) && now() - last < cooldownMs) return;
 
     // Do not prevent the default. Vite dispatches this event from the catch
@@ -52,6 +55,7 @@ export function installChunkRecovery(
     } catch {
       // The reload still happens; only the loop guard is lost.
     }
+
     target.location.reload();
   });
 }

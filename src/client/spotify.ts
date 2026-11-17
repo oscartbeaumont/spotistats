@@ -37,7 +37,7 @@ export class SpotifyApiError extends Schema.TaggedError<SpotifyApiError>()(
   "SpotifyApiError",
   {
     status: Schema.Number,
-    body: Schema.Unknown,
+    body: Schema.Json,
     // Only a 429 carries Spotify's `Retry-After`, in milliseconds.
     retryAfterMs: Schema.optional(Schema.NullOr(Schema.Number)),
     message: Schema.String,
@@ -45,7 +45,7 @@ export class SpotifyApiError extends Schema.TaggedError<SpotifyApiError>()(
 ) {
   constructor(
     readonly status: number,
-    readonly body: unknown,
+    readonly body: Schema.Json,
     readonly retryAfterMs: number | null = null,
   ) {
     super({ status, body, retryAfterMs, message: `Spotistats: ${status}` });
@@ -88,6 +88,7 @@ export type SpotifyError =
   | SpotifyRequestError;
 
 const Image = Schema.Struct({ url: Schema.String });
+
 const Named = Schema.Struct({ name: Schema.String });
 
 export const SpotifyProfile = Schema.Struct({
@@ -114,6 +115,7 @@ export const SpotifyItem = Schema.Struct({
     Schema.Struct({ images: Schema.optional(Schema.NullOr(Schema.Array(Image))) }),
   ),
 });
+
 export type SpotifyItem = typeof SpotifyItem.Type;
 
 export const CurrentlyPlaying = Schema.Struct({
@@ -122,6 +124,7 @@ export const CurrentlyPlaying = Schema.Struct({
   item: Schema.NullOr(SpotifyItem),
   progress_ms: Schema.NullOr(Schema.Number),
 });
+
 export type CurrentlyPlaying = typeof CurrentlyPlaying.Type;
 
 export const Playlist = Schema.Struct({
@@ -134,6 +137,7 @@ export const Playlist = Schema.Struct({
   ),
   images: Schema.optional(Schema.NullOr(Schema.Array(Image))),
 });
+
 export type Playlist = typeof Playlist.Type;
 
 const page = <S extends Schema.Constraint>(item: S) =>
@@ -155,6 +159,7 @@ const Track = Schema.Struct({
   duration_ms: Schema.Number,
   popularity: Schema.optional(Schema.NullOr(Schema.Number)),
 });
+
 export type PlaylistTrackItem = typeof Track.Type;
 
 export const PlaylistTrack = Schema.Struct({
@@ -163,12 +168,13 @@ export const PlaylistTrack = Schema.Struct({
   is_local: Schema.optional(Schema.Boolean),
   // Spotify's playlist-items endpoint returns `item`; `track` is the
   // deprecated alias the older endpoint still returns.
-  item: Schema.optional(Schema.NullOr(Schema.Unknown)),
-  track: Schema.optional(Schema.NullOr(Schema.Unknown)),
+  item: Schema.optional(Schema.NullOr(Schema.Json)),
+  track: Schema.optional(Schema.NullOr(Schema.Json)),
 });
+
 export type PlaylistTrack = typeof PlaylistTrack.Type;
 
-const decodePlaylistTrack = (value: unknown): PlaylistTrackItem | null =>
+const decodePlaylistTrack = (value: Schema.Json | undefined): PlaylistTrackItem | null =>
   value == null
     ? null
     : Option.getOrNull(Schema.decodeUnknownOption(Track)(value));
@@ -180,8 +186,10 @@ const decodePlaylistTrack = (value: unknown): PlaylistTrackItem | null =>
  */
 export function playlistTrack(entry: PlaylistTrack): PlaylistTrackItem | null {
   if (entry.is_local === true) return null;
+
   const track =
     decodePlaylistTrack(entry.item) ?? decodePlaylistTrack(entry.track);
+
   return track && track.is_local !== true ? track : null;
 }
 
@@ -220,15 +228,26 @@ const AudioFeatures = Schema.Struct({
   mode: Schema.Number,
   time_signature: Schema.Number,
 });
+
 export type AudioFeatures = typeof AudioFeatures.Type;
 
 const Artist = Schema.Struct({
   id: Schema.String,
   genres: Schema.Array(Schema.String),
 });
+
 export type SpotifyArtist = typeof Artist.Type;
 
 const retryable = (status: number) => [500, 502, 503].includes(status);
+
+/**
+ * The parsed JSON body.
+ *
+ * SAFETY: `Response.json()` resolves with `JSON.parse`'s output, which is JSON
+ * by construction; a malformed body rejects instead of resolving.
+ */
+const jsonBody = (response: Response): Promise<Schema.Json> =>
+  response.json() as Promise<Schema.Json>;
 
 /** Longest wait this app will park a request for before failing to the page. */
 const maxRetryDelayMs = 5_000;
@@ -240,10 +259,13 @@ const maxRetryDelayMs = 5_000;
  */
 const retryAfter = (response: Response): number | null => {
   const header = response.headers.get("Retry-After");
+
   if (!header) return null;
   const seconds = Number(header);
+
   if (Number.isFinite(seconds)) return Math.max(0, seconds * 1_000);
   const date = Date.parse(header);
+
   return Number.isNaN(date) ? null : Math.max(0, date - Date.now());
 };
 
@@ -267,8 +289,11 @@ const retrySchedule = Schedule.exponential("500 millis").pipe(
 /** Whether a failed request is transient, and worth a second attempt. */
 const retryableError = (error: SpotifyError): boolean => {
   if (error instanceof SpotifyRequestError) return true;
+
   if (!(error instanceof SpotifyApiError)) return false;
+
   if (retryable(error.status)) return true;
+
   // A rate limit that asks for longer than the cap is shown to the page, which
   // offers a retry, rather than parking the request on it.
   return (
@@ -296,7 +321,7 @@ const endpointOf = (url: string): string => {
 
 const decode = <S extends Schema.ConstraintDecoder<unknown>>(
   schema: S,
-  value: unknown,
+  value: Schema.Json,
   url: string,
 ): Effect.Effect<S["Type"], SpotifyResponseError> =>
   Schema.decodeUnknownEffect(schema)(value).pipe(
@@ -312,6 +337,7 @@ const request = <S extends Schema.ConstraintDecoder<unknown>>(
 ): Effect.Effect<S["Type"], SpotifyError> =>
   Effect.gen(function* () {
     const store = untrack(() => authStore());
+
     if (store.status !== "authenticated") {
       return yield* Effect.fail(new SpotifyUnauthenticatedError());
     }
@@ -335,6 +361,7 @@ const request = <S extends Schema.ConstraintDecoder<unknown>>(
           ? { status: "empty" }
           : current,
       );
+
       return yield* Effect.fail(new SpotifyUnauthenticatedError());
     }
 
@@ -342,13 +369,14 @@ const request = <S extends Schema.ConstraintDecoder<unknown>>(
 
     if (!response.ok) {
       const body = yield* Effect.tryPromise({
-        try: () => response.json(),
+        try: () => jsonBody(response),
         catch: (cause) =>
           new SpotifyApiError(response.status, {
             status: response.status,
             detail: String(cause),
           }),
       }).pipe(Effect.catchTag("SpotifyApiError", (error) => Effect.succeed(error.body)));
+
       return yield* Effect.fail(
         new SpotifyApiError(
           response.status,
@@ -359,13 +387,14 @@ const request = <S extends Schema.ConstraintDecoder<unknown>>(
     }
 
     const json = yield* Effect.tryPromise({
-      try: () => response.json(),
+      try: () => jsonBody(response),
       catch: (cause) =>
         new SpotifyApiError(response.status, {
           error: "Spotify response body could not be read",
           detail: String(cause),
         }),
     });
+
     return yield* decode(schema, json, url);
   }).pipe(
     Effect.retry({
@@ -385,7 +414,7 @@ export const getProfile = () =>
 
 /** Every saved-albums entry, whether or not its album can be rendered. */
 const savedAlbumPage = Schema.Struct({
-  items: Schema.Array(Schema.Unknown),
+  items: Schema.Array(Schema.Json),
   next: Schema.NullOr(Schema.String),
   total: Schema.Number,
   limit: Schema.Number,
@@ -399,14 +428,14 @@ const savedAlbumPage = Schema.Struct({
  * catalog or unavailable in the user's market. Such an entry cannot be shown,
  * but it also must not fail the whole page, so each entry is decoded on its own.
  */
-const savedAlbum = (entry: unknown): SpotifyItem | undefined => {
-  if (typeof entry !== "object" || entry === null || !("album" in entry)) {
-    return undefined;
-  }
-  return Option.getOrUndefined(
-    Schema.decodeUnknownOption(SpotifyItem)(entry.album),
+const SavedAlbumEntry = Schema.Struct({ album: SpotifyItem });
+
+const savedAlbum = (entry: Schema.Json): SpotifyItem | undefined =>
+  Option.getOrUndefined(
+    Schema.decodeUnknownOption(SavedAlbumEntry)(entry).pipe(
+      Option.map((value) => value.album),
+    ),
   );
-};
 
 export const getTopTracksPage = (range: "long" | "medium" | "short", offset = 0) =>
   request(
@@ -431,6 +460,7 @@ export const getSavedAlbumsPage = (offset = 0) =>
       (data): SpotifyListing<SpotifyItem> => ({
         items: data.items.flatMap((entry) => {
           const album = savedAlbum(entry);
+
           return album ? [album] : [];
         }),
         next: data.next,
@@ -450,12 +480,15 @@ export const getPlaylists = () =>
   Effect.gen(function* () {
     let url: string | null = "https://api.spotify.com/v1/me/playlists?limit=50";
     const value: Playlist[] = [];
+
     while (url) {
       const data: { readonly items: ReadonlyArray<Playlist>; readonly next: string | null } =
         yield* request(playlistPage, url);
+
       value.push(...data.items);
       url = data.next;
     }
+
     return [{ name: "Liked Songs", public: true, images: [] }, ...value];
   });
 
@@ -517,6 +550,7 @@ export const CatalogTrack = Schema.Struct({
   restrictions: Schema.optional(Schema.Struct({ reason: Schema.String })),
   linked_from: Schema.optional(Schema.Struct({ id: Schema.String })),
 });
+
 export type CatalogTrack = typeof CatalogTrack.Type;
 
 export const getRecommendations = (seeds: readonly string[], attributes: Readonly<Record<string, number>>) =>
@@ -539,6 +573,7 @@ export const getSavedTrackFlags = (ids: readonly string[]) =>
   request(Schema.Array(Schema.Boolean), `https://api.spotify.com/v1/me/tracks/contains?${new URLSearchParams({ ids: ids.join(",") })}`);
 
 export const CreatedPlaylist = Schema.Struct({ id: Schema.String, external_urls: Schema.Struct({ spotify: Schema.String }) });
+
 export type CreatedPlaylist = typeof CreatedPlaylist.Type;
 
 export const createPrivatePlaylist = (name: string) =>

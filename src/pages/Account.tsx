@@ -22,20 +22,21 @@ import { createShortcut } from "~/lib/shortcut";
 import { statsOutcome } from "~/lib/statsOutcome";
 
 /** Fixed reason codes the worker puts on a failed stats handshake. */
-const statsFailureMessages: Record<string, string> = {
-  spotify_denied: "Spotify did not grant access.",
-  spotify_unavailable: "Spotify was unavailable during the handshake.",
-  spotify_rejected: "Spotify rejected the authorization request.",
-  spotify_credentials: "Spotify rejected the app's credentials.",
-  missing_code: "Spotify did not return an authorization code.",
-  missing_state: "The Spotify handshake was missing its state.",
-  invalid_state: "The Spotify handshake expired or was invalid.",
-  internal_error: "The Spotify handshake failed on the server.",
-};
+const statsFailureMessages = new Map<string, string>([
+  ["spotify_denied", "Spotify did not grant access."],
+  ["spotify_unavailable", "Spotify was unavailable during the handshake."],
+  ["spotify_rejected", "Spotify rejected the authorization request."],
+  ["spotify_credentials", "Spotify rejected the app's credentials."],
+  ["missing_code", "Spotify did not return an authorization code."],
+  ["missing_state", "The Spotify handshake was missing its state."],
+  ["invalid_state", "The Spotify handshake expired or was invalid."],
+  ["internal_error", "The Spotify handshake failed on the server."],
+]);
 
 export default function AccountPage() {
   const location = useLocation();
   const navigate = useNavigate();
+
   // Snapshot the one-shot result before the effect below clears the query. The
   // OAuth callback owns the URL, so read the browser's copy rather than the
   // router's: it stays in step after the clear below.
@@ -44,6 +45,7 @@ export default function AccountPage() {
       statsOutcome(typeof window === "undefined" ? "" : window.location.search),
     ),
   );
+
   // A denied consent screen is the user's choice, not a bug. It gets an
   // explanation on the page instead of the system-error boundary, which would
   // file an issue nobody can act on.
@@ -56,6 +58,7 @@ export default function AccountPage() {
   // fixed reason code, which keeps the failure diagnosable without leaking the
   // underlying cause.
   const result = untrack(() => outcome());
+
   if (typeof window !== "undefined" && result?.kind === "failed") {
     window.history.replaceState(
       null,
@@ -64,9 +67,11 @@ export default function AccountPage() {
     );
     // Keep the conversion funnel event; the boundary reports the error itself.
     capture("stats_sync_failed", { reason: result.reason });
+
     const explanation = result.reason
-      ? statsFailureMessages[result.reason]
+      ? statsFailureMessages.get(result.reason)
       : undefined;
+
     throw new Error(
       `Connecting Spotify listening stats did not complete.${
         explanation ? ` ${explanation}` : ""
@@ -109,6 +114,7 @@ export default function AccountPage() {
     if (disabling()) return;
     setDisabling(true);
     setActionError(null);
+
     try {
       await runDisable();
       capture("stats_sync_disabled", {});
@@ -121,6 +127,7 @@ export default function AccountPage() {
 
   const deleteAccountData = async () => {
     if (deleting()) return;
+
     if (
       !confirm(
         "Delete all Spotistats account data stored by this site? This also stops stats sync.",
@@ -128,11 +135,15 @@ export default function AccountPage() {
     ) {
       return;
     }
+
     setDeleting(true);
     setActionError(null);
+
     try {
       await runDelete();
+
       try { sessionStorage.removeItem("spotistats-discovery-draft"); } catch { /* Storage may be blocked. */ }
+
       capture("account_data_deleted", {});
     } catch (error) {
       setActionError(errorMessage(error));
@@ -145,6 +156,7 @@ export default function AccountPage() {
     if (exporting()) return;
     setExporting(format);
     setActionError(null);
+
     try {
       if (format === "json") {
         const data = await accountApi.exportJson();
@@ -157,6 +169,7 @@ export default function AccountPage() {
         const csv = await accountApi.exportCsv();
         downloadTextFile("spotistats-listening-data.csv", csv);
       }
+
       capture("listening_data_exported", { format });
     } catch (error) {
       setActionError(errorMessage(error));

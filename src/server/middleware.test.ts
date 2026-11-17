@@ -1,9 +1,22 @@
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("./handler", () => ({ ServicesLive: {}, apiHandler: vi.fn() }));
-vi.mock("./oauth", () => ({ statsLogin: vi.fn(), statsCallback: vi.fn() }));
+import { createMiddleware } from "./middleware-core";
 
-import middleware from "./middleware";
+const statsLogin = vi.fn(async () => new Response(null, { status: 302 }));
+
+const statsCallback = vi.fn(async () => new Response(null, { status: 302 }));
+
+const apiHandler = vi.fn(async () => new Response("{}", { status: 200 }));
+
+const proxyPostHog = vi.fn(async () => new Response("posthog"));
+
+const middleware = createMiddleware({
+  statsLogin,
+  statsCallback,
+  apiHandler,
+  isPostHogPath: () => false,
+  proxyPostHog,
+});
 
 const call = (path: string, method = "GET") => {
   const next = vi.fn(
@@ -13,9 +26,11 @@ const call = (path: string, method = "GET") => {
         headers: { "content-type": "text/html" },
       }),
   );
+
   const event = {
     request: new Request(`https://spotistats.otbeaumont.me${path}`, { method }),
-  } as unknown as Parameters<typeof middleware>[0];
+  };
+
   return middleware(event, next).then((response) => ({ response, next }));
 };
 

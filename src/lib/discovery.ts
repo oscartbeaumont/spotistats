@@ -1,6 +1,7 @@
-import { Schema } from "effect";
+import { Match, Schema } from "effect";
 
 export type DiscoveryMode = "new" | "rediscover" | "blend";
+
 export type Mood = "any" | "chill" | "focus" | "workout" | "upbeat";
 
 export const moodAttributes: Record<Mood, Readonly<Record<string, number>>> = {
@@ -13,11 +14,15 @@ export const moodAttributes: Record<Mood, Readonly<Record<string, number>>> = {
 
 export function matchesMood(mood: Mood, features: Readonly<Record<string, number>> | null | undefined) {
   if (mood === "any") return true;
+
   if (!features) return false;
+
   return Object.entries(moodAttributes[mood]).every(([key, threshold]) => {
     const [bound, ...parts] = key.split("_");
+
     if (bound === "target") return true;
     const value = features[parts.join("_")];
+
     return value !== undefined && Number.isFinite(value) && (bound === "min" ? value >= threshold : value <= threshold);
   });
 }
@@ -32,6 +37,7 @@ export const DiscoveryCandidate = Schema.Struct({
   reason: Schema.String,
   source: Schema.Literals(["new", "rediscover"]),
 });
+
 export type DiscoveryCandidate = typeof DiscoveryCandidate.Type;
 
 /** Keep source order, alternate the blend, and cap each primary artist at three tracks. */
@@ -41,19 +47,32 @@ export function selectDiscoveryTracks(
   mode: DiscoveryMode,
   limit = 30,
 ) {
-  const pool = mode === "new" ? fresh : mode === "rediscover" ? old :
-    Array.from({ length: Math.max(fresh.length, old.length) }, (_, index) => [fresh[index], old[index]])
-      .flat().filter((track): track is DiscoveryCandidate => !!track);
+  const pool = Match.value(mode).pipe(
+    Match.when("new", () => fresh),
+    Match.when("rediscover", () => old),
+    Match.orElse(() =>
+      Array.from(
+        { length: Math.max(fresh.length, old.length) },
+        (_, index) => [fresh[index], old[index]],
+      )
+        .flat()
+        .filter((track): track is DiscoveryCandidate => !!track),
+    ),
+  );
+
   const ids = new Set<string>();
   const artists = new Map<string, number>();
   const selected: DiscoveryCandidate[] = [];
+
   for (const track of pool) {
     if (selected.length >= limit) break;
     const count = artists.get(track.artistKey) ?? 0;
+
     if (ids.has(track.id) || count >= 3) continue;
     selected.push(track);
     ids.add(track.id);
     artists.set(track.artistKey, count + 1);
   }
+
   return selected;
 }

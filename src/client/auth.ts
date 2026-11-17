@@ -1,3 +1,4 @@
+import { Schema } from "effect";
 import { createSignal, untrack } from "solid-js";
 
 import {
@@ -16,6 +17,7 @@ import { spotifyClientId, spotifyScopes } from "./spotify";
  * screen, so every failure branch records a human-readable reason here.
  */
 const [loginError, setLoginError] = createSignal<string | null>(null);
+
 export { loginError };
 
 const base64UrlEncode = (bytes: ArrayBuffer) =>
@@ -27,7 +29,9 @@ const base64UrlEncode = (bytes: ArrayBuffer) =>
 const randomString = (length: number) => {
   const possible =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
+
   const values = crypto.getRandomValues(new Uint8Array(length));
+
   return Array.from(values, (value) => possible[value % possible.length]).join("");
 };
 
@@ -36,26 +40,26 @@ const createPkceChallenge = async (verifier: string) => {
     "SHA-256",
     new TextEncoder().encode(verifier),
   );
+
   return base64UrlEncode(digest);
 };
 
 const spotifyRedirectOrigin = (origin: string) => {
   const url = new URL(origin);
+
   if (url.hostname === "localhost") url.hostname = "127.0.0.1";
+
   return url.origin;
 };
 
-const isSpotifyToken = (
-  value: unknown,
-): value is { token_type: string; access_token: string } =>
-  typeof value === "object" &&
-  value !== null &&
-  "token_type" in value &&
-  typeof value.token_type === "string" &&
-  value.token_type.length > 0 &&
-  "access_token" in value &&
-  typeof value.access_token === "string" &&
-  value.access_token.length > 0;
+/** The token response, decoded at the I/O boundary rather than asserted. */
+const SpotifyTokenResponse = Schema.Struct({
+  token_type: Schema.NonEmptyString,
+  access_token: Schema.NonEmptyString,
+  scope: Schema.optional(Schema.String),
+});
+
+type SpotifyTokenResponse = typeof SpotifyTokenResponse.Type;
 
 export async function createLoginUrl(origin: string, playlistWrite = false) {
   const token = crypto.randomUUID();
@@ -85,7 +89,9 @@ export async function createLoginUrl(origin: string, playlistWrite = false) {
 
 export function hasSpotifyCallbackResult() {
   const params = new URLSearchParams(window.location.search);
+
   if (params.has("code")) return true;
+
   // Only a sign-in that was actually started can return an error, so a stray
   // `?error=` on a signed-in page is not a reason to leave the session alone.
   return (
@@ -101,6 +107,7 @@ export async function consumeSpotifyCallback(
   const code = params.get("code");
   const returnedState = params.get("state");
   const spotifyError = params.get("error");
+
   const cleanUrl = () =>
     history.replaceState(null, "", window.location.pathname || "/");
 
@@ -117,19 +124,21 @@ export async function consumeSpotifyCallback(
     );
     setAuthStore({ status: "empty" });
     cleanUrl();
+
     return true;
   }
 
   const failedLogin = (
     reason: LoginFailureReason,
     message: string,
-    detail: unknown,
+    cause: unknown,
   ) => {
-    console.error("Spotify login failed:", detail);
+    console.error("Spotify login failed:", cause);
     capture("login_failed", { reason });
     setLoginError(message);
     setAuthStore({ status: "empty" });
     cleanUrl();
+
     return true;
   };
 
@@ -138,6 +147,7 @@ export async function consumeSpotifyCallback(
     setLoginError("Your sign-in session expired. Please try again.");
     setAuthStore({ status: "empty" });
     cleanUrl();
+
     return false;
   }
 
@@ -150,6 +160,7 @@ export async function consumeSpotifyCallback(
   });
 
   let response: Response;
+
   try {
     response = await fetch("https://accounts.spotify.com/api/token", {
       method: "POST",
@@ -172,13 +183,12 @@ export async function consumeSpotifyCallback(
     );
   }
 
-  let token: { token_type: string; access_token: string; scope?: string };
+  let token: SpotifyTokenResponse;
+
   try {
     const value: unknown = await response.json();
-    if (!isSpotifyToken(value)) {
-      throw new Error("Spotify returned an invalid token response");
-    }
-    token = { ...value, scope: typeof value === "object" && "scope" in value && typeof value.scope === "string" ? value.scope : undefined };
+
+    token = Schema.decodeUnknownSync(SpotifyTokenResponse)(value);
   } catch (error) {
     return failedLogin(
       "invalid_response",
@@ -196,13 +206,17 @@ export async function consumeSpotifyCallback(
     scopes: token.scope?.split(" ").filter(Boolean) ?? [],
   });
   cleanUrl();
+
   if (store.status === "authenticating" && store.returnTo) window.location.replace(store.returnTo);
+
   return true;
 }
 
 export function logout() {
   capture("logout", {});
   resetAnalytics();
+
   try { sessionStorage.removeItem("spotistats-discovery-draft"); } catch { /* Storage may be blocked. */ }
+
   setAuthStore({ status: "empty" });
 }

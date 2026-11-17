@@ -9,6 +9,9 @@
  * one module and the events stay in one place.
  */
 
+import { Option, Predicate, Schema } from "effect";
+import type { CaptureResult, Properties } from "posthog-js";
+
 import type { InsightsRange } from "~/api";
 
 import { SpotifyUnauthenticatedError } from "./spotify";
@@ -18,32 +21,46 @@ export type PostHogClient = typeof import("posthog-js")["default"];
 let client: Promise<PostHogClient> | undefined;
 
 /** One frame of a PostHog `$exception` stack. Client events use `filename`. */
-type ExceptionFrame = { filename?: string; source?: string };
+const ExceptionFrame = Schema.Struct({
+  filename: Schema.optional(Schema.String),
+  source: Schema.optional(Schema.String),
+});
+
+type ExceptionFrame = typeof ExceptionFrame.Type;
 
 /** One entry of an `$exception` event's exception list. */
-interface Exception {
-  type?: string;
-  value?: string;
-  stacktrace?: { frames?: unknown };
-}
+const ExceptionEntry = Schema.Struct({
+  type: Schema.optional(Schema.String),
+  value: Schema.optional(Schema.String),
+  stacktrace: Schema.optional(
+    Schema.Struct({ frames: Schema.optional(Schema.Array(ExceptionFrame)) }),
+  ),
+});
+
+type ExceptionEntry = typeof ExceptionEntry.Type;
+
+const ExceptionList = Schema.Array(ExceptionEntry);
 
 /** The exceptions an `$exception` event carries. */
-function exceptionList(event: {
-  properties?: Record<string, unknown>;
-}): Exception[] {
-  const list = event.properties?.["$exception_list"];
-  return Array.isArray(list) ? (list as Exception[]) : [];
+function exceptionList(event: CaptureResult): ReadonlyArray<ExceptionEntry> {
+  return Option.getOrElse(
+    Schema.decodeUnknownOption(ExceptionList)(event.properties["$exception_list"]),
+    () => [],
+  );
 }
 
 /** Every stack frame across an `$exception` event's exception list. */
-function exceptionFrames(exceptions: ReadonlyArray<Exception>): ExceptionFrame[] {
+function exceptionFrames(exceptions: ReadonlyArray<ExceptionEntry>): ExceptionFrame[] {
   const frames: ExceptionFrame[] = [];
+
   for (const exception of exceptions) {
-    const stack = exception?.stacktrace;
-    if (Array.isArray(stack?.frames)) {
-      frames.push(...(stack.frames as ExceptionFrame[]));
+    const stack = exception.stacktrace;
+
+    if (stack?.frames) {
+      frames.push(...stack.frames);
     }
   }
+
   return frames;
 }
 
@@ -67,14 +84,19 @@ const scriptPath = /\.(?:c|m)?js$/;
  */
 function namesAppScript(frame: ExceptionFrame, pageUrl: string): boolean {
   const filename = frame.filename ?? frame.source;
+
   if (!filename || filename.startsWith("<")) return false;
+
   try {
     const script = new URL(filename, pageUrl);
     const document = new URL(pageUrl);
+
     if (script.origin !== document.origin) return false;
+
     if (script.protocol !== "http:" && script.protocol !== "https:") {
       return false;
     }
+
     return scriptPath.test(script.pathname);
   } catch {
     return false;
@@ -95,6 +117,7 @@ export function isInjectedScriptError(
   pageUrl: string,
 ): boolean {
   if (frames.length === 0) return false;
+
   return frames.every((frame) => !namesAppScript(frame, pageUrl));
 }
 
@@ -118,12 +141,12 @@ const afterNumericLiteral = /numeric literal/i;
  * cannot classify them.
  */
 export function isUnparseableScriptError(
-  exceptions: ReadonlyArray<Exception>,
+  exceptions: ReadonlyArray<ExceptionEntry>,
 ): boolean {
   return exceptions.some(
     (exception) =>
-      exception?.type === "SyntaxError" &&
-      typeof exception.value === "string" &&
+      exception.type === "SyntaxError" &&
+      exception.value !== undefined &&
       afterNumericLiteral.test(exception.value),
   );
 }
@@ -138,15 +161,6 @@ interface UpstreamFailure {
   status: number | null;
 }
 
-function isUpstreamError(error: unknown): error is UpstreamFailure {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "_tag" in error &&
-    error._tag === "UpstreamError"
-  );
-}
-
 /**
  * Whether Spotify itself is unavailable or throttling the request.
  *
@@ -156,13 +170,28 @@ function isUpstreamError(error: unknown): error is UpstreamFailure {
  * deliberately excluded: that is an unexpected response shape, which is the
  * app's problem to fix.
  */
-export function isUpstreamOutage(error: unknown): boolean {
-  if (!isUpstreamError(error) || error.service !== "spotify") return false;
+export function isUpstreamOutage(error: unknown): error is UpstreamFailure {
+  if (!Predicate.isTagged(error, "UpstreamError")) return false;
+
+  if (!Predicate.hasProperty(error, "service")) return false;
+
+  if (!Predicate.hasProperty(error, "status")) return false;
+
+  if (!Schema.is(Schema.String)(error.service)) return false;
+
+  if (error.status !== null && !Schema.is(Schema.Number)(error.status)) {
+    return false;
+  }
+
+  if (error.service !== "spotify") return false;
+
   return error.status === 429 || (error.status !== null && error.status >= 500);
 }
 
 /** Whether the stored Spotify session expired and the app is signing out. */
-export function isSessionExpiredError(error: unknown): boolean {
+export function isSessionExpiredError(
+  error: unknown,
+): error is SpotifyUnauthenticatedError {
   return error instanceof SpotifyUnauthenticatedError;
 }
 
@@ -178,13 +207,16 @@ const chunkLoadFailure =
   /dynamically imported module|importing a module script failed|unable to preload css/i;
 
 /** Whether an error is a failed lazy-chunk load that recovery reloads past. */
-export function isChunkLoadError(error: unknown): boolean {
-  if (typeof error !== "object" || error === null || !("message" in error)) {
-    return false;
-  }
-  return (
-    typeof error.message === "string" && chunkLoadFailure.test(error.message)
+const MessagedError = Schema.Struct({ message: Schema.String });
+
+export function isChunkLoadError(
+  error: unknown,
+): error is { readonly message: string } {
+  const messaged = Option.getOrNull(
+    Schema.decodeUnknownOption(MessagedError)(error),
   );
+
+  return messaged !== null && chunkLoadFailure.test(messaged.message);
 }
 
 /**
@@ -196,7 +228,12 @@ export function isChunkLoadError(error: unknown): boolean {
  * boundary offers a retry, but there is no bug to fix. A failed chunk load is
  * recovered by a reload. None is a crash worth an issue.
  */
-export function isHandledError(error: unknown): boolean {
+export function isHandledError(
+  error: unknown,
+): error is
+  | SpotifyUnauthenticatedError
+  | UpstreamFailure
+  | { readonly message: string } {
   return (
     isSessionExpiredError(error) ||
     isUpstreamOutage(error) ||
@@ -205,25 +242,28 @@ export function isHandledError(error: unknown): boolean {
 }
 
 /** Whether PostHog should drop this event before it is sent. */
-function shouldDropEvent(event: {
-  event?: string;
-  properties?: Record<string, unknown>;
-}): boolean {
+export function shouldDropEvent(event: CaptureResult): boolean {
   if (event.event !== "$exception") return false;
   const exceptions = exceptionList(event);
+
   if (isUnparseableScriptError(exceptions)) return true;
+
   if (
     exceptions.some(
       (exception) =>
-        typeof exception?.value === "string" &&
+        exception.value !== undefined &&
         chunkLoadFailure.test(exception.value),
     )
   ) {
     return true;
   }
-  const currentUrl = event.properties?.["$current_url"];
-  const pageUrl =
-    typeof currentUrl === "string" ? currentUrl : window.location.href;
+
+  const currentUrl = event.properties["$current_url"];
+
+  const pageUrl = Schema.is(Schema.String)(currentUrl)
+    ? currentUrl
+    : window.location.href;
+
   return isInjectedScriptError(exceptionFrames(exceptions), pageUrl);
 }
 
@@ -247,11 +287,14 @@ function analytics(): Promise<PostHogClient> | undefined {
       // rather than filing an issue the app cannot fix.
       before_send: (event) => {
         if (event === null) return event;
+
         return shouldDropEvent(event) ? null : event;
       },
     });
+
     return posthog;
   });
+
   return client;
 }
 
@@ -280,10 +323,7 @@ export function posthogClient(): Promise<PostHogClient> | undefined {
   return analytics();
 }
 
-export function identifyUser(
-  id: string,
-  properties: Record<string, unknown>,
-): void {
+export function identifyUser(id: string, properties: Properties): void {
   runAnalytics((posthog) => posthog.identify(id, properties));
 }
 
@@ -292,11 +332,11 @@ export function identifyUser(
  * its errors, so PostHog's global handlers never see them. A no-op in
  * development, alongside the rest of analytics.
  */
-export function captureError(error: unknown): void {
+export function captureError(cause: unknown): void {
   // An expired session is handled by signing the user out, so reporting it
   // files an issue nobody can fix.
-  if (isHandledError(error)) return;
-  runAnalytics((posthog) => posthog.captureException(error));
+  if (isHandledError(cause)) return;
+  runAnalytics((posthog) => posthog.captureException(cause));
 }
 
 /**

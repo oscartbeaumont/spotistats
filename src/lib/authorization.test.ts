@@ -12,6 +12,7 @@ import {
 
 /** 2026-04-22, roughly when the listening-stats sync first shipped. */
 const authorizedAt = Date.UTC(2026, 3, 22);
+
 const expiresAt = authorizedAt + refreshTokenLifetimeMs;
 
 describe("authorizationExpiry", () => {

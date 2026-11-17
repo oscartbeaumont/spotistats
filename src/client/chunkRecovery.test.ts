@@ -2,6 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 
 import { installChunkRecovery } from "./chunkRecovery";
 
+/** A real preload-error event with a spied `preventDefault`. */
+function preloadError(): Event {
+  const event = new Event("vite:preloadError");
+  vi.spyOn(event, "preventDefault");
+
+  return event;
+}
+
 function harness(start = 1_000_000) {
   let clock = start;
   let stored: string | null = null;
@@ -20,11 +28,14 @@ function harness(start = 1_000_000) {
     },
     () => clock,
   );
+
   const fire = () => {
-    const event = { preventDefault: vi.fn() } as unknown as Event;
+    const event = preloadError();
     listeners.get("vite:preloadError")?.(event);
+
     return event;
   };
+
   return { fire, reload, advance: (ms: number) => (clock += ms) };
 }
 
@@ -72,7 +83,7 @@ describe("installChunkRecovery", () => {
         },
       },
     );
-    listeners.get("vite:preloadError")?.({ preventDefault: vi.fn() } as unknown as Event);
+    listeners.get("vite:preloadError")?.(preloadError());
     expect(reload).toHaveBeenCalledTimes(1);
   });
 });

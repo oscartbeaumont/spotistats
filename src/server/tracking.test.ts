@@ -1,29 +1,36 @@
-import { DatabaseSync, type SQLInputValue } from "node:sqlite";
+import { DatabaseSync } from "node:sqlite";
 import { readFileSync } from "node:fs";
 import { D1Client } from "@effect/sql-d1";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import { Reactivity } from "effect/reactivity";
 import { SqlClient } from "effect/sql/SqlClient";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-const queue = vi.hoisted(() => ({
-  send: vi.fn(async () => undefined),
-  sendBatch: vi.fn(async () => undefined),
-}));
 
-vi.mock("cloudflare:workers", () => ({
-  env: { SPOTIFY_SYNC_QUEUE: queue },
-}));
+import { Spotify } from "./spotify";
+import { SqliteD1 } from "./sqliteD1";
+import { Tracking, TrackingLive, type SyncQueueMessage, type TrackingService } from "./tracking";
 
-import { Spotify, type SpotifyShape } from "./spotify";
-import { Tracking, TrackingLive, type TrackingShape } from "./tracking";
+/** A queue whose sends are asserted; metrics are never read in these tests. */
+const emptyMetrics = () => ({ backlogCount: 0, backlogBytes: 0 });
+
+const send = vi.fn(async () => ({ metadata: { metrics: emptyMetrics() } }));
+
+const sendBatch = vi.fn(async () => ({ metadata: { metrics: emptyMetrics() } }));
+
+const queue: Queue<SyncQueueMessage> = {
+  metrics: async () => emptyMetrics(),
+  send,
+  sendBatch,
+};
 
 let database: DatabaseSync;
 
 beforeEach(() => {
   vi.clearAllMocks();
-  queue.send.mockClear();
-  queue.sendBatch.mockClear();
+  send.mockClear();
+  sendBatch.mockClear();
   database = new DatabaseSync(":memory:");
+
   for (const file of ["0001_spotify_tracking.sql", "0002_colossal_selene.sql"]) {
     database.exec(
       readFileSync(new URL(`../../migrations/${file}`, import.meta.url), "utf8"),
@@ -78,33 +85,27 @@ const spotify = {
       play("two", "2026-11-16T09:00:00.000Z"),
     ]),
   ),
-} as unknown as SpotifyShape;
+};
 
 const run = <A, E>(
-  query: (tracking: TrackingShape) => Effect.Effect<A, E>,
+  query: (tracking: TrackingService) => Effect.Effect<A, E>,
 ) => {
-  const db = {
-    prepare: (text: string) => ({
-      bind: (...values: SQLInputValue[]) => ({
-        all: async () => {
-          if (values.length > 100) throw new Error("D1 binding limit exceeded");
-          return { results: database.prepare(text).all(...values) };
-        },
-      }),
-    }),
-  } as unknown as D1Client.D1ClientConfig["db"];
+  const db = new SqliteD1(database, { maxBindings: 100 });
 
   return Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
         const sql = yield* D1Client.make({ db });
+
         return yield* Effect.gen(function* () {
           const tracking = yield* Tracking;
+
           return yield* query(tracking);
         }).pipe(
-          Effect.provide(TrackingLive),
+          Effect.provide(
+            TrackingLive(queue).pipe(Layer.provide(Layer.mock(Spotify, spotify))),
+          ),
           Effect.provideService(SqlClient, sql),
-          Effect.provideService(Spotify, spotify),
         );
       }),
     ).pipe(Effect.provide(Reactivity.layer)),
@@ -117,11 +118,12 @@ describe("tracking sync", () => {
       Effect.gen(function* () {
         yield* tracking.enable(profile, token);
         yield* tracking.sync("user");
+
         return yield* tracking.status("user");
       }),
     );
 
-    expect(queue.send).toHaveBeenCalledWith({ spotifyUserId: "user" });
+    expect(send).toHaveBeenCalledWith({ spotifyUserId: "user" });
     expect(spotify.refreshToken).toHaveBeenCalledWith("refresh");
     expect(spotify.recentlyPlayed).toHaveBeenCalledWith(
       "new-access",
@@ -146,9 +148,11 @@ describe("tracking sync", () => {
         yield* tracking.enable(profile, token);
         yield* tracking.disable("user");
         yield* tracking.sync("user");
+
         return yield* tracking.status("user");
       }),
     );
+
     expect(spotify.refreshToken).not.toHaveBeenCalled();
     expect(result.enabled).toBe(false);
   });
@@ -159,9 +163,11 @@ describe("tracking sync", () => {
         yield* tracking.enable(profile, token);
         yield* tracking.sync("user");
         yield* tracking.deleteData("user");
+
         return yield* tracking.status("user");
       }),
     );
+
     expect(result).toMatchObject({ enabled: false, listenCount: 0, recent: [] });
     expect(
       database.prepare("SELECT COUNT(*) AS count FROM spotify_listens").get(),
@@ -176,9 +182,11 @@ describe("tracking sync", () => {
       Effect.gen(function* () {
         yield* tracking.enable(profile, token);
         yield* tracking.disableInactive;
+
         return yield* tracking.status("user");
       }),
     );
+
     expect(result.enabled).toBe(true);
   });
 
@@ -190,9 +198,11 @@ describe("tracking sync", () => {
           .prepare("UPDATE spotify_tracking_users SET last_read_at = ?")
           .run(Date.now() - 200 * 86_400_000);
         yield* tracking.disableInactive;
+
         return yield* tracking.status("user");
       }),
     );
+
     expect(result.enabled).toBe(false);
     expect(result.disabledAt).toEqual(expect.any(Number));
   });

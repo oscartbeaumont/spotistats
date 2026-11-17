@@ -31,16 +31,21 @@ export const AuthStore = Schema.Union([
     scopes: Schema.optional(Schema.Array(Schema.String)),
   }),
 ]);
+
 export type AuthStore = typeof AuthStore.Type;
 
 const storageKey = "auth";
+
 const empty: AuthStore = { status: "empty" };
 
 const readAuth = (): AuthStore => {
   if (typeof localStorage === "undefined") return empty;
+
   try {
     const raw = localStorage.getItem(storageKey);
+
     if (!raw) return empty;
+
     return Schema.decodeUnknownSync(AuthStore)(JSON.parse(raw));
   } catch {
     return empty;
@@ -65,11 +70,13 @@ export function hydrateAuthStore(): AuthStore {
   const value = readAuth();
   setAuthSignal(value);
   setAuthReady(true);
+
   return value;
 }
 
 const persist = (value: AuthStore) => {
   if (typeof localStorage === "undefined") return;
+
   try {
     localStorage.setItem(storageKey, JSON.stringify(value));
   } catch {
@@ -81,8 +88,15 @@ export { authStore };
 
 export function setAuthStore(next: AuthStore | ((prev: AuthStore) => AuthStore)) {
   setAuthSignal((prev) => {
-    const value = typeof next === "function" ? next(prev) : next;
+    const value = isUpdater(next) ? next(prev) : next;
     persist(value);
+
     return value;
   });
+}
+
+function isUpdater(
+  next: AuthStore | ((prev: AuthStore) => AuthStore),
+): next is (prev: AuthStore) => AuthStore {
+  return typeof next === "function";
 }

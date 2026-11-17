@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { cloudflare } from "@cloudflare/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import solid from "@solidjs/vite-plugin";
+import { Option, Schema } from "effect";
 import { defineConfig, type Plugin } from "vite";
 
 // The Cloudflare build does not always have this set, but it is public.
@@ -24,6 +25,15 @@ if (!process.env?.VITE_SPOTIFY_CLIENT_ID)
  */
 const clientManifestPath = path.resolve("dist/client/.vite/manifest.json");
 
+/** The manifest fields that name an emitted file. */
+const ManifestEntry = Schema.Struct({
+  file: Schema.optional(Schema.String),
+  css: Schema.optional(Schema.Array(Schema.String)),
+  assets: Schema.optional(Schema.Array(Schema.String)),
+});
+
+const decodeManifestEntry = Schema.decodeUnknownOption(ManifestEntry);
+
 /**
  * The files a Vite manifest says the app can request.
  *
@@ -31,23 +41,23 @@ const clientManifestPath = path.resolve("dist/client/.vite/manifest.json");
  * ones, so anything under `assets/` that is missing here is a leftover from an
  * earlier build.
  */
-function shippedFiles(manifest: Record<string, unknown>): Set<string> {
+function shippedFiles(manifest: Schema.JsonObject): Set<string> {
   const shipped = new Set<string>();
+
   for (const record of Object.values(manifest)) {
-    if (typeof record !== "object" || record === null) continue;
-    const { file, css, assets } = record as {
-      file?: unknown;
-      css?: unknown;
-      assets?: unknown;
-    };
+    const entry = Option.getOrNull(decodeManifestEntry(record));
+
+    if (entry === null) continue;
+
     for (const value of [
-      file,
-      ...(Array.isArray(css) ? css : []),
-      ...(Array.isArray(assets) ? assets : []),
+      entry.file,
+      ...(entry.css ?? []),
+      ...(entry.assets ?? []),
     ]) {
-      if (typeof value === "string") shipped.add(path.basename(value));
+      if (value !== undefined) shipped.add(path.basename(value));
     }
   }
+
   return shipped;
 }
 
@@ -78,42 +88,52 @@ function solidClientManifest(): Plugin {
       // build hands the Worker build the same manifest shape a single
       // `vite build` would have given it.
       const asset = bundle[".vite/manifest.json"];
+
       if (asset?.type !== "asset") return;
       mkdirSync(path.dirname(clientManifestPath), { recursive: true });
       writeFileSync(
         clientManifestPath,
-        typeof asset.source === "string"
+        Schema.is(Schema.String)(asset.source)
           ? asset.source
           : Buffer.from(asset.source),
       );
     },
     closeBundle() {
       const environment = this.environment;
+
       if (environment?.name !== "client") return;
 
       const outDir = environment.config.build.outDir;
       const manifestPath = path.join(outDir, ".vite/manifest.json");
+
       if (!existsSync(manifestPath)) return;
 
       const bundlePath = path.resolve(outDir, "../bundle/index.js");
+
       if (!existsSync(bundlePath)) return;
 
-      const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as Record<
-        string,
-        unknown
-      >;
-      manifest._base = environment.config.base || "/";
+      const parsed = Schema.decodeUnknownSync(Schema.JsonObject)(
+        JSON.parse(readFileSync(manifestPath, "utf8")),
+      );
+
+      const manifest: Schema.JsonObject = {
+        ...parsed,
+        _base: environment.config.base || "/",
+      };
 
       const code = readFileSync(bundlePath, "utf8");
       const marker = code.indexOf("virtual:solid-manifest");
       const declarationStart = marker < 0 ? -1 : code.indexOf("var ", marker);
+
       const declaration =
         declarationStart < 0
           ? null
           : /^var\s+([A-Za-z0-9_$]+)\s*=\s*\{/.exec(code.slice(declarationStart));
+
       const declarationEnd = declaration
         ? code.indexOf("\n};", declarationStart)
         : -1;
+
       if (!declaration || declarationEnd < 0) {
         throw new Error(
           `Could not find the Solid client manifest in ${bundlePath}. The Solid plugin falls back to its dev manifest when it has no client manifest, and that one carries no object to replace here: check that ${clientManifestPath} exists before the Worker build.`,
@@ -136,6 +156,7 @@ function solidClientManifest(): Plugin {
             .split(",")
             .map((entry) => entry.trim())
             .filter((entry) => entry && entry !== "$$moduleUrl");
+
           return kept.length > 0 ? `export { ${kept.join(", ")} };` : "";
         },
       );
@@ -150,10 +171,13 @@ function solidClientManifest(): Plugin {
       // them. Drop them rather than uploading two builds' worth of assets.
       const shipped = shippedFiles(manifest);
       const assetsDir = path.join(outDir, "assets");
+
       if (!existsSync(assetsDir)) return;
+
       for (const name of readdirSync(assetsDir)) {
         // Only scripts and their maps: `assets/` also holds the public images.
         if (!/\.m?js(?:\.map)?$/.test(name)) continue;
+
         if (shipped.has(name.replace(/\.map$/, ""))) continue;
         rmSync(path.join(assetsDir, name));
       }

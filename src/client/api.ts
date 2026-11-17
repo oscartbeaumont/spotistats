@@ -1,5 +1,4 @@
-import { Effect, Schedule } from "effect";
-import { HttpClientError } from "effect/http";
+import { Effect, Predicate, Schedule, Schema } from "effect";
 import { layer as fetchHttpClientLayer } from "effect/http/FetchHttpClient";
 import { HttpApiClient } from "effect/http-api";
 import { untrack } from "solid-js";
@@ -32,30 +31,25 @@ const client = Effect.runSync(
  * before treating it as final. Retrying is safe here: the account routes are
  * reads or idempotent writes, and the worker is one origin away.
  */
-const transientTransport = (error: unknown): boolean =>
-  HttpClientError.isHttpClientError(error) &&
-  error.reason._tag === "TransportError";
+const transient = <E>(error: E): boolean => {
+  if (
+    Predicate.hasProperty(error, "reason") &&
+    Predicate.isTagged(error.reason, "TransportError")
+  ) {
+    return true;
+  }
 
-/**
- * The worker answers 502 with an `UpstreamError` when Spotify or the database
- * fails. A 5xx from Spotify is an outage the page can wait out, and the account
- * routes are reads or idempotent writes, so give it the same retry as a dropped
- * connection instead of sending the user to the error boundary.
- */
-const transientUpstream = (error: unknown): boolean =>
-  typeof error === "object" &&
-  error !== null &&
-  "_tag" in error &&
-  error._tag === "UpstreamError" &&
-  "status" in error &&
-  typeof error.status === "number" &&
-  error.status >= 500;
-
-const transient = (error: unknown): boolean =>
-  transientTransport(error) || transientUpstream(error);
+  return (
+    Predicate.isTagged(error, "UpstreamError") &&
+    Predicate.hasProperty(error, "status") &&
+    Schema.is(Schema.Number)(error.status) &&
+    error.status >= 500
+  );
+};
 
 export const runApi = <A, E>(effect: Effect.Effect<A, E, never>): Promise<A> => {
   const session = untrack(() => authStore());
+
   return Effect.runPromise(
     effect.pipe(
       Effect.retry({
@@ -64,13 +58,8 @@ export const runApi = <A, E>(effect: Effect.Effect<A, E, never>): Promise<A> => 
         while: transient,
       }),
     ),
-  ).catch((error: unknown) => {
-    if (
-      typeof error === "object" &&
-      error !== null &&
-      "_tag" in error &&
-      error._tag === "Unauthorized"
-    ) {
+  ).catch((error) => {
+    if (Predicate.isTagged(error, "Unauthorized")) {
       setAuthStore((current) =>
         session.status === "authenticated" &&
         current.status === "authenticated" &&
@@ -80,13 +69,16 @@ export const runApi = <A, E>(effect: Effect.Effect<A, E, never>): Promise<A> => 
       );
       throw new SpotifyUnauthenticatedError();
     }
+
     throw error;
   });
 };
 
 const authorization = () => {
   const store = untrack(() => authStore());
+
   if (store.status !== "authenticated") throw new SpotifyUnauthenticatedError();
+
   return store.accessToken;
 };
 

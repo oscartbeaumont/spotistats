@@ -28,23 +28,28 @@ function AnimatedNumber(props: {
     () => props.value,
     (target) => {
       const reduced =
-        typeof matchMedia === "function" &&
-        matchMedia("(prefers-reduced-motion: reduce)").matches;
+        window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+
       if (reduced || target === 0) {
         setDisplay(target);
+
         return;
       }
 
       const started = performance.now();
       const duration = 900;
       let frame = 0;
+
       const step = (now: number) => {
         const progress = Math.min(1, (now - started) / duration);
         const eased = 1 - Math.pow(1 - progress, 3);
         setDisplay(target * eased);
+
         if (progress < 1) frame = requestAnimationFrame(step);
       };
+
       frame = requestAnimationFrame(step);
+
       return () => cancelAnimationFrame(frame);
     },
   );
@@ -86,6 +91,7 @@ function BucketChart(props: {
   highlight?: number | null;
 }) {
   const max = () => Math.max(1, ...props.values);
+
   return (
     <figure aria-label={props.label}>
       <div
@@ -133,9 +139,12 @@ function TimeVsPlaysChart(props: {
   const maxListens = () => Math.max(1, ...props.buckets.map((bucket) => bucket.listens));
   const maxMs = () => Math.max(1, ...props.buckets.map((bucket) => bucket.listeningMs));
   const lastIndex = () => Math.max(1, props.buckets.length - 1);
+
   const xPercent = (index: number) =>
     props.buckets.length === 1 ? 50 : (index / lastIndex()) * 100;
+
   const yPercent = (listeningMs: number) => 100 - (listeningMs / maxMs()) * 100;
+
   const points = () =>
     props.buckets
       .map((bucket, index) => `${xPercent(index)},${yPercent(bucket.listeningMs)}`)
@@ -197,23 +206,32 @@ function TimeVsPlaysChart(props: {
 function InsightsContent(props: { data: ListeningInsightsData }) {
   const busiestHour = () => busiestIndex(props.data.hours);
   const busiestWeekday = () => busiestIndex(props.data.weekdays);
+
   const peak = createMemo(() => {
     const hour = busiestHour();
+
     return hour === null ? null : { hour, listens: props.data.hours[hour] ?? 0 };
   });
+
   const topTrack = () => props.data.topTracks[0];
   const topArtist = () => props.data.topArtists[0];
+
   const repeatShare = () =>
     percentage(topTrack()?.listens ?? 0, props.data.totals.listens);
+
   const discoveryShare = () =>
     percentage(props.data.onePlayTracks, props.data.totals.tracks);
+
   const lateNightShare = () =>
     percentage(props.data.lateNightListens, props.data.totals.listens);
+
   const averagePerDay = () =>
     props.data.totals.activeDays === 0
       ? 0
       : Math.round(props.data.totals.listens / props.data.totals.activeDays);
+
   const trendUnitLabel = () => (props.data.trendUnit === "day" ? "day" : "month");
+
   const averageTrackTime = () =>
     props.data.totals.listens === 0
       ? "—"
@@ -351,6 +369,7 @@ function InsightsContent(props: { data: ListeningInsightsData }) {
             buckets={props.data.trend}
             labels={(index) => {
               const bucket = props.data.trend[index]?.bucket ?? "";
+
               return props.data.trendUnit === "day"
                 ? formatDayShort(bucket)
                 : formatMonth(bucket);
@@ -387,6 +406,7 @@ function InsightsContent(props: { data: ListeningInsightsData }) {
               values={props.data.trend.map((bucket) => bucket.listens)}
               labels={(index) => {
                 const bucket = props.data.trend[index]?.bucket ?? "";
+
                 return props.data.trendUnit === "day"
                   ? formatDayShort(bucket)
                   : formatMonth(bucket);

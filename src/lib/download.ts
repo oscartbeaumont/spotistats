@@ -25,13 +25,15 @@ export function downloadBlob(name: string, blob: Blob) {
  * the formula triggers is prefixed with an apostrophe so Excel, Sheets, and
  * friends treat it as text.
  */
-export function csvCell(value: unknown) {
+export function csvCell(value: string | number | boolean | null | undefined) {
   if (value === null || value === undefined) return "";
+
   // Numbers are emitted verbatim so negative numeric columns (loudness, tempo
   // deltas) stay numeric; only text can carry a formula payload.
-  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  if (Number.isFinite(value)) return String(value);
   const text = String(value);
   const safe = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+
   return /[",\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
 }
 
@@ -41,6 +43,7 @@ export function safeFileName(name: string) {
     .replace(/[\\/:*?"<>|\u0000-\u001f]+/g, "_")
     .replace(/^\.+/, "")
     .trim();
+
   return cleaned || "untitled";
 }
 
@@ -49,6 +52,8 @@ export function playlistArchiveName(name: string, exists: (name: string) => bool
   const base = safeFileName(name);
   let candidate = `${base}.csv`;
   let suffix = 2;
+
   while (exists(candidate)) candidate = `${base} (${suffix++}).csv`;
+
   return candidate;
 }

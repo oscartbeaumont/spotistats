@@ -15,8 +15,11 @@ import {
 export function ExportProgress() {
   const label = (status: string, progress: number) => {
     if (status === "queued") return "Queued";
+
     if (status === "running") return `${Math.round(progress * 100)}%`;
+
     if (status === "done") return "Done";
+
     return "Failed";
   };
 

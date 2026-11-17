@@ -1,12 +1,20 @@
+import { Schema } from "effect";
+
 export const siteUrl = "https://spotistats.otbeaumont.me";
+
 export const siteName = "Spotistats";
+
 export const siteTitle =
   "Spotistats — Spotify listening stats, history & backup";
+
 export const siteDescription =
   "Spotistats is a free Spotify stats app that keeps your listening history, shows your top artists and streaks, and lets you export your playlists and play data.";
+
 export const siteImage = `${siteUrl}/assets/og.png`;
+
 export const siteImageAlt =
   "Spotistats — your Spotify listening stats, history and backup, decoded.";
+
 export interface SiteFaq {
   readonly question: string;
   readonly answer: string;
@@ -47,17 +55,25 @@ export const siteFaq: readonly SiteFaq[] = [
 
 export const titleForPath = (path: string) => {
   if (path === "/" || path === "/login") return siteTitle;
+
   if (path.startsWith("/favourites/tracks"))
     return "Favourite Spotify tracks — Spotistats";
+
   if (path.startsWith("/favourites/albums"))
     return "Saved Spotify albums — Spotistats";
+
   if (path.startsWith("/export"))
     return "Export your Spotify data — Spotistats";
+
   if (path.startsWith("/account"))
     return "Spotify stats account — Spotistats";
+
   if (path.startsWith("/discover")) return "Discover music — Spotistats";
+
   if (path.startsWith("/privacy")) return "Privacy policy — Spotistats";
+
   if (path.startsWith("/security")) return "Security policy — Spotistats";
+
   return "Spotistats — Your Spotify, decoded";
 };
 
@@ -88,9 +104,12 @@ export const isPublicPath = (path: string) =>
 export const isContentPath = (path: string) =>
   path === "/privacy" || path === "/security";
 
+/** One node of the JSON-LD graph: JSON values the crawler can read. */
+type JsonLdNode = Readonly<Record<string, Schema.Json>>;
+
 /** Structured data for the public site. FAQ is only emitted for public pages. */
 export function jsonLdFor(publicPage: boolean) {
-  const graph: Record<string, unknown>[] = [
+  const graph: JsonLdNode[] = [
     {
       "@type": "WebSite",
       "@id": `${siteUrl}/#website`,

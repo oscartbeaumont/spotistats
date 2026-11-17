@@ -25,6 +25,20 @@ import {
   type Playlist,
 } from "~/client/spotify";
 
+/** The progress line under an export job. */
+function exportStatusLabel(job: ExportJob): string {
+  switch (job.status) {
+    case "queued":
+      return "Queued_";
+    case "running":
+      return `Exporting ${Math.round(job.progress * 100)}%`;
+    case "done":
+      return "Downloaded";
+    case "error":
+      return `Failed: ${job.error ?? "unknown error"}`;
+  }
+}
+
 export default function ExportPage() {
   const [backupProgress, setBackupProgress] = createSignal(0);
   const [backingUp, setBackingUp] = createSignal(false);
@@ -34,6 +48,7 @@ export default function ExportPage() {
 
   const playlists = createMemo(() => runSpotify(getPlaylists()));
   const playlistItems = () => playlists();
+
   /** Non-suspending read for handlers, effects, and the progress timer. */
   const loadedPlaylists = (): readonly Playlist[] => {
     try {
@@ -52,8 +67,10 @@ export default function ExportPage() {
     const id = exportJobId(playlist);
     setSelected((current) => {
       const next = new Set<string>(current);
+
       if (next.has(id)) next.delete(id);
       else next.add(id);
+
       return next;
     });
   };
@@ -64,6 +81,7 @@ export default function ExportPage() {
   const exportSelected = () => {
     if (backingUp()) return;
     const chosen = selectedPlaylists();
+
     if (chosen.length === 0) return;
     setExportError(null);
     startPlaylistExports(chosen);
@@ -78,6 +96,7 @@ export default function ExportPage() {
 
   async function backupAll() {
     const all = loadedPlaylists();
+
     // The header renders before the playlist list resolves. Starting here with
     // an empty list downloaded a `Music.zip` that held only `user.json`.
     // The background store also runs one export at a time for rate limits, so
@@ -86,21 +105,25 @@ export default function ExportPage() {
     setBackingUp(true);
     setBackupProgress(0);
     setExportError(null);
+
     try {
       const zip = new JSZip();
       const share = 1 / Math.max(all.length, 1);
       let index = 0;
       let playlistCount = 0;
+
       for (const playlist of all) {
         // The Liked Songs entry is synthesised client-side without an id, so
         // `buildPlaylistCsv` reaches it via the liked-tracks endpoint; other
         // id-less entries are malformed and skipped.
         if (!isLikedSongs(playlist) && !playlist.id) continue;
         const base = index * share;
+
         try {
           const { csv } = await buildPlaylistCsv(playlist, (fraction) =>
             setBackupProgress(base + fraction * share),
           );
+
           zip.file(
             playlistArchiveName(playlist.name, (name) => zip.file(name) !== null),
             csv,
@@ -110,8 +133,10 @@ export default function ExportPage() {
           console.error("Spotify export failed", error);
           setExportError(errorMessage(error));
         }
+
         index += 1;
       }
+
       const store = authStore();
       zip.file(
         "user.json",
@@ -133,6 +158,7 @@ export default function ExportPage() {
       0,
       Math.min(focusedIndex() + delta, loadedPlaylists().length - 1),
     );
+
     setFocusedIndex(next);
     document
       .getElementById(`playlist-${next}`)
@@ -145,10 +171,12 @@ export default function ExportPage() {
   createShortcut(["ArrowUp"], () => moveFocus(-1));
   createShortcut(["Enter"], () => {
     const focused = loadedPlaylists()[focusedIndex()];
+
     if (focused) exportPlaylist(focused);
   });
   createShortcut([" "], () => {
     const focused = loadedPlaylists()[focusedIndex()];
+
     if (focused) toggleSelected(focused);
   });
   createShortcut(["b"], () => void backupAll());
@@ -212,6 +240,7 @@ export default function ExportPage() {
         <For each={playlistItems()}>
           {(playlist, index) => {
             const job = () => jobFor(playlist);
+
             return (
               <div
                 id={`playlist-${index()}`}
@@ -262,13 +291,7 @@ export default function ExportPage() {
                             />
                           </div>
                           <p class="mt-1 text-[0.6rem] uppercase tracking-widest">
-                            {value().status === "queued"
-                              ? "Queued_"
-                              : value().status === "running"
-                                ? `Exporting ${Math.round(value().progress * 100)}%`
-                                : value().status === "done"
-                                  ? "Downloaded"
-                                  : `Failed: ${value().error ?? "unknown error"}`}
+                            {exportStatusLabel(value())}
                           </p>
                         </div>
                       )}

@@ -11,21 +11,29 @@ import LoginPage from "./pages/Login";
  */
 
 const ProfilePage = lazy(() => import("./pages/Profile"));
+
 const FavouritesTracks = lazy(() =>
   import("./pages/Favourites").then((module) => ({
     default: () => <module.FavouritesPage kind="tracks" />,
   })),
 );
+
 const FavouritesAlbums = lazy(() =>
   import("./pages/Favourites").then((module) => ({
     default: () => <module.FavouritesPage kind="albums" />,
   })),
 );
+
 const ExportPage = lazy(() => import("./pages/Export"));
+
 const DiscoverPage = lazy(() => import("./pages/Discover"));
+
 const AccountPage = lazy(() => import("./pages/Account"));
+
 const PrivacyPage = lazy(() => import("./pages/Privacy"));
+
 const SecurityPage = lazy(() => import("./pages/Security"));
+
 const NotFoundPage = lazy(() => import("./pages/NotFound"));
 
 export const Router = createRouter({
