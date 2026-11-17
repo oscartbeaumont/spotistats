@@ -3,6 +3,7 @@ import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { D1Client } from "@effect/sql-d1";
 import { Effect } from "effect";
 import { Reactivity } from "effect/reactivity";
+import type { SqlClient } from "effect/sql/SqlClient";
 import { afterEach, beforeEach, expect, it } from "vitest";
 
 import { readDiscoveryHistory, readKnownTracks } from "./discovery";
@@ -26,7 +27,7 @@ function listen(user: string, id: string, daysAgo: number) {
     .run(`${user}:${id}:${daysAgo}`, user, id, now - daysAgo * day);
 }
 
-const run = <A, E>(query: (sql: D1Client.D1Client) => Effect.Effect<A, E>) => {
+const run = <A, E>(query: (sql: SqlClient) => Effect.Effect<A, E>) => {
   // Execute the real D1 driver's compiled SQL in SQLite, enforcing D1's bind cap.
   const db = {
     prepare: (text: string) => ({
