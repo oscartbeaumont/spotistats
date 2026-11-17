@@ -76,9 +76,6 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    environment:
-      name: production
-      url: https://spotistats.otbeaumont.me
     permissions:
       contents: read
     steps:
