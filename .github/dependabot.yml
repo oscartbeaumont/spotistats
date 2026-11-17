@@ -1,0 +1,18 @@
+version: 2
+
+# One PR for every dependency bump.
+# 
+# All ecosystems share a single multi-ecosystem group, so upgrades are
+# reviewed together instead of one PR per ecosystem.
+
+multi-ecosystem-groups:
+  spotistats-deps:
+    schedule:
+      interval: "weekly"
+
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    multi-ecosystem-group: "spotistats-deps"
+    patterns: ["*"]
+
