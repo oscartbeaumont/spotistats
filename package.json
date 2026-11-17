@@ -24,23 +24,23 @@
     "db:migrate:remote": "cf d1 migrations apply 7529dabd-7b6d-42f6-ac94-ddc3db1332ab"
   },
   "dependencies": {
-    "@effect/sql-d1": "^4.0.5",
+    "@effect/sql-d1": "^4.1.4",
     "@solidjs/meta": "next",
     "@solidjs/router": "next",
     "@solidjs/web": "next",
-    "effect": "^4.0.5",
+    "effect": "^4.1.4",
     "jszip": "^3.10.2",
-    "posthog-js": "^1.438.12",
+    "posthog-js": "^1.449.1",
     "solid-js": "next"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "beta",
-    "@solidjs/vite-plugin": "3.0.0-next.55",
-    "@tailwindcss/vite": "^4.3.3",
-    "cf": "1.0.0-beta.26",
-    "tailwindcss": "^4.3.3",
-    "typescript": "^6.0.3",
-    "vite": "^8.3.5",
-    "vitest": "^5.0.5"
+    "@solidjs/vite-plugin": "3.0.0-next.57",
+    "@tailwindcss/vite": "^4.3.5",
+    "cf": "1.0.0-beta.32",
+    "tailwindcss": "^4.3.5",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0"
   }
 }
