@@ -70,6 +70,30 @@ const currentToken = () => {
   return store.accessToken;
 };
 
+/**
+ * Runs each step after the previous one settles.
+ *
+ * Spotify rate limits the library and catalog lookups, so these batches must
+ * not run in parallel; `Array.fromAsync` would say the same thing but is newer
+ * than the browsers this app targets.
+ */
+async function inSequence<Input, Output>(
+  items: readonly Input[],
+  run: (item: Input) => Promise<Output>,
+): Promise<Output[]> {
+  const results: Output[] = [];
+
+  await items.reduce(
+    (previous, item) =>
+      previous.then(async () => {
+        results.push(await run(item));
+      }),
+    Promise.resolve(),
+  );
+
+  return results;
+}
+
 /** Excludes tracks already in the user's history or liked songs. */
 async function unstoredRecommendations(
   seeds: readonly string[],
@@ -84,17 +108,22 @@ async function unstoredRecommendations(
 
   const ids = [
     ...new Set(
-      tracks.flatMap((track) => [
-        track.id,
-        ...(track.linked_from ? [track.linked_from.id] : []),
-      ]),
+      tracks.flatMap((track) =>
+        track.linked_from
+          ? [track.id, track.linked_from.id]
+          : [track.id],
+      ),
     ),
   ];
 
-  const known = new Set(await accountReads.discoveryKnown(ids));
+  const knownIds = await accountReads.discoveryKnown(ids);
 
-  for (let offset = 0; offset < ids.length; offset += 50) {
-    const batch = ids.slice(offset, offset + 50);
+  const batches = Array.from(
+    { length: Math.ceil(ids.length / 50) },
+    (_, index) => ids.slice(index * 50, index * 50 + 50),
+  );
+
+  const savedFlags = await inSequence(batches, async (batch) => {
     const flags = await runSpotify(getSavedTrackFlags(batch));
 
     if (flags.length !== batch.length) {
@@ -103,10 +132,15 @@ async function unstoredRecommendations(
       );
     }
 
-    flags.forEach((saved, index) => {
-      if (saved) known.add(batch[index]!);
-    });
-  }
+    return flags;
+  });
+
+  const known = new Set([
+    ...knownIds,
+    ...batches.flatMap((batch, index) =>
+      batch.filter((_, position) => savedFlags[index]?.[position]),
+    ),
+  ]);
 
   return tracks
     .filter(
@@ -149,11 +183,12 @@ async function rediscoveredTracks(
     matchesMood(mood, features?.[index]),
   );
 
-  const tracks: DiscoveryCandidate[] = [];
+  const batches = Array.from(
+    { length: Math.ceil(eligible.length / 50) },
+    (_, index) => eligible.slice(index * 50, index * 50 + 50),
+  );
 
-  for (let offset = 0; offset < eligible.length; offset += 50) {
-    const batch = eligible.slice(offset, offset + 50);
-
+  const catalogs = await inSequence(batches, async (batch) => {
     const catalog = await runSpotify(
       getCatalogTracks(batch.map((track) => track.id)),
     );
@@ -162,21 +197,24 @@ async function rediscoveredTracks(
       throw new Error("Spotify returned an incomplete track lookup. Please try again.");
     }
 
-    catalog.tracks.forEach((track, index) => {
-      const previous = batch[index];
+    return catalog;
+  });
 
-      if (!previous || !usable(track)) return;
-      tracks.push(
+  return catalogs.flatMap((catalog, batchIndex) =>
+    catalog.tracks.flatMap((track, index) => {
+      const previous = batches[batchIndex]?.[index];
+
+      if (!previous || !usable(track)) return [];
+
+      return [
         candidate(
           track,
           "rediscover",
           `${previous.listens} tracked plays; last played ${new Date(previous.lastPlayedAtMs).toLocaleDateString()}.`,
         ),
-      );
-    });
-  }
-
-  return tracks;
+      ];
+    }),
+  );
 }
 
 export async function generateDiscovery(

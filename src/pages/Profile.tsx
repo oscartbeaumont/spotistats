@@ -17,6 +17,7 @@ import {
   getCurrentlyPlaying,
   getProfile,
   runSpotify,
+  type SpotifyItem,
   SpotifyProfile,
 } from "~/client/spotify";
 import { setAuthStore } from "~/client/storage";
@@ -28,6 +29,7 @@ import {
 import { StatsWelcome } from "~/components/StatsWelcome";
 import { errorMessage } from "~/lib/errors";
 import { formatDate } from "~/lib/format";
+import { firstImageUrl } from "~/lib/images";
 import {
   DAY_MS,
   browserTimezoneOffset,
@@ -38,7 +40,7 @@ import { createPreviewInsights } from "~/lib/previewInsights";
 import { createShortcut } from "~/lib/shortcut";
 import { reuseUnchanged } from "~/lib/stable";
 import { statsOutcome } from "~/lib/statsOutcome";
-import { welcomePhase } from "~/lib/statsWelcome";
+import { welcomePhase, type WelcomePhase } from "~/lib/statsWelcome";
 import { externalHref } from "~/lib/url";
 import type {
   InsightsQuery,
@@ -152,6 +154,177 @@ function ProfileHeader(props: { user: ProfileUser }) {
   );
 }
 
+/** One row of the most-recently-listened list. */
+function RecentTrackRow(props: { item: TrackingStatus["recent"][number] }) {
+  return (
+    <a
+      href={externalHref(props.item.externalUrl) ?? "#"}
+      target="_blank"
+      rel="noopener"
+      onClick={() =>
+        capture("spotify_item_opened", {
+          kind: "track",
+          surface: "recent",
+        })
+      }
+      class="flex items-center gap-3 border-b-[3px] border-[#0a0a0a] py-3 text-left transition last:border-b-0 hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
+    >
+      <img
+        src={props.item.imageUrl ?? "/assets/placeholder.svg"}
+        alt={props.item.name}
+        class="h-9 w-9 shrink-0 border-2 border-[#0a0a0a] object-cover"
+      />
+      <div class="min-w-0 flex-1">
+        <p class="truncate text-xs font-black uppercase tracking-tight">
+          {props.item.name}
+        </p>
+        <p class="mt-0.5 truncate text-[0.65rem] text-[#5c5c5c]">
+          {props.item.artistNames}
+        </p>
+        <p class="mt-0.5 text-[0.6rem] uppercase tracking-widest text-[#5c5c5c]">
+          {formatDate(props.item.playedAt)}
+        </p>
+      </div>
+    </a>
+  );
+}
+
+/** The "recently listened" card, including its off and empty states. */
+function RecentListensCard(props: {
+  status: TrackingStatus;
+  refreshing: boolean;
+  onRefresh: () => void;
+}) {
+  return (
+    <section class="border-4 border-[#0a0a0a] p-5">
+      <div class="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <div class="text-xs uppercase tracking-[0.2em] text-[#5c5c5c]">
+            Recently Listened
+          </div>
+          <p class="mt-1 text-[0.6rem] uppercase tracking-widest text-[#666]">
+            {props.status.lastSuccessAt
+              ? `Synced ${formatDate(props.status.lastSuccessAt)}`
+              : "Spotify stats"}
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={props.refreshing || !props.status.enabled}
+          onClick={props.onRefresh}
+          class="shrink-0 border-[3px] border-[#0a0a0a] px-2 py-1.5 text-[0.6rem] font-black uppercase tracking-widest transition disabled:opacity-40 hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
+          title="Shortcut: R"
+        >
+          {props.refreshing ? "Queued_" : "Refresh (R)"}
+        </button>
+      </div>
+      <Show
+        when={props.status.enabled}
+        fallback={
+          <div class="border-[3px] border-dashed border-[#0a0a0a] p-4">
+            <p class="text-xs font-black uppercase tracking-tight">
+              Stats are off
+            </p>
+            <p class="mt-2 text-xs leading-6 text-[#555]">
+              Connect stats to keep recent plays here.
+            </p>
+            <a
+              href="/account/stats/login"
+              rel="external"
+              class="mt-3 inline-block text-[0.65rem] font-black uppercase tracking-widest underline"
+            >
+              Connect stats →
+            </a>
+          </div>
+        }
+      >
+        <Show
+          when={props.status.recent.length > 0}
+          fallback={
+            <div class="border-[3px] border-dashed border-[#0a0a0a] p-4">
+              <p class="text-xs font-black uppercase tracking-tight">
+                No listening data yet
+              </p>
+              <p class="mt-2 text-xs leading-6 text-[#555]">
+                Use Refresh to queue a sync, then this list will update when
+                Spotify returns recent plays.
+              </p>
+            </div>
+          }
+        >
+          <div>
+            <For each={props.status.recent}>
+              {(item) => <RecentTrackRow item={item} />}
+            </For>
+          </div>
+        </Show>
+      </Show>
+    </section>
+  );
+}
+
+/** The sync on/off state, last-sync times and the error line. */
+function SyncStatusCard(props: { status: TrackingStatus }) {
+  return (
+    <section class="border-4 border-[#0a0a0a] p-5">
+      <div class="mb-3 flex items-center justify-between gap-3">
+        <div class="text-xs uppercase tracking-[0.2em] text-[#5c5c5c]">
+          Stats Sync
+        </div>
+        <span
+          class={`border-[3px] border-[#0a0a0a] px-2 py-1 text-[0.6rem] font-black uppercase tracking-widest ${
+            props.status.enabled
+              ? "bg-[#1DB954] text-[#0a0a0a]"
+              : "bg-[#0a0a0a] text-[#f0ede8]"
+          }`}
+        >
+          {props.status.enabled ? "On" : "Off"}
+        </span>
+      </div>
+      <Show
+        when={props.status.enabled}
+        fallback={
+          <p class="text-xs leading-6 text-[#555]">
+            Turn on stats to keep a history Spotify does not expose.
+          </p>
+        }
+      >
+        <dl class="space-y-2 text-[0.6rem] uppercase tracking-widest text-[#666]">
+          <div class="flex items-baseline justify-between gap-2">
+            <dt>Last sync</dt>
+            <dd class="text-right font-bold text-[#0a0a0a]">
+              {formatDate(props.status.lastSuccessAt)}
+            </dd>
+          </div>
+          <div class="flex items-baseline justify-between gap-2">
+            <dt>Newest listen</dt>
+            <dd class="text-right font-bold text-[#0a0a0a]">
+              {formatDate(props.status.lastPlayedAtMs)}
+            </dd>
+          </div>
+          <div class="flex items-baseline justify-between gap-2">
+            <dt>Listens tracked</dt>
+            <dd class="text-right font-bold text-[#0a0a0a]">
+              {props.status.listenCount.toLocaleString()}
+            </dd>
+          </div>
+        </dl>
+      </Show>
+      <Show when={props.status.lastError}>
+        {(error) => (
+          <p class="mt-3 text-[0.65rem] leading-5 text-red-700">{error()}</p>
+        )}
+      </Show>
+      <a
+        href="/account"
+        class="mt-3 inline-block text-[0.65rem] font-black uppercase tracking-widest underline"
+      >
+        Manage stats →
+      </a>
+    </section>
+  );
+}
+
 function StatsRail(props: {
   status: TrackingStatus;
   refreshing: boolean;
@@ -159,157 +332,12 @@ function StatsRail(props: {
 }) {
   return (
     <div class="content-fade-in space-y-4 xl:sticky xl:top-24">
-      <section class="border-4 border-[#0a0a0a] p-5">
-        <div class="mb-4 flex items-start justify-between gap-3">
-          <div>
-            <div class="text-xs uppercase tracking-[0.2em] text-[#5c5c5c]">
-              Recently Listened
-            </div>
-            <p class="mt-1 text-[0.6rem] uppercase tracking-widest text-[#666]">
-              {props.status.lastSuccessAt
-                ? `Synced ${formatDate(props.status.lastSuccessAt)}`
-                : "Spotify stats"}
-            </p>
-          </div>
-          <button
-            type="button"
-            disabled={props.refreshing || !props.status.enabled}
-            onClick={props.onRefresh}
-            class="shrink-0 border-[3px] border-[#0a0a0a] px-2 py-1.5 text-[0.6rem] font-black uppercase tracking-widest transition disabled:opacity-40 hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
-            title="Shortcut: R"
-          >
-            {props.refreshing ? "Queued_" : "Refresh (R)"}
-          </button>
-        </div>
-        <Show
-          when={props.status.enabled}
-          fallback={
-            <div class="border-[3px] border-dashed border-[#0a0a0a] p-4">
-              <p class="text-xs font-black uppercase tracking-tight">
-                Stats are off
-              </p>
-              <p class="mt-2 text-xs leading-6 text-[#555]">
-                Connect stats to keep recent plays here.
-              </p>
-              <a
-                href="/account/stats/login"
-                rel="external"
-                class="mt-3 inline-block text-[0.65rem] font-black uppercase tracking-widest underline"
-              >
-                Connect stats →
-              </a>
-            </div>
-          }
-        >
-          <Show
-            when={props.status.recent.length > 0}
-            fallback={
-              <div class="border-[3px] border-dashed border-[#0a0a0a] p-4">
-                <p class="text-xs font-black uppercase tracking-tight">
-                  No listening data yet
-                </p>
-                <p class="mt-2 text-xs leading-6 text-[#555]">
-                  Use Refresh to queue a sync, then this list will update when
-                  Spotify returns recent plays.
-                </p>
-              </div>
-            }
-          >
-            <div>
-              <For each={props.status.recent}>
-                {(item) => (
-                  <a
-                    href={externalHref(item.externalUrl) ?? "#"}
-                    target="_blank"
-                    rel="noopener"
-                    onClick={() =>
-                      capture("spotify_item_opened", {
-                        kind: "track",
-                        surface: "recent",
-                      })
-                    }
-                    class="flex items-center gap-3 border-b-[3px] border-[#0a0a0a] py-3 text-left transition last:border-b-0 hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
-                  >
-                    <img
-                      src={item.imageUrl ?? "/assets/placeholder.svg"}
-                      alt={item.name}
-                      class="h-9 w-9 shrink-0 border-2 border-[#0a0a0a] object-cover"
-                    />
-                    <div class="min-w-0 flex-1">
-                      <p class="truncate text-xs font-black uppercase tracking-tight">
-                        {item.name}
-                      </p>
-                      <p class="mt-0.5 truncate text-[0.65rem] text-[#5c5c5c]">
-                        {item.artistNames}
-                      </p>
-                      <p class="mt-0.5 text-[0.6rem] uppercase tracking-widest text-[#5c5c5c]">
-                        {formatDate(item.playedAt)}
-                      </p>
-                    </div>
-                  </a>
-                )}
-              </For>
-            </div>
-          </Show>
-        </Show>
-      </section>
-
-      <section class="border-4 border-[#0a0a0a] p-5">
-        <div class="mb-3 flex items-center justify-between gap-3">
-          <div class="text-xs uppercase tracking-[0.2em] text-[#5c5c5c]">
-            Stats Sync
-          </div>
-          <span
-            class={`border-[3px] border-[#0a0a0a] px-2 py-1 text-[0.6rem] font-black uppercase tracking-widest ${
-              props.status.enabled
-                ? "bg-[#1DB954] text-[#0a0a0a]"
-                : "bg-[#0a0a0a] text-[#f0ede8]"
-            }`}
-          >
-            {props.status.enabled ? "On" : "Off"}
-          </span>
-        </div>
-        <Show
-          when={props.status.enabled}
-          fallback={
-            <p class="text-xs leading-6 text-[#555]">
-              Turn on stats to keep a history Spotify does not expose.
-            </p>
-          }
-        >
-          <dl class="space-y-2 text-[0.6rem] uppercase tracking-widest text-[#666]">
-            <div class="flex items-baseline justify-between gap-2">
-              <dt>Last sync</dt>
-              <dd class="text-right font-bold text-[#0a0a0a]">
-                {formatDate(props.status.lastSuccessAt)}
-              </dd>
-            </div>
-            <div class="flex items-baseline justify-between gap-2">
-              <dt>Newest listen</dt>
-              <dd class="text-right font-bold text-[#0a0a0a]">
-                {formatDate(props.status.lastPlayedAtMs)}
-              </dd>
-            </div>
-            <div class="flex items-baseline justify-between gap-2">
-              <dt>Listens tracked</dt>
-              <dd class="text-right font-bold text-[#0a0a0a]">
-                {props.status.listenCount.toLocaleString()}
-              </dd>
-            </div>
-          </dl>
-        </Show>
-        <Show when={props.status.lastError}>
-          {(error) => (
-            <p class="mt-3 text-[0.65rem] leading-5 text-red-700">{error()}</p>
-          )}
-        </Show>
-        <a
-          href="/account"
-          class="mt-3 inline-block text-[0.65rem] font-black uppercase tracking-widest underline"
-        >
-          Manage stats →
-        </a>
-      </section>
+      <RecentListensCard
+        status={props.status}
+        refreshing={props.refreshing}
+        onRefresh={props.onRefresh}
+      />
+      <SyncStatusCard status={props.status} />
     </div>
   );
 }
@@ -383,123 +411,32 @@ function InsightsRangeControl(props: {
   );
 }
 
-export default function ProfilePage() {
-  const [tick, setTick] = createSignal(0);
+/** The insights range, its data, and the handlers that drive both. */
+function createInsightsDashboard(props: {
+  timezone: number;
+  statsNow: () => TrackingStatus | null;
+}) {
   const [insightsTick, setInsightsTick] = createSignal(0);
   const [preview, setPreview] = createSignal<ListeningInsightsData | null>(null);
-  const [refreshing, setRefreshing] = createSignal(false);
-
-  // The stats callback sends a fresh connection here rather than to the
-  // settings page, so the first thing the user sees is the feature itself.
-  // Read the one-shot flag before the URL is cleaned below.
-  const connected = untrack(
-    () =>
-      statsOutcome(typeof window === "undefined" ? "" : window.location.search)
-        ?.kind === "enabled",
-  );
-
-  const [welcome, setWelcome] = createSignal(connected);
-  const [polls, setPolls] = createSignal(0);
-  const timezone = browserTimezoneOffset();
   const [range, setRange] = createSignal<InsightsRange>("all");
 
   const [fromDate, setFromDate] = createSignal(
-    localDay(Date.now() - 29 * DAY_MS, timezone),
+    localDay(Date.now() - 29 * DAY_MS, props.timezone),
   );
 
-  const [toDate, setToDate] = createSignal(localDay(Date.now(), timezone));
-
-  const profile = createMemo(() => runSpotify(getProfile()));
-
-  const stats = createMemo(() => {
-    tick();
-
-    return fetchStatus();
-  });
-
-  const currentlyPlaying = createMemo(() => {
-    tick();
-
-    return runSpotify(getCurrentlyPlaying());
-  });
+  const [toDate, setToDate] = createSignal(localDay(Date.now(), props.timezone));
 
   const insights = createMemo(() => {
     insightsTick();
     const selected = range();
 
     return fetchInsights({
-      tzOffset: timezone,
+      tzOffset: props.timezone,
       range: selected,
       fromMs: selected === "custom" ? localDateStart(fromDate()) : null,
       toMs: selected === "custom" ? localDateEnd(toDate()) : null,
     });
   });
-
-  // `latest` keeps the last settled value while a poll is in flight, so the
-  // 10-second refresh does not tear down and re-mount the dashboard (which can
-  // leave a `<Show>` child reading its narrowed accessor after it unmounts).
-  // It only throws before the first value arrives, which is the skeleton case.
-  const profileNow = () => {
-    try {
-      return latest(profile) ?? null;
-    } catch {
-      return null;
-    }
-  };
-
-  const statsNow = () => {
-    try {
-      return latest(stats) ?? null;
-    } catch {
-      return null;
-    }
-  };
-
-  /**
-   * How far the first sync has got. Every forty polls (a minute at the welcome
-   * cadence) the panel stops claiming progress and offers a fresh attempt.
-   */
-  const firstSyncLimit = 40;
-
-  const phase = createMemo(() =>
-    welcomePhase({
-      seenStatus: statsNow() !== null,
-      listenCount: statsNow()?.listenCount ?? 0,
-      lastSuccessAt: statsNow()?.lastSuccessAt ?? null,
-      lastError: statsNow()?.lastError ?? null,
-      polls: polls(),
-      pollLimit: firstSyncLimit,
-    }),
-  );
-
-  // The dashboard polls every 10s and each poll parses fresh objects, so
-  // `<For>` would rebuild the recent list (and reload its covers) every time.
-  // Reuse the previous object for a row that has not changed.
-  let previousRecent: TrackingStatus["recent"] = [];
-
-  const stableStats = createMemo(() => {
-    const status = statsNow();
-
-    if (!status) return null;
-
-    const recent = reuseUnchanged(
-      previousRecent,
-      status.recent,
-      (item) => `${item.playedAtMs}:${item.name}`,
-    );
-
-    previousRecent = recent;
-
-    return { ...status, recent };
-  });
-
-  const playingNow = () => {
-    try {
-      return latest(currentlyPlaying) ?? null;
-    } catch {
-      return null;
-    }
-  };
 
   const insightsNow = () => {
     try {
@@ -519,7 +456,7 @@ export default function ProfilePage() {
 
   const readyInsights = () => {
     const state = insightsNow();
-    const status = statsNow();
+    const status = props.statsNow();
 
     return state && status ? { state, status } : null;
   };
@@ -570,8 +507,236 @@ export default function ProfilePage() {
     }
   };
 
+  return {
+    preview,
+    range,
+    fromDate,
+    toDate,
+    insightsPending,
+    readyInsights,
+    reloadInsights,
+    showPreview,
+    exitPreview,
+    changeRange,
+    changeFromDate,
+    changeToDate,
+    rangeLabel,
+  };
+}
+
+/** The now-playing strip shown while Spotify reports a song. */
+function NowPlayingCard(props: { track: SpotifyItem }) {
+  return (
+    <a
+      href={externalHref(props.track.external_urls.spotify)}
+      target="_blank"
+      rel="noopener"
+      class="content-fade-in group flex items-center gap-4 border-4 border-[#0a0a0a] bg-[#1DB954] p-4 text-[#0a0a0a] shadow-[8px_8px_0_#0a0a0a] transition hover:-translate-y-0.5 hover:shadow-[10px_10px_0_#0a0a0a]"
+    >
+      <img
+        src={
+          firstImageUrl(props.track.album?.images) ??
+          firstImageUrl(props.track.images) ??
+          "/assets/placeholder.svg"
+        }
+        alt={props.track.name}
+        class="h-16 w-16 shrink-0 border-[3px] border-[#0a0a0a] object-cover"
+      />
+      <div class="min-w-0 flex-1">
+        <div class="mb-1 text-[0.65rem] font-black uppercase tracking-[0.25em]">
+          Playing Now
+        </div>
+        <p class="truncate text-xl font-black uppercase tracking-tight md:text-2xl">
+          {props.track.name}
+        </p>
+        <p class="truncate text-xs font-bold uppercase tracking-widest opacity-75">
+          {props.track.artists?.map((artist) => artist.name).join(", ") ??
+            "Spotify"}
+        </p>
+      </div>
+      <span class="hidden shrink-0 border-[3px] border-[#0a0a0a] px-3 py-2 text-xs font-black uppercase tracking-widest transition group-hover:bg-[#0a0a0a] group-hover:text-[#1DB954] md:inline-block">
+        Open Spotify →
+      </span>
+    </a>
+  );
+}
+
+/** The insights column: the preview, the range controls or the gate. */
+function InsightsPanel(props: {
+  preview: ListeningInsightsData | null;
+  ready: { state: InsightsState; status: TrackingStatus } | null;
+  rangeLabel: string;
+  refreshing: boolean;
+  range: InsightsRange;
+  fromDate: string;
+  toDate: string;
+  updating: boolean;
+  onReload: () => void;
+  onPreview: () => void;
+  onExitPreview: () => void;
+  onRefresh: () => void;
+  onRangeChange: (value: InsightsRange) => void;
+  onFromChange: (value: string) => void;
+  onToChange: (value: string) => void;
+}) {
+  return (
+    <div class="order-3 min-w-0 xl:col-start-1 xl:row-start-2">
+      <Show when={props.preview}>
+        {(data) => (
+          <div class="content-fade-in">
+            <ListeningInsights
+              data={data()}
+              onReload={props.onReload}
+              rangeLabel="Sample data"
+              preview
+              onExitPreview={props.onExitPreview}
+            />
+          </div>
+        )}
+      </Show>
+      <Show when={!props.preview && props.ready}>
+        {(ready) => (
+          <div class="content-fade-in">
+            <Show
+              when={ready().state.data}
+              fallback={
+                <InsightsUnavailable
+                  message={
+                    ready().state.error ??
+                    "Insights could not be loaded. Try again."
+                  }
+                  onRetry={props.onReload}
+                  onPreview={props.onPreview}
+                />
+              }
+            >
+              {(data) => (
+                <Show
+                  when={
+                    data().totals.listens > 0 ||
+                    ready().status.listenCount > 0
+                  }
+                  fallback={
+                    <InsightsGate
+                      status={ready().status}
+                      refreshing={props.refreshing}
+                      onPreview={props.onPreview}
+                      onRefresh={props.onRefresh}
+                    />
+                  }
+                >
+                  <ListeningInsights
+                    data={data()}
+                    onReload={props.onReload}
+                    rangeLabel={props.rangeLabel}
+                    controls={
+                      <InsightsRangeControl
+                        value={props.range}
+                        fromDate={props.fromDate}
+                        toDate={props.toDate}
+                        updating={props.updating}
+                        onChange={props.onRangeChange}
+                        onFromChange={props.onFromChange}
+                        onToChange={props.onToChange}
+                      />
+                    }
+                  />
+                </Show>
+              )}
+            </Show>
+          </div>
+        )}
+      </Show>
+    </div>
+  );
+}
+
+type InsightsDashboard = ReturnType<typeof createInsightsDashboard>;
+
+/** The whole profile screen, wired to the state the page owns. */
+function ProfileDashboard(props: {
+  welcome: boolean;
+  phase: WelcomePhase;
+  listenCount: number;
+  error: string | null;
+  playing: SpotifyItem | null;
+  profile: ProfileUser | null;
+  stats: TrackingStatus | null;
+  insights: InsightsDashboard;
+  refreshing: boolean;
+  onRefresh: () => void;
+  onDismiss: () => void;
+}) {
+  return (
+    <main class="app-main flex-1 p-8 md:p-16">
+      <div class="space-y-8">
+        <Show when={props.welcome}>
+          <StatsWelcome
+            phase={props.phase}
+            listenCount={props.listenCount}
+            error={props.error}
+            refreshing={props.refreshing}
+            onRefresh={props.onRefresh}
+            onDismiss={props.onDismiss}
+          />
+        </Show>
+        <Show when={props.playing}>
+          {(track) => <NowPlayingCard track={track()} />}
+        </Show>
+
+        <div class="grid gap-8 xl:grid-cols-[minmax(0,1fr)_minmax(20rem,26rem)] xl:items-start">
+          <Show when={props.profile} fallback={<ProfileHeaderSkeleton />}>
+            {(user) => <ProfileHeader user={user()} />}
+          </Show>
+
+          <aside class="order-2 xl:col-start-2 xl:row-span-2 xl:row-start-1">
+            <Show when={props.stats} fallback={<StatsRailSkeleton />}>
+              {(status) => (
+                <StatsRail
+                  status={status()}
+                  refreshing={props.refreshing}
+                  onRefresh={props.onRefresh}
+                />
+              )}
+            </Show>
+          </aside>
+
+          <InsightsPanel
+            preview={props.insights.preview()}
+            ready={props.insights.readyInsights()}
+            rangeLabel={props.insights.rangeLabel()}
+            refreshing={props.refreshing}
+            range={props.insights.range()}
+            fromDate={props.insights.fromDate()}
+            toDate={props.insights.toDate()}
+            updating={props.insights.insightsPending()}
+            onReload={props.insights.reloadInsights}
+            onPreview={props.insights.showPreview}
+            onExitPreview={props.insights.exitPreview}
+            onRefresh={props.onRefresh}
+            onRangeChange={props.insights.changeRange}
+            onFromChange={props.insights.changeFromDate}
+            onToChange={props.insights.changeToDate}
+          />
+        </div>
+      </div>
+    </main>
+  );
+}
+
+/** The page's polling, identity and conversion effects. */
+function useProfileEffects(options: {
+  profileNow: () => ProfileUser | null;
+  connected: boolean;
+  welcome: () => boolean;
+  phase: () => string;
+  statsNow: () => TrackingStatus | null;
+  setPolls: (update: (value: number) => number) => void;
+  setTick: (update: (value: number) => number) => void;
+  reloadInsights: () => void;
+}) {
   createEffect(
-    () => profileNow(),
+    () => options.profileNow(),
     (data) => {
       if (!data) return;
       const displayName = data.display_name ?? data.id;
@@ -601,15 +766,181 @@ export default function ProfilePage() {
   );
 
   onSettled(() => {
-    const interval = setInterval(() => setTick((value) => value + 1), 10000);
+    const interval = setInterval(() => options.setTick((value) => value + 1), 10000);
 
     return () => clearInterval(interval);
   });
 
+  // The connection landed: report the conversion once, then drop the one-shot
+  // flag from the URL so a reload does not replay it.
+  onSettled(() => {
+    if (!options.connected) return;
+    capture("stats_sync_enabled", {});
+    window.history.replaceState(null, "", window.location.pathname || "/");
+  });
+
+  // Watch the first sync land instead of leaving the page on zeros. The
+  // dashboard's own cadence is ten seconds, which is too slow to show anything
+  // happening; this polls only while the welcome panel is waiting.
+  createEffect(
+    () => options.welcome(),
+    (open) => {
+      if (!open) return;
+
+      const interval = setInterval(() => {
+        const current = options.phase();
+
+        if (current !== "connecting" && current !== "syncing") {
+          clearInterval(interval);
+
+          return;
+        }
+
+        options.setPolls((value) => value + 1);
+        options.setTick((value) => value + 1);
+      }, 1500);
+
+      return () => clearInterval(interval);
+    },
+  );
+
+  // Report the first sync separately from the connect click: it is the moment
+  // the feature actually starts working.
+  let firstSyncReported = false;
+  createEffect(
+    () => ({
+      phase: options.phase(),
+      count: options.statsNow()?.listenCount ?? 0,
+    }),
+    (current) => {
+      if (firstSyncReported || current.phase !== "ready") return;
+      firstSyncReported = true;
+      capture("stats_sync_first_sync", { listenCount: current.count });
+    },
+  );
+
+  let lastListenCount: number | null = null;
+  createEffect(
+    () => options.statsNow()?.listenCount,
+    (count) => {
+      if (count === undefined) return;
+
+      if (lastListenCount === null) {
+        lastListenCount = count;
+
+        return;
+      }
+
+      if (count !== lastListenCount) {
+        lastListenCount = count;
+        options.reloadInsights();
+      }
+    },
+  );
+}
+
+/** Whether the stats callback reported a fresh connection. */
+function statsCallbackConnected(): boolean {
+  return untrack(
+    () =>
+      statsOutcome(typeof window === "undefined" ? "" : window.location.search)
+        ?.kind === "enabled",
+  );
+}
+
+/** How far the first sync has got before the panel offers a fresh attempt. */
+const firstSyncLimit = 40;
+
+export default function ProfilePage() {
+  const [tick, setTick] = createSignal(0);
+  const [refreshing, setRefreshing] = createSignal(false);
+
+  const connected = statsCallbackConnected();
+
+  const [welcome, setWelcome] = createSignal(connected);
+  const [polls, setPolls] = createSignal(0);
+  const timezone = browserTimezoneOffset();
+
+  const profile = createMemo(() => runSpotify(getProfile()));
+
+  const stats = createMemo(() => {
+    tick();
+
+    return fetchStatus();
+  });
+
+  const currentlyPlaying = createMemo(() => {
+    tick();
+
+    return runSpotify(getCurrentlyPlaying());
+  });
+
+  // `latest` keeps the last settled value while a poll is in flight, so the
+  // 10-second refresh does not tear down and re-mount the dashboard (which can
+  // leave a `<Show>` child reading its narrowed accessor after it unmounts).
+  // It only throws before the first value arrives, which is the skeleton case.
+  const profileNow = () => {
+    try {
+      return latest(profile) ?? null;
+    } catch {
+      return null;
+    }
+  };
+
+  const statsNow = () => {
+    try {
+      return latest(stats) ?? null;
+    } catch {
+      return null;
+    }
+  };
+
+  const phase = createMemo(() =>
+    welcomePhase({
+      seenStatus: statsNow() !== null,
+      listenCount: statsNow()?.listenCount ?? 0,
+      lastSuccessAt: statsNow()?.lastSuccessAt ?? null,
+      lastError: statsNow()?.lastError ?? null,
+      polls: polls(),
+      pollLimit: firstSyncLimit,
+    }),
+  );
+
+  // The dashboard polls every 10s and each poll parses fresh objects, so
+  // `<For>` would rebuild the recent list (and reload its covers) every time.
+  // Reuse the previous object for a row that has not changed.
+  let previousRecent: TrackingStatus["recent"] = [];
+
+  const stableStats = createMemo(() => {
+    const status = statsNow();
+
+    if (!status) return null;
+
+    const recent = reuseUnchanged(
+      previousRecent,
+      status.recent,
+      (item) => `${item.playedAtMs}:${item.name}`,
+    );
+
+    previousRecent = recent;
+
+    return { ...status, recent };
+  });
+
+  const playingNow = () => {
+    try {
+      return latest(currentlyPlaying) ?? null;
+    } catch {
+      return null;
+    }
+  };
+
+  const insights = createInsightsDashboard({ timezone, statsNow });
+
   const queueRefresh = action(function* () {
     yield accountApi.refresh();
     setTick((value) => value + 1);
-    reloadInsights();
+    insights.reloadInsights();
   });
 
   const refreshStats = async () => {
@@ -629,69 +960,16 @@ export default function ProfilePage() {
     }
   };
 
-  // The connection landed: report the conversion once, then drop the one-shot
-  // flag from the URL so a reload does not replay it.
-  onSettled(() => {
-    if (!connected) return;
-    capture("stats_sync_enabled", {});
-    window.history.replaceState(null, "", window.location.pathname || "/");
+  useProfileEffects({
+    profileNow,
+    connected,
+    welcome,
+    phase,
+    statsNow,
+    setPolls,
+    setTick,
+    reloadInsights: insights.reloadInsights,
   });
-
-  // Watch the first sync land instead of leaving the page on zeros. The
-  // dashboard's own cadence is ten seconds, which is too slow to show anything
-  // happening; this polls only while the welcome panel is waiting.
-  createEffect(
-    () => welcome(),
-    (open) => {
-      if (!open) return;
-
-      const interval = setInterval(() => {
-        const current = phase();
-
-        if (current !== "connecting" && current !== "syncing") {
-          clearInterval(interval);
-
-          return;
-        }
-
-        setPolls((value) => value + 1);
-        setTick((value) => value + 1);
-      }, 1500);
-
-      return () => clearInterval(interval);
-    },
-  );
-
-  // Report the first sync separately from the connect click: it is the moment
-  // the feature actually starts working.
-  let firstSyncReported = false;
-  createEffect(
-    () => ({ phase: phase(), count: statsNow()?.listenCount ?? 0 }),
-    (current) => {
-      if (firstSyncReported || current.phase !== "ready") return;
-      firstSyncReported = true;
-      capture("stats_sync_first_sync", { listenCount: current.count });
-    },
-  );
-
-  let lastListenCount: number | null = null;
-  createEffect(
-    () => statsNow()?.listenCount,
-    (count) => {
-      if (count === undefined) return;
-
-      if (lastListenCount === null) {
-        lastListenCount = count;
-
-        return;
-      }
-
-      if (count !== lastListenCount) {
-        lastListenCount = count;
-        reloadInsights();
-      }
-    },
-  );
 
   createShortcut(
     ["r"],
@@ -700,143 +978,47 @@ export default function ProfilePage() {
   );
 
   return (
-    <main class="app-main flex-1 p-8 md:p-16">
-      <div class="space-y-8">
-        <Show when={welcome()}>
-          <StatsWelcome
-            phase={phase()}
-            listenCount={statsNow()?.listenCount ?? 0}
-            error={statsNow()?.lastError ?? null}
-            refreshing={refreshing()}
-            onRefresh={() => void refreshStats()}
-            onDismiss={() => setWelcome(false)}
-          />
-        </Show>
-        <Show when={playingNow()?.is_playing && playingNow()?.item}>
-          {(track) => (
-            <a
-              href={externalHref(track().external_urls.spotify)}
-              target="_blank"
-              rel="noopener"
-              class="content-fade-in group flex items-center gap-4 border-4 border-[#0a0a0a] bg-[#1DB954] p-4 text-[#0a0a0a] shadow-[8px_8px_0_#0a0a0a] transition hover:-translate-y-0.5 hover:shadow-[10px_10px_0_#0a0a0a]"
-            >
-              <img
-                src={
-                  track().album?.images?.[0]?.url ??
-                  track().images?.[0]?.url ??
-                  "/assets/placeholder.svg"
-                }
-                alt={track().name}
-                class="h-16 w-16 shrink-0 border-[3px] border-[#0a0a0a] object-cover"
-              />
-              <div class="min-w-0 flex-1">
-                <div class="mb-1 text-[0.65rem] font-black uppercase tracking-[0.25em]">
-                  Playing Now
-                </div>
-                <p class="truncate text-xl font-black uppercase tracking-tight md:text-2xl">
-                  {track().name}
-                </p>
-                <p class="truncate text-xs font-bold uppercase tracking-widest opacity-75">
-                  {track()
-                    .artists?.map((artist) => artist.name)
-                    .join(", ") ?? "Spotify"}
-                </p>
-              </div>
-              <span class="hidden shrink-0 border-[3px] border-[#0a0a0a] px-3 py-2 text-xs font-black uppercase tracking-widest transition group-hover:bg-[#0a0a0a] group-hover:text-[#1DB954] md:inline-block">
-                Open Spotify →
-              </span>
-            </a>
-          )}
-        </Show>
+    <ProfileDashboard
+      welcome={welcome()}
+      phase={phase()}
+      listenCount={statsNow()?.listenCount ?? 0}
+      error={statsNow()?.lastError ?? null}
+      playing={playingNow()?.is_playing ? (playingNow()?.item ?? null) : null}
+      profile={profileNow()}
+      stats={stableStats()}
+      insights={insights}
+      refreshing={refreshing()}
+      onRefresh={() => void refreshStats()}
+      onDismiss={() => setWelcome(false)}
+    />
+  );
+}
 
-        <div class="grid gap-8 xl:grid-cols-[minmax(0,1fr)_minmax(20rem,26rem)] xl:items-start">
-          <Show when={profileNow()} fallback={<ProfileHeaderSkeleton />}>
-            {(user) => <ProfileHeader user={user()} />}
-          </Show>
-
-          <aside class="order-2 xl:col-start-2 xl:row-span-2 xl:row-start-1">
-            <Show when={stableStats()} fallback={<StatsRailSkeleton />}>
-              {(status) => (
-                <StatsRail
-                  status={status()}
-                  refreshing={refreshing()}
-                  onRefresh={refreshStats}
-                />
-              )}
-            </Show>
-          </aside>
-
-          <div class="order-3 min-w-0 xl:col-start-1 xl:row-start-2">
-            <Show when={preview()}>
-              {(data) => (
-                <div class="content-fade-in">
-                  <ListeningInsights
-                    data={data()}
-                    onReload={reloadInsights}
-                    rangeLabel="Sample data"
-                    preview
-                    onExitPreview={exitPreview}
-                  />
-                </div>
-              )}
-            </Show>
-            <Show when={!preview() && readyInsights()}>
-              {(ready) => (
-                <div class="content-fade-in">
-                  <Show
-                    when={ready().state.data}
-                    fallback={
-                      <InsightsUnavailable
-                        message={
-                          ready().state.error ??
-                          "Insights could not be loaded. Try again."
-                        }
-                        onRetry={reloadInsights}
-                        onPreview={showPreview}
-                      />
-                    }
-                  >
-                    {(data) => (
-                      <Show
-                        when={
-                          data().totals.listens > 0 ||
-                          ready().status.listenCount > 0
-                        }
-                        fallback={
-                          <InsightsGate
-                            status={ready().status}
-                            refreshing={refreshing()}
-                            onPreview={showPreview}
-                            onRefresh={refreshStats}
-                          />
-                        }
-                      >
-                        <ListeningInsights
-                          data={data()}
-                          onReload={reloadInsights}
-                          rangeLabel={rangeLabel()}
-                          controls={
-                            <InsightsRangeControl
-                              value={range()}
-                              fromDate={fromDate()}
-                              toDate={toDate()}
-                              updating={insightsPending()}
-                              onChange={changeRange}
-                              onFromChange={changeFromDate}
-                              onToChange={changeToDate}
-                            />
-                          }
-                        />
-                      </Show>
-                    )}
-                  </Show>
-                </div>
-              )}
-            </Show>
-          </div>
-        </div>
+/** The three things listening insights will show. */
+function InsightsFeatureGrid() {
+  return (
+    <div class="mt-6 grid gap-3 sm:grid-cols-3">
+      <div class="border-[3px] border-[#0a0a0a] p-4">
+        <p class="text-xs font-black uppercase tracking-widest">
+          Top artists & tracks
+        </p>
+        <p class="mt-2 text-xs leading-6 text-[#5c5c5c]">
+          All-time favourites, not just Spotify's last 50 plays.
+        </p>
       </div>
-    </main>
+      <div class="border-[3px] border-[#0a0a0a] p-4">
+        <p class="text-xs font-black uppercase tracking-widest">When you listen</p>
+        <p class="mt-2 text-xs leading-6 text-[#5c5c5c]">
+          Your local hours, weekdays and the shape of the last year.
+        </p>
+      </div>
+      <div class="border-[3px] border-[#0a0a0a] p-4">
+        <p class="text-xs font-black uppercase tracking-widest">Streaks & quirks</p>
+        <p class="mt-2 text-xs leading-6 text-[#5c5c5c]">
+          Listening streaks, long-tail tracks and your night-owl share.
+        </p>
+      </div>
+    </div>
   );
 }
 
@@ -864,28 +1046,7 @@ function InsightsGate(props: {
           ? "Stats sync is on. Spotify's recent-play window lands shortly, then this page will fill in on its own."
           : "Spotistats can only graph the plays you choose to store. Connect listening stats to build a history Spotify does not keep, or preview the overview with sample data first."}
       </p>
-      <div class="mt-6 grid gap-3 sm:grid-cols-3">
-        <div class="border-[3px] border-[#0a0a0a] p-4">
-          <p class="text-xs font-black uppercase tracking-widest">
-            Top artists & tracks
-          </p>
-          <p class="mt-2 text-xs leading-6 text-[#5c5c5c]">
-            All-time favourites, not just Spotify's last 50 plays.
-          </p>
-        </div>
-        <div class="border-[3px] border-[#0a0a0a] p-4">
-          <p class="text-xs font-black uppercase tracking-widest">When you listen</p>
-          <p class="mt-2 text-xs leading-6 text-[#5c5c5c]">
-            Your local hours, weekdays and the shape of the last year.
-          </p>
-        </div>
-        <div class="border-[3px] border-[#0a0a0a] p-4">
-          <p class="text-xs font-black uppercase tracking-widest">Streaks & quirks</p>
-          <p class="mt-2 text-xs leading-6 text-[#5c5c5c]">
-            Listening streaks, long-tail tracks and your night-owl share.
-          </p>
-        </div>
-      </div>
+      <InsightsFeatureGrid />
       <Show when={props.status.lastError}>
         {(error) => (
           <pre class="mt-5 overflow-auto border-[3px] border-[#0a0a0a] bg-[#0a0a0a] p-3 text-xs text-red-500">

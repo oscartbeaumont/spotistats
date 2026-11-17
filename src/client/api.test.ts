@@ -1,6 +1,9 @@
 import { Effect } from "effect";
 import { HttpClientError, HttpClientRequest } from "effect/http";
+import { HttpApiError } from "effect/http-api";
 import { expect, it } from "vitest";
+
+import { UpstreamError } from "~/api";
 
 import { runApi } from "./api";
 import { authStore, setAuthStore } from "./storage";
@@ -11,7 +14,7 @@ it("does not let an old worker API request log out a new session", async () => {
 
   const request = runApi(Effect.tryPromise({
     try: () => new Promise<never>((_resolve, fail) => { reject = () => fail(new Error()); }),
-    catch: () => ({ _tag: "Unauthorized" as const }),
+    catch: () => new HttpApiError.Unauthorized({}),
   }));
 
   const result = expect(request).rejects.toThrow("401 Unauthorized");
@@ -23,7 +26,7 @@ it("does not let an old worker API request log out a new session", async () => {
 
 it("clears the rejected worker API session", async () => {
   setAuthStore({ status: "authenticated", accessToken: "Bearer token", linkToUri: false });
-  await expect(runApi(Effect.fail({ _tag: "Unauthorized" as const }))).rejects.toThrow("401 Unauthorized");
+  await expect(runApi(Effect.fail(new HttpApiError.Unauthorized({})))).rejects.toThrow("401 Unauthorized");
   expect(authStore()).toEqual({ status: "empty" });
 });
 
@@ -69,12 +72,12 @@ it("does not retry a failure the server answered", async () => {
 });
 
 /** The tagged error the worker's 502 decodes into, with Spotify's own status. */
-const upstreamFailure = (status: number) => ({
-  _tag: "UpstreamError" as const,
-  service: "spotify",
-  message: `Spotify API failed: ${status}`,
-  status,
-});
+const upstreamFailure = (status: number) =>
+  new UpstreamError({
+    service: "spotify",
+    message: `Spotify API failed: ${status}`,
+    status,
+  });
 
 it("retries a transient upstream failure instead of failing the page", async () => {
   setAuthStore({ status: "authenticated", accessToken: "Bearer token", linkToUri: false });
@@ -97,14 +100,16 @@ it("retries a transient upstream failure instead of failing the page", async () 
 it("does not retry an upstream rejection", async () => {
   setAuthStore({ status: "authenticated", accessToken: "Bearer token", linkToUri: false });
   let attempts = 0;
-  await expect(
-    runApi(
-      Effect.gen(function* () {
-        attempts += 1;
 
-        return yield* Effect.fail(upstreamFailure(400));
-      }),
-    ),
-  ).rejects.toMatchObject({ _tag: "UpstreamError", status: 400 });
+  const failure = runApi(
+    Effect.gen(function* () {
+      attempts += 1;
+
+      return yield* Effect.fail(upstreamFailure(400));
+    }),
+  );
+
+  await expect(failure).rejects.toBeInstanceOf(UpstreamError);
+  await expect(failure).rejects.toMatchObject({ status: 400 });
   expect(attempts).toBe(1);
 });

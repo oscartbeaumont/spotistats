@@ -82,25 +82,15 @@ interface CountRow {
   count: number;
 }
 
-export const readInsights = (
-  sql: SqlClient,
-  spotifyUserId: string,
-  query: InsightsQuery,
-) =>
+interface StatsBounds {
+  readonly spotifyUserId: string;
+  readonly fromMs: number;
+  readonly toMs: number;
+  readonly modifier: string;
+}
+
+const readTotals = (sql: SqlClient, bounds: StatsBounds) =>
   Effect.gen(function* () {
-    const now = Date.now();
-
-    const { fromMs, toMs } = resolveStatsWindow(
-      query.range,
-      query.tzOffset,
-      query.fromMs,
-      query.toMs,
-      now,
-    );
-
-    const modifier = timezoneModifier(query.tzOffset);
-    const trendUnit = toMs - fromMs <= 31 * DAY_MS ? "day" : "month";
-
     const [totals] = yield* sql<TotalsRow>`
       SELECT
         COUNT(*) AS listens,
@@ -110,23 +100,29 @@ export const readInsights = (
         MAX(l.played_at_ms) AS lastPlayedAtMs
       FROM spotify_listens l
       INNER JOIN spotify_tracks t ON t.spotify_track_id = l.spotify_track_id
-      WHERE l.spotify_user_id = ${spotifyUserId}
-        AND l.played_at_ms >= ${fromMs}
-        AND l.played_at_ms <= ${toMs}
+      WHERE l.spotify_user_id = ${bounds.spotifyUserId}
+        AND l.played_at_ms >= ${bounds.fromMs}
+        AND l.played_at_ms <= ${bounds.toMs}
     `.pipe(Effect.mapError(databaseError("Failed to read listening totals")));
 
-    const days = yield* sql<DayRow>`
-      SELECT
-        date(l.played_at_ms / 1000, 'unixepoch', ${modifier}) AS day,
-        COUNT(*) AS listens
-      FROM spotify_listens l
-      WHERE l.spotify_user_id = ${spotifyUserId}
-        AND l.played_at_ms >= ${fromMs}
-        AND l.played_at_ms <= ${toMs}
-      GROUP BY day
-      ORDER BY day ASC
-    `.pipe(Effect.mapError(databaseError("Failed to read listening days")));
+    return totals;
+  });
 
+const readDays = (sql: SqlClient, bounds: StatsBounds) =>
+  sql<DayRow>`
+    SELECT
+      date(l.played_at_ms / 1000, 'unixepoch', ${bounds.modifier}) AS day,
+      COUNT(*) AS listens
+    FROM spotify_listens l
+    WHERE l.spotify_user_id = ${bounds.spotifyUserId}
+      AND l.played_at_ms >= ${bounds.fromMs}
+      AND l.played_at_ms <= ${bounds.toMs}
+    GROUP BY day
+    ORDER BY day ASC
+  `.pipe(Effect.mapError(databaseError("Failed to read listening days")));
+
+const readArtistCount = (sql: SqlClient, bounds: StatsBounds) =>
+  Effect.gen(function* () {
     const [artistCount] = yield* sql<ArtistCountRow>`
       SELECT COUNT(DISTINCT json_extract(artist.value, '$.name')) AS artists
       FROM spotify_listens l
@@ -135,193 +131,277 @@ export const readInsights = (
           CASE WHEN json_valid(t.raw_json) THEN t.raw_json ELSE '{"artists":[]}' END,
           '$.artists'
         ) artist
-      WHERE l.spotify_user_id = ${spotifyUserId}
-        AND l.played_at_ms >= ${fromMs}
-        AND l.played_at_ms <= ${toMs}
+      WHERE l.spotify_user_id = ${bounds.spotifyUserId}
+        AND l.played_at_ms >= ${bounds.fromMs}
+        AND l.played_at_ms <= ${bounds.toMs}
     `.pipe(Effect.mapError(databaseError("Failed to count artists")));
 
-    const topTracks = yield* sql<TopTrackRow>`
-      SELECT
-        l.spotify_track_id AS trackId,
-        t.name AS name,
-        t.artist_names AS artistNames,
-        t.image_url AS imageUrl,
-        t.external_url AS externalUrl,
-        COUNT(*) AS listens
-      FROM spotify_listens l
-      INNER JOIN spotify_tracks t ON t.spotify_track_id = l.spotify_track_id
-      WHERE l.spotify_user_id = ${spotifyUserId}
-        AND l.played_at_ms >= ${fromMs}
-        AND l.played_at_ms <= ${toMs}
-      GROUP BY l.spotify_track_id
-      ORDER BY listens DESC, t.name ASC
-      LIMIT 5
-    `.pipe(Effect.mapError(databaseError("Failed to read top tracks")));
+    return artistCount;
+  });
 
-    const topArtists = yield* sql<TopArtistRow>`
-      SELECT
-        json_extract(artist.value, '$.name') AS name,
-        COUNT(*) AS listens,
-        COUNT(DISTINCT l.spotify_track_id) AS tracks
-      FROM spotify_listens l
-      INNER JOIN spotify_tracks t ON t.spotify_track_id = l.spotify_track_id,
-        json_each(
-          CASE WHEN json_valid(t.raw_json) THEN t.raw_json ELSE '{"artists":[]}' END,
-          '$.artists'
-        ) artist
-      WHERE l.spotify_user_id = ${spotifyUserId}
-        AND l.played_at_ms >= ${fromMs}
-        AND l.played_at_ms <= ${toMs}
-        AND json_extract(artist.value, '$.name') IS NOT NULL
-      GROUP BY 1
-      ORDER BY listens DESC, 1 ASC
-      LIMIT 5
-    `.pipe(Effect.mapError(databaseError("Failed to read top artists")));
+const readTopTracks = (sql: SqlClient, bounds: StatsBounds) =>
+  sql<TopTrackRow>`
+    SELECT
+      l.spotify_track_id AS trackId,
+      t.name AS name,
+      t.artist_names AS artistNames,
+      t.image_url AS imageUrl,
+      t.external_url AS externalUrl,
+      COUNT(*) AS listens
+    FROM spotify_listens l
+    INNER JOIN spotify_tracks t ON t.spotify_track_id = l.spotify_track_id
+    WHERE l.spotify_user_id = ${bounds.spotifyUserId}
+      AND l.played_at_ms >= ${bounds.fromMs}
+      AND l.played_at_ms <= ${bounds.toMs}
+    GROUP BY l.spotify_track_id
+    ORDER BY listens DESC, t.name ASC
+    LIMIT 5
+  `.pipe(Effect.mapError(databaseError("Failed to read top tracks")));
 
-    const hourRows = yield* sql<BucketRow>`
-      SELECT
-        strftime('%H', l.played_at_ms / 1000, 'unixepoch', ${modifier}) AS bucket,
-        COUNT(*) AS listens
-      FROM spotify_listens l
-      WHERE l.spotify_user_id = ${spotifyUserId}
-        AND l.played_at_ms >= ${fromMs}
-        AND l.played_at_ms <= ${toMs}
-      GROUP BY bucket
-    `.pipe(Effect.mapError(databaseError("Failed to read hourly listening")));
+const readTopArtists = (sql: SqlClient, bounds: StatsBounds) =>
+  sql<TopArtistRow>`
+    SELECT
+      json_extract(artist.value, '$.name') AS name,
+      COUNT(*) AS listens,
+      COUNT(DISTINCT l.spotify_track_id) AS tracks
+    FROM spotify_listens l
+    INNER JOIN spotify_tracks t ON t.spotify_track_id = l.spotify_track_id,
+      json_each(
+        CASE WHEN json_valid(t.raw_json) THEN t.raw_json ELSE '{"artists":[]}' END,
+        '$.artists'
+      ) artist
+    WHERE l.spotify_user_id = ${bounds.spotifyUserId}
+      AND l.played_at_ms >= ${bounds.fromMs}
+      AND l.played_at_ms <= ${bounds.toMs}
+      AND json_extract(artist.value, '$.name') IS NOT NULL
+    GROUP BY 1
+    ORDER BY listens DESC, 1 ASC
+    LIMIT 5
+  `.pipe(Effect.mapError(databaseError("Failed to read top artists")));
 
-    const weekdayRows = yield* sql<BucketRow>`
-      SELECT
-        CAST(
-          (CAST(strftime('%w', l.played_at_ms / 1000, 'unixepoch', ${modifier}) AS INTEGER) + 6) % 7
-          AS TEXT
-        ) AS bucket,
-        COUNT(*) AS listens
-      FROM spotify_listens l
-      WHERE l.spotify_user_id = ${spotifyUserId}
-        AND l.played_at_ms >= ${fromMs}
-        AND l.played_at_ms <= ${toMs}
-      GROUP BY bucket
-    `.pipe(Effect.mapError(databaseError("Failed to read weekly listening")));
+const readHourBuckets = (sql: SqlClient, bounds: StatsBounds) =>
+  sql<BucketRow>`
+    SELECT
+      strftime('%H', l.played_at_ms / 1000, 'unixepoch', ${bounds.modifier}) AS bucket,
+      COUNT(*) AS listens
+    FROM spotify_listens l
+    WHERE l.spotify_user_id = ${bounds.spotifyUserId}
+      AND l.played_at_ms >= ${bounds.fromMs}
+      AND l.played_at_ms <= ${bounds.toMs}
+    GROUP BY bucket
+  `.pipe(Effect.mapError(databaseError("Failed to read hourly listening")));
 
-    const trendRows =
-      trendUnit === "day"
-        ? yield* sql<TrendRow>`
-            SELECT
-              date(l.played_at_ms / 1000, 'unixepoch', ${modifier}) AS bucket,
-              COUNT(*) AS listens,
-              COALESCE(SUM(t.duration_ms), 0) AS listeningMs
-            FROM spotify_listens l
-            INNER JOIN spotify_tracks t ON t.spotify_track_id = l.spotify_track_id
-            WHERE l.spotify_user_id = ${spotifyUserId}
-              AND l.played_at_ms >= ${fromMs}
-              AND l.played_at_ms <= ${toMs}
-            GROUP BY bucket
-          `.pipe(Effect.mapError(databaseError("Failed to read daily listening")))
-        : yield* sql<TrendRow>`
-            SELECT
-              strftime('%Y-%m', l.played_at_ms / 1000, 'unixepoch', ${modifier}) AS bucket,
-              COUNT(*) AS listens,
-              COALESCE(SUM(t.duration_ms), 0) AS listeningMs
-            FROM spotify_listens l
-            INNER JOIN spotify_tracks t ON t.spotify_track_id = l.spotify_track_id
-            WHERE l.spotify_user_id = ${spotifyUserId}
-              AND l.played_at_ms >= ${fromMs}
-              AND l.played_at_ms <= ${toMs}
-            GROUP BY bucket
-          `.pipe(Effect.mapError(databaseError("Failed to read monthly listening")));
+const readWeekdayBuckets = (sql: SqlClient, bounds: StatsBounds) =>
+  sql<BucketRow>`
+    SELECT
+      CAST(
+        (CAST(strftime('%w', l.played_at_ms / 1000, 'unixepoch', ${bounds.modifier}) AS INTEGER) + 6) % 7
+        AS TEXT
+      ) AS bucket,
+      COUNT(*) AS listens
+    FROM spotify_listens l
+    WHERE l.spotify_user_id = ${bounds.spotifyUserId}
+      AND l.played_at_ms >= ${bounds.fromMs}
+      AND l.played_at_ms <= ${bounds.toMs}
+    GROUP BY bucket
+  `.pipe(Effect.mapError(databaseError("Failed to read weekly listening")));
 
+const readTrendRows = (
+  sql: SqlClient,
+  bounds: StatsBounds,
+  trendUnit: "day" | "month",
+) =>
+  trendUnit === "day"
+    ? sql<TrendRow>`
+        SELECT
+          date(l.played_at_ms / 1000, 'unixepoch', ${bounds.modifier}) AS bucket,
+          COUNT(*) AS listens,
+          COALESCE(SUM(t.duration_ms), 0) AS listeningMs
+        FROM spotify_listens l
+        INNER JOIN spotify_tracks t ON t.spotify_track_id = l.spotify_track_id
+        WHERE l.spotify_user_id = ${bounds.spotifyUserId}
+          AND l.played_at_ms >= ${bounds.fromMs}
+          AND l.played_at_ms <= ${bounds.toMs}
+        GROUP BY bucket
+      `.pipe(Effect.mapError(databaseError("Failed to read daily listening")))
+    : sql<TrendRow>`
+        SELECT
+          strftime('%Y-%m', l.played_at_ms / 1000, 'unixepoch', ${bounds.modifier}) AS bucket,
+          COUNT(*) AS listens,
+          COALESCE(SUM(t.duration_ms), 0) AS listeningMs
+        FROM spotify_listens l
+        INNER JOIN spotify_tracks t ON t.spotify_track_id = l.spotify_track_id
+        WHERE l.spotify_user_id = ${bounds.spotifyUserId}
+          AND l.played_at_ms >= ${bounds.fromMs}
+          AND l.played_at_ms <= ${bounds.toMs}
+        GROUP BY bucket
+      `.pipe(Effect.mapError(databaseError("Failed to read monthly listening")));
+
+const readOnePlayCount = (sql: SqlClient, bounds: StatsBounds) =>
+  Effect.gen(function* () {
     const [onePlay] = yield* sql<CountRow>`
       SELECT COUNT(*) AS count FROM (
         SELECT spotify_track_id
         FROM spotify_listens
-        WHERE spotify_user_id = ${spotifyUserId}
-          AND played_at_ms >= ${fromMs}
-          AND played_at_ms <= ${toMs}
+        WHERE spotify_user_id = ${bounds.spotifyUserId}
+          AND played_at_ms >= ${bounds.fromMs}
+          AND played_at_ms <= ${bounds.toMs}
         GROUP BY spotify_track_id
         HAVING COUNT(*) = 1
       )
     `.pipe(Effect.mapError(databaseError("Failed to count one-play tracks")));
 
-    const hours = Array.from({ length: 24 }, () => 0);
-
-    for (const row of hourRows) {
-      const hour = Number(row.bucket);
-
-      if (Number.isInteger(hour) && hour >= 0 && hour < 24) hours[hour] = row.listens;
-    }
-
-    const weekdays = Array.from({ length: 7 }, () => 0);
-
-    for (const row of weekdayRows) {
-      const day = Number(row.bucket);
-
-      if (Number.isInteger(day) && day >= 0 && day < 7) weekdays[day] = row.listens;
-    }
-
-    const busiestDay = days.reduce<DayRow | null>(
-      (best, row) => (best === null || row.listens > best.listens ? row : best),
-      null,
-    );
-
-    const endDay = localDay(toMs, query.tzOffset);
-    const endMonth = endDay.slice(0, 7);
-
-    const trendKeys =
-      trendUnit === "day"
-        ? dayKeysBetween(localDay(fromMs, query.tzOffset), endDay)
-        : monthKeysBetween(
-            fromMs === 0
-              ? shiftMonth(endMonth, -11)
-              : localDay(fromMs, query.tzOffset).slice(0, 7),
-            endMonth,
-            36,
-          );
-
-    const trendCounts = new Map(trendRows.map((row) => [row.bucket, row]));
-
-    const trend = trendKeys.map((bucket) => ({
-      bucket,
-      listens: trendCounts.get(bucket)?.listens ?? 0,
-      listeningMs: trendCounts.get(bucket)?.listeningMs ?? 0,
-    }));
-
-    return {
-      generatedAt: now,
-      totals: {
-        listens: totals?.listens ?? 0,
-        tracks: totals?.tracks ?? 0,
-        artists: artistCount?.artists ?? 0,
-        listeningMs: totals?.listeningMs ?? 0,
-        activeDays: days.length,
-        firstPlayedAtMs: totals?.firstPlayedAtMs ?? null,
-        lastPlayedAtMs: totals?.lastPlayedAtMs ?? null,
-      },
-      streak: computeStreaks(
-        days.map((row) => row.day),
-        endDay,
-      ),
-      hours,
-      weekdays,
-      trend,
-      trendUnit,
-      topTracks: topTracks.map((row) => ({
-        trackId: row.trackId,
-        name: row.name,
-        artistNames: row.artistNames,
-        imageUrl: row.imageUrl,
-        externalUrl: row.externalUrl,
-        listens: row.listens,
-      })),
-      topArtists,
-      onePlayTracks: onePlay?.count ?? 0,
-      lateNightListens:
-        (hours[22] ?? 0) + (hours[23] ?? 0) + (hours[0] ?? 0) +
-        (hours[1] ?? 0) + (hours[2] ?? 0) + (hours[3] ?? 0) + (hours[4] ?? 0),
-      busiestDay: busiestDay
-        ? { date: busiestDay.day, listens: busiestDay.listens }
-        : null,
-    } satisfies ListeningInsights;
+    return onePlay;
   });
+
+/** Fills a fixed-size bucket array from SQL rows, ignoring out-of-range keys. */
+function bucketCounts(rows: ReadonlyArray<BucketRow>, size: number): number[] {
+  const counts = Array.from({ length: size }, () => 0);
+
+  rows.forEach((row) => {
+    const bucket = Number(row.bucket);
+
+    if (Number.isInteger(bucket) && bucket >= 0 && bucket < size) {
+      counts[bucket] = row.listens;
+    }
+  });
+
+  return counts;
+}
+
+interface ListeningRows {
+  readonly totals: TotalsRow | undefined;
+  readonly days: ReadonlyArray<DayRow>;
+  readonly artistCount: ArtistCountRow | undefined;
+  readonly topTracks: ReadonlyArray<TopTrackRow>;
+  readonly topArtists: ReadonlyArray<TopArtistRow>;
+  readonly hourRows: ReadonlyArray<BucketRow>;
+  readonly weekdayRows: ReadonlyArray<BucketRow>;
+  readonly trendRows: ReadonlyArray<TrendRow>;
+  readonly onePlay: CountRow | undefined;
+}
+
+interface InsightsWindow {
+  readonly now: number;
+  readonly tzOffset: number;
+  readonly fromMs: number;
+  readonly toMs: number;
+  readonly trendUnit: "day" | "month";
+}
+
+function buildListeningInsights(
+  rows: ListeningRows,
+  window: InsightsWindow,
+): ListeningInsights {
+  const hours = bucketCounts(rows.hourRows, 24);
+  const weekdays = bucketCounts(rows.weekdayRows, 7);
+
+  const busiestDay = rows.days.reduce<DayRow | null>(
+    (best, row) => (best === null || row.listens > best.listens ? row : best),
+    null,
+  );
+
+  const endDay = localDay(window.toMs, window.tzOffset);
+  const endMonth = endDay.slice(0, 7);
+
+  const trendKeys =
+    window.trendUnit === "day"
+      ? dayKeysBetween(localDay(window.fromMs, window.tzOffset), endDay)
+      : monthKeysBetween(
+          window.fromMs === 0
+            ? shiftMonth(endMonth, -11)
+            : localDay(window.fromMs, window.tzOffset).slice(0, 7),
+          endMonth,
+          36,
+        );
+
+  const trendCounts = new Map(rows.trendRows.map((row) => [row.bucket, row]));
+
+  const trend = trendKeys.map((bucket) => ({
+    bucket,
+    listens: trendCounts.get(bucket)?.listens ?? 0,
+    listeningMs: trendCounts.get(bucket)?.listeningMs ?? 0,
+  }));
+
+  return {
+    generatedAt: window.now,
+    totals: {
+      listens: rows.totals?.listens ?? 0,
+      tracks: rows.totals?.tracks ?? 0,
+      artists: rows.artistCount?.artists ?? 0,
+      listeningMs: rows.totals?.listeningMs ?? 0,
+      activeDays: rows.days.length,
+      firstPlayedAtMs: rows.totals?.firstPlayedAtMs ?? null,
+      lastPlayedAtMs: rows.totals?.lastPlayedAtMs ?? null,
+    },
+    streak: computeStreaks(
+      rows.days.map((row) => row.day),
+      endDay,
+    ),
+    hours,
+    weekdays,
+    trend,
+    trendUnit: window.trendUnit,
+    topTracks: rows.topTracks.map((row) => ({
+      trackId: row.trackId,
+      name: row.name,
+      artistNames: row.artistNames,
+      imageUrl: row.imageUrl,
+      externalUrl: row.externalUrl,
+      listens: row.listens,
+    })),
+    topArtists: rows.topArtists,
+    onePlayTracks: rows.onePlay?.count ?? 0,
+    lateNightListens:
+      (hours[22] ?? 0) + (hours[23] ?? 0) + (hours[0] ?? 0) +
+      (hours[1] ?? 0) + (hours[2] ?? 0) + (hours[3] ?? 0) + (hours[4] ?? 0),
+    busiestDay: busiestDay
+      ? { date: busiestDay.day, listens: busiestDay.listens }
+      : null,
+  } satisfies ListeningInsights;
+}
+
+export const readInsights = (
+  sql: SqlClient,
+  spotifyUserId: string,
+  query: InsightsQuery,
+) =>
+  Effect.gen(function* () {
+    const now = Date.now();
+
+    const { fromMs, toMs } = resolveStatsWindow({
+      range: query.range,
+      tzOffset: query.tzOffset,
+      fromMs: query.fromMs,
+      toMs: query.toMs,
+      now,
+    });
+
+    const modifier = timezoneModifier(query.tzOffset);
+    const trendUnit = toMs - fromMs <= 31 * DAY_MS ? "day" : "month";
+    const bounds = { spotifyUserId, fromMs, toMs, modifier };
+
+    const rows: ListeningRows = {
+      totals: yield* readTotals(sql, bounds),
+      days: yield* readDays(sql, bounds),
+      artistCount: yield* readArtistCount(sql, bounds),
+      topTracks: yield* readTopTracks(sql, bounds),
+      topArtists: yield* readTopArtists(sql, bounds),
+      hourRows: yield* readHourBuckets(sql, bounds),
+      weekdayRows: yield* readWeekdayBuckets(sql, bounds),
+      trendRows: yield* readTrendRows(sql, bounds, trendUnit),
+      onePlay: yield* readOnePlayCount(sql, bounds),
+    };
+
+    return buildListeningInsights(rows, {
+      now,
+      tzOffset: query.tzOffset,
+      fromMs,
+      toMs,
+      trendUnit,
+    });
+  });
+
 
 interface ExportRow {
   id: string;

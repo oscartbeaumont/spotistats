@@ -44,21 +44,85 @@ const decodeManifestEntry = Schema.decodeUnknownOption(ManifestEntry);
 function shippedFiles(manifest: Schema.JsonObject): Set<string> {
   const shipped = new Set<string>();
 
-  for (const record of Object.values(manifest)) {
-    const entry = Option.getOrNull(decodeManifestEntry(record));
+  Object.values(manifest)
+    .map((record) => Option.getOrNull(decodeManifestEntry(record)))
+    .forEach((entry) => {
+      if (entry === null) return;
 
-    if (entry === null) continue;
-
-    for (const value of [
-      entry.file,
-      ...(entry.css ?? []),
-      ...(entry.assets ?? []),
-    ]) {
-      if (value !== undefined) shipped.add(path.basename(value));
-    }
-  }
+      if (entry.file !== undefined) shipped.add(path.basename(entry.file));
+      entry.css?.forEach((value) => shipped.add(path.basename(value)));
+      entry.assets?.forEach((value) => shipped.add(path.basename(value)));
+    });
 
   return shipped;
+}
+
+/** Replaces the client manifest baked into the Worker bundle with `manifest`. */
+function replaceBakedManifest(
+  code: string,
+  bundlePath: string,
+  manifest: Schema.JsonObject,
+): string {
+  const marker = code.indexOf("virtual:solid-manifest");
+  const declarationStart = marker < 0 ? -1 : code.indexOf("var ", marker);
+
+  const declaration =
+    declarationStart < 0
+      ? null
+      : /^var\s+([A-Za-z0-9_$]+)\s*=\s*\{/.exec(code.slice(declarationStart));
+
+  const declarationEnd = declaration
+    ? code.indexOf("\n};", declarationStart)
+    : -1;
+
+  if (!declaration || declarationEnd < 0) {
+    throw new Error(
+      `Could not find the Solid client manifest in ${bundlePath}. The Solid plugin falls back to its dev manifest when it has no client manifest, and that one carries no object to replace here: check that ${clientManifestPath} exists before the Worker build.`,
+    );
+  }
+
+  // The fallback build names the virtual manifest variable after the
+  // plugin's internal alias. A build that found a client manifest inlines
+  // it as `manifest` instead.
+  const replacement = `var ${declaration[1]} = ${JSON.stringify(manifest)};\n`;
+
+  return `${code.slice(0, declarationStart)}${replacement}${code.slice(declarationEnd + "\n};".length)}`;
+}
+
+/**
+ * Drops `$$moduleUrl` from a Worker entry's exports.
+ *
+ * Solid appends a `$$moduleUrl` export to every SSR module. The Worker entry
+ * re-exports it, but Workers module exports must be functions or handlers.
+ */
+function dropModuleUrlExport(code: string): string {
+  return code.replace(
+    /export\s*\{([^}]*)\}\s*;/g,
+    (_match, exports: string) => {
+      const kept = exports
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter((entry) => entry && entry !== "$$moduleUrl");
+
+      return kept.length > 0 ? `export { ${kept.join(", ")} };` : "";
+    },
+  );
+}
+
+/** Removes chunks the early client build left behind in `assets/`. */
+function pruneStaleAssets(outDir: string, manifest: Schema.JsonObject): void {
+  const shipped = shippedFiles(manifest);
+  const assetsDir = path.join(outDir, "assets");
+
+  if (!existsSync(assetsDir)) return;
+
+  for (const name of readdirSync(assetsDir)) {
+    // Only scripts and their maps: `assets/` also holds the public images.
+    if (!/\.m?js(?:\.map)?$/.test(name)) continue;
+
+    if (shipped.has(name.replace(/\.map$/, ""))) continue;
+    rmSync(path.join(assetsDir, name));
+  }
 }
 
 /**
@@ -122,46 +186,9 @@ function solidClientManifest(): Plugin {
       };
 
       const code = readFileSync(bundlePath, "utf8");
-      const marker = code.indexOf("virtual:solid-manifest");
-      const declarationStart = marker < 0 ? -1 : code.indexOf("var ", marker);
+      const withManifest = replaceBakedManifest(code, bundlePath, manifest);
 
-      const declaration =
-        declarationStart < 0
-          ? null
-          : /^var\s+([A-Za-z0-9_$]+)\s*=\s*\{/.exec(code.slice(declarationStart));
-
-      const declarationEnd = declaration
-        ? code.indexOf("\n};", declarationStart)
-        : -1;
-
-      if (!declaration || declarationEnd < 0) {
-        throw new Error(
-          `Could not find the Solid client manifest in ${bundlePath}. The Solid plugin falls back to its dev manifest when it has no client manifest, and that one carries no object to replace here: check that ${clientManifestPath} exists before the Worker build.`,
-        );
-      }
-
-      // The fallback build names the virtual manifest variable after the
-      // plugin's internal alias. A build that found a client manifest inlines
-      // it as `manifest` instead.
-      const replacement = `var ${declaration[1]} = ${JSON.stringify(manifest)};\n`;
-      const withManifest = `${code.slice(0, declarationStart)}${replacement}${code.slice(declarationEnd + "\n};".length)}`;
-
-      // Solid appends a `$$moduleUrl` export to every SSR module. The Worker
-      // entry re-exports it, but Workers module exports must be functions or
-      // handlers. Drop it from the entry's export list.
-      const patched = withManifest.replace(
-        /export\s*\{([^}]*)\}\s*;/g,
-        (_match, exports: string) => {
-          const kept = exports
-            .split(",")
-            .map((entry) => entry.trim())
-            .filter((entry) => entry && entry !== "$$moduleUrl");
-
-          return kept.length > 0 ? `export { ${kept.join(", ")} };` : "";
-        },
-      );
-
-      writeFileSync(bundlePath, patched);
+      writeFileSync(bundlePath, dropModuleUrlExport(withManifest));
 
       mkdirSync(path.dirname(clientManifestPath), { recursive: true });
       writeFileSync(clientManifestPath, JSON.stringify(manifest));
@@ -169,18 +196,7 @@ function solidClientManifest(): Plugin {
       // The early client build wrote its chunks into the same directory, and
       // its hashes do not survive the Worker build, so nothing can request
       // them. Drop them rather than uploading two builds' worth of assets.
-      const shipped = shippedFiles(manifest);
-      const assetsDir = path.join(outDir, "assets");
-
-      if (!existsSync(assetsDir)) return;
-
-      for (const name of readdirSync(assetsDir)) {
-        // Only scripts and their maps: `assets/` also holds the public images.
-        if (!/\.m?js(?:\.map)?$/.test(name)) continue;
-
-        if (shipped.has(name.replace(/\.map$/, ""))) continue;
-        rmSync(path.join(assetsDir, name));
-      }
+      pruneStaleAssets(outDir, manifest);
     },
   };
 }

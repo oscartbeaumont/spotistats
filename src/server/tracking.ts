@@ -9,6 +9,7 @@ import {
   UpstreamError,
 } from "~/api";
 import { authorizationExpiry } from "~/lib/authorization";
+import { firstImageUrl } from "~/lib/images";
 
 import { exportCsv, readExport, readInsights } from "./insights";
 import {
@@ -361,49 +362,60 @@ const make = Effect.gen(function* () {
       );
 
       const now = Date.now();
-      const playedAtMsValues: number[] = [];
 
-      for (const item of items) {
-        if (!item.track.id) continue;
+      const plays = items.flatMap((item) => {
+        const trackId = item.track.id;
+
+        if (!trackId) return [];
+
         const playedAtMs = Date.parse(item.played_at);
 
-        if (!Number.isFinite(playedAtMs)) continue;
-        playedAtMsValues.push(playedAtMs);
-        const image = item.track.album?.images?.[0]?.url ?? null;
-        const artists = item.track.artists?.map((artist) => artist.name).join(", ") ?? "";
-        const raw = JSON.stringify(item.track);
+        return Number.isFinite(playedAtMs) ? [{ item, trackId, playedAtMs }] : [];
+      });
 
-        yield* sql`
-          INSERT INTO spotify_tracks
-            (spotify_track_id, name, album_name, artist_names, duration_ms, uri, external_url, image_url, raw_json, updated_at)
-          VALUES (
-            ${item.track.id}, ${item.track.name}, ${item.track.album?.name ?? null}, ${artists},
-            ${item.track.duration_ms}, ${item.track.uri}, ${item.track.external_urls?.spotify ?? null},
-            ${image}, ${raw}, ${now}
-          )
-          ON CONFLICT(spotify_track_id) DO UPDATE SET
-            name = excluded.name,
-            album_name = excluded.album_name,
-            artist_names = excluded.artist_names,
-            duration_ms = excluded.duration_ms,
-            uri = excluded.uri,
-            external_url = excluded.external_url,
-            image_url = excluded.image_url,
-            raw_json = excluded.raw_json,
-            updated_at = excluded.updated_at
-        `.pipe(Effect.mapError(databaseError("Failed to upsert track")));
+      yield* Effect.forEach(
+        plays,
+        ({ item, trackId, playedAtMs }) =>
+          Effect.gen(function* () {
+            const image = firstImageUrl(item.track.album?.images) ?? null;
+            const artists = item.track.artists?.map((artist) => artist.name).join(", ") ?? "";
+            const raw = JSON.stringify(item.track);
 
-        yield* sql`
-          INSERT INTO spotify_listens
-            (id, spotify_user_id, spotify_track_id, played_at, played_at_ms, context_type, context_uri, raw_json, created_at)
-          VALUES (
-            ${listenId(spotifyUserId, item.track.id, playedAtMs)}, ${spotifyUserId}, ${item.track.id},
-            ${item.played_at}, ${playedAtMs}, ${item.context?.type ?? null}, ${item.context?.uri ?? null},
-            ${JSON.stringify(item)}, ${now}
-          )
-          ON CONFLICT DO NOTHING
-        `.pipe(Effect.mapError(databaseError("Failed to insert listen")));
-      }
+            yield* sql`
+              INSERT INTO spotify_tracks
+                (spotify_track_id, name, album_name, artist_names, duration_ms, uri, external_url, image_url, raw_json, updated_at)
+              VALUES (
+                ${trackId}, ${item.track.name}, ${item.track.album?.name ?? null}, ${artists},
+                ${item.track.duration_ms}, ${item.track.uri}, ${item.track.external_urls?.spotify ?? null},
+                ${image}, ${raw}, ${now}
+              )
+              ON CONFLICT(spotify_track_id) DO UPDATE SET
+                name = excluded.name,
+                album_name = excluded.album_name,
+                artist_names = excluded.artist_names,
+                duration_ms = excluded.duration_ms,
+                uri = excluded.uri,
+                external_url = excluded.external_url,
+                image_url = excluded.image_url,
+                raw_json = excluded.raw_json,
+                updated_at = excluded.updated_at
+            `.pipe(Effect.mapError(databaseError("Failed to upsert track")));
+
+            yield* sql`
+              INSERT INTO spotify_listens
+                (id, spotify_user_id, spotify_track_id, played_at, played_at_ms, context_type, context_uri, raw_json, created_at)
+              VALUES (
+                ${listenId(spotifyUserId, trackId, playedAtMs)}, ${spotifyUserId}, ${trackId},
+                ${item.played_at}, ${playedAtMs}, ${item.context?.type ?? null}, ${item.context?.uri ?? null},
+                ${JSON.stringify(item)}, ${now}
+              )
+              ON CONFLICT DO NOTHING
+            `.pipe(Effect.mapError(databaseError("Failed to insert listen")));
+          }),
+        { concurrency: 1 },
+      );
+
+      const playedAtMsValues = plays.map((play) => play.playedAtMs);
 
       const watermark = nextWatermark(
         items.length,
@@ -477,9 +489,12 @@ export interface TrackingService {
 
 export class Tracking extends Context.Service<Tracking, TrackingService>()(
   "spotistats/Tracking",
-) {}
+) {
+  static readonly make = make;
+  static readonly layer = Layer.effect(this, this.make);
+}
 
 export const TrackingLive = (queue: Queue<SyncQueueMessage>) =>
-  Layer.effect(Tracking, make).pipe(
+  Tracking.layer.pipe(
     Layer.provide(Layer.succeed(SyncQueue, queue)),
   );

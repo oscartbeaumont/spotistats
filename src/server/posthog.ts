@@ -43,7 +43,7 @@ export function proxyPostHog(request: Request): Promise<Response> {
 
   for (const name of privateHeaders) headers.delete(name);
 
-  for (const name of [...headers.keys()]) {
+  for (const name of Array.from(headers.keys())) {
     if (name.startsWith("cf-")) headers.delete(name);
   }
 

@@ -196,18 +196,26 @@ export function startOfLocalDay(ms: number, tzOffset: number) {
   return Math.floor(local / DAY_MS) * DAY_MS + offset * 60_000;
 }
 
+export interface StatsWindowInput {
+  readonly range: InsightsRange;
+  readonly tzOffset: number;
+  readonly fromMs?: number | null;
+  readonly toMs?: number | null;
+  readonly now?: number;
+}
+
 /**
  * Turns a range choice into concrete UTC bounds. Presets start at local
  * midnight so "last 7 days" is exactly seven local calendar days, and custom
  * ranges are clamped to the past.
  */
-export function resolveStatsWindow(
-  range: InsightsRange,
-  tzOffset: number,
-  fromMs: number | null = null,
-  toMs: number | null = null,
+export function resolveStatsWindow({
+  range,
+  tzOffset,
+  fromMs = null,
+  toMs = null,
   now = Date.now(),
-): StatsWindow {
+}: StatsWindowInput): StatsWindow {
   const today = startOfLocalDay(now, tzOffset);
 
   switch (range) {

@@ -115,6 +115,113 @@ function SampleTeaser() {
   );
 }
 
+/** The signed-out header, with the maker credit. */
+function LoginHeader() {
+  return (
+    <header class="flex items-center justify-between border-b-4 border-[#0a0a0a] p-5">
+      <span class="font-black text-xl tracking-tighter uppercase">
+        SPOTISTATS
+      </span>
+      <span class="hidden text-[0.65rem] uppercase tracking-[0.2em] text-[#5c5c5c] sm:block">
+        Created by{" "}
+        <a
+          href="https://otbeaumont.me"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="underline-offset-2 hover:underline"
+        >
+          Oscar Beaumont
+        </a>
+      </span>
+    </header>
+  );
+}
+
+/** The pitch beside the sign-in card, including the last failure. */
+function LoginPitch() {
+  return (
+    <>
+      <div class="flex items-center gap-2.5">
+        <span class="h-2.5 w-2.5 bg-[#1DB954]" />
+        <span class="text-[0.65rem] uppercase tracking-[0.25em] text-[#5c5c5c]">
+          Your Spotify, decoded
+        </span>
+      </div>
+
+      <h1 class="mt-5 text-6xl font-black uppercase leading-[0.88] tracking-[-0.055em] sm:text-7xl xl:text-[88px]">
+        <span class="block">Listen.</span>
+        <span class="block">Learn.</span>
+        <span class="block">Repeat.</span>
+      </h1>
+
+      <p class="mt-6 max-w-[470px] text-sm leading-7 text-[#555]">
+        Spotify only shows you the last few plays. Spotistats keeps the
+        long view, then turns it into streaks, top artists, and the shape
+        of your year.
+      </p>
+
+      <Show when={loginError()}>
+        <pre
+          role="alert"
+          class="mt-6 max-w-[540px] whitespace-pre-wrap break-words border-4 border-[#0a0a0a] bg-[#0a0a0a] p-3 text-xs font-bold text-red-500"
+        >
+          Sign-in failed: {loginError()}
+        </pre>
+      </Show>
+    </>
+  );
+}
+
+/** The opt-in explanation and the Spotify connect button. */
+function SignInCard(props: { signingIn: boolean; onSignIn: () => void }) {
+  return (
+    <div class="mt-7 w-full max-w-[540px] border-4 border-[#0a0a0a] bg-[#f0ede8] p-5 shadow-[8px_8px_0_#0a0a0a]">
+      <div class="text-[0.6rem] font-black uppercase tracking-[0.2em] text-[#5c5c5c]">
+        Three steps to your stats
+      </div>
+      <ol class="mt-4 space-y-3">
+        <For each={steps}>
+          {(step, index) => (
+            <li class="flex items-center gap-3">
+              <span
+                class={`flex h-6 w-6 shrink-0 items-center justify-center border-2 border-[#0a0a0a] text-[0.6rem] font-black ${
+                  index() === 0 ? "bg-[#1DB954]" : ""
+                }`}
+              >
+                {index() + 1}
+              </span>
+              <span class="text-[0.65rem] font-black uppercase tracking-wider">
+                {step}
+              </span>
+            </li>
+          )}
+        </For>
+      </ol>
+      <button
+        type="button"
+        disabled={props.signingIn}
+        onClick={props.onSignIn}
+        class="mt-5 flex w-full items-center justify-center gap-3 border-4 border-[#0a0a0a] bg-[#1DB954] px-4 py-3 text-xs font-black uppercase tracking-widest transition hover:bg-[#0a0a0a] hover:text-[#1DB954] disabled:opacity-60"
+      >
+        {props.signingIn ? "CONNECTING_" : "CONNECT SPOTIFY"}
+        <span aria-hidden="true">→</span>
+      </button>
+      <p class="mt-3 text-[0.6rem] leading-5 text-[#5c5c5c]">
+        Stats sync is opt-in. Delete your history whenever you want.
+      </p>
+      <p class="mt-2 text-[0.6rem] leading-5 text-[#5c5c5c]">
+        <a href="/privacy" class="underline hover:text-[#0a0a0a]">
+          Privacy
+        </a>
+        {" · "}
+        <a href="/security" class="underline hover:text-[#0a0a0a]">
+          Security
+        </a>
+      </p>
+    </div>
+  );
+}
+
 export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -144,98 +251,16 @@ export default function LoginPage() {
 
   return (
     <div class="flex min-h-screen flex-col">
-      <header class="flex items-center justify-between border-b-4 border-[#0a0a0a] p-5">
-        <span class="font-black text-xl tracking-tighter uppercase">
-          SPOTISTATS
-        </span>
-        <span class="hidden text-[0.65rem] uppercase tracking-[0.2em] text-[#5c5c5c] sm:block">
-          Created by{" "}
-          <a
-            href="https://otbeaumont.me"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="underline-offset-2 hover:underline"
-          >
-            Oscar Beaumont
-          </a>
-        </span>
-      </header>
+      <LoginHeader />
 
       <main class="p-5 py-10 md:p-10 lg:p-12">
         <div class="mx-auto grid w-full max-w-[1440px] gap-12 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] xl:items-center xl:gap-16">
           <section class="min-w-0">
-            <div class="flex items-center gap-2.5">
-              <span class="h-2.5 w-2.5 bg-[#1DB954]" />
-              <span class="text-[0.65rem] uppercase tracking-[0.25em] text-[#5c5c5c]">
-                Your Spotify, decoded
-              </span>
-            </div>
-
-            <h1 class="mt-5 text-6xl font-black uppercase leading-[0.88] tracking-[-0.055em] sm:text-7xl xl:text-[88px]">
-              <span class="block">Listen.</span>
-              <span class="block">Learn.</span>
-              <span class="block">Repeat.</span>
-            </h1>
-
-            <p class="mt-6 max-w-[470px] text-sm leading-7 text-[#555]">
-              Spotify only shows you the last few plays. Spotistats keeps the
-              long view, then turns it into streaks, top artists, and the shape
-              of your year.
-            </p>
-
-            <Show when={loginError()}>
-              <pre
-                role="alert"
-                class="mt-6 max-w-[540px] whitespace-pre-wrap break-words border-4 border-[#0a0a0a] bg-[#0a0a0a] p-3 text-xs font-bold text-red-500"
-              >
-                Sign-in failed: {loginError()}
-              </pre>
-            </Show>
-
-            <div class="mt-7 w-full max-w-[540px] border-4 border-[#0a0a0a] bg-[#f0ede8] p-5 shadow-[8px_8px_0_#0a0a0a]">
-              <div class="text-[0.6rem] font-black uppercase tracking-[0.2em] text-[#5c5c5c]">
-                Three steps to your stats
-              </div>
-              <ol class="mt-4 space-y-3">
-                <For each={steps}>
-                  {(step, index) => (
-                    <li class="flex items-center gap-3">
-                      <span
-                        class={`flex h-6 w-6 shrink-0 items-center justify-center border-2 border-[#0a0a0a] text-[0.6rem] font-black ${
-                          index() === 0 ? "bg-[#1DB954]" : ""
-                        }`}
-                      >
-                        {index() + 1}
-                      </span>
-                      <span class="text-[0.65rem] font-black uppercase tracking-wider">
-                        {step}
-                      </span>
-                    </li>
-                  )}
-                </For>
-              </ol>
-              <button
-                type="button"
-                disabled={signingIn()}
-                onClick={() => void signIn()}
-                class="mt-5 flex w-full items-center justify-center gap-3 border-4 border-[#0a0a0a] bg-[#1DB954] px-4 py-3 text-xs font-black uppercase tracking-widest transition hover:bg-[#0a0a0a] hover:text-[#1DB954] disabled:opacity-60"
-              >
-                {signingIn() ? "CONNECTING_" : "CONNECT SPOTIFY"}
-                <span aria-hidden="true">→</span>
-              </button>
-              <p class="mt-3 text-[0.6rem] leading-5 text-[#5c5c5c]">
-                Stats sync is opt-in. Delete your history whenever you want.
-              </p>
-              <p class="mt-2 text-[0.6rem] leading-5 text-[#5c5c5c]">
-                <a href="/privacy" class="underline hover:text-[#0a0a0a]">
-                  Privacy
-                </a>
-                {" · "}
-                <a href="/security" class="underline hover:text-[#0a0a0a]">
-                  Security
-                </a>
-              </p>
-            </div>
+            <LoginPitch />
+            <SignInCard
+              signingIn={signingIn()}
+              onSignIn={() => void signIn()}
+            />
           </section>
 
           <section class="min-w-0">

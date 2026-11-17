@@ -30,17 +30,21 @@ export const readDiscoveryHistory = Effect.fn("readDiscoveryHistory")(function* 
 });
 
 export const readKnownTracks = Effect.fn("readKnownTracks")(function* (sql: SqlClient, userId: string, ids: readonly string[]) {
-  const known: string[] = [];
-
   // D1 permits 100 bindings per statement; leave room for the account filter.
-  for (let offset = 0; offset < ids.length; offset += 90) {
-    const rows = yield* sql<{ id: string }>`
-      SELECT DISTINCT spotify_track_id AS id FROM spotify_listens
-      WHERE spotify_user_id = ${userId} AND ${sql.in("spotify_track_id", ids.slice(offset, offset + 90))}
-    `.pipe(Effect.mapError(databaseError));
+  const offsets = Array.from(
+    { length: Math.ceil(ids.length / 90) },
+    (_, index) => index * 90,
+  );
 
-    known.push(...rows.map((row) => row.id));
-  }
+  const batches = yield* Effect.forEach(
+    offsets,
+    (offset) =>
+      sql<{ id: string }>`
+        SELECT DISTINCT spotify_track_id AS id FROM spotify_listens
+        WHERE spotify_user_id = ${userId} AND ${sql.in("spotify_track_id", ids.slice(offset, offset + 90))}
+      `.pipe(Effect.mapError(databaseError)),
+    { concurrency: 1 },
+  );
 
-  return known;
+  return batches.flatMap((rows) => rows.map((row) => row.id));
 });

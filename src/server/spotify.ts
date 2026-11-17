@@ -332,9 +332,12 @@ export interface SpotifyService {
 
 export class Spotify extends Context.Service<Spotify, SpotifyService>()(
   "spotistats/Spotify",
-) {}
+) {
+  static readonly make = make;
+  static readonly layer = Layer.effect(this, this.make);
+}
 
 export const SpotifyLive = (credentials: SpotifyCredentialsValue) =>
-  Layer.effect(Spotify, make).pipe(
+  Spotify.layer.pipe(
     Layer.provide(Layer.succeed(SpotifyCredentials, credentials)),
   );

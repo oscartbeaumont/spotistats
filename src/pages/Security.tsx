@@ -1,70 +1,75 @@
 import { LegalLayout } from "~/components/LegalLayout";
 
-/**
- * The security policy.
- *
- * The machine-readable summary is served from `/.well-known/security.txt`,
- * which points back at this page.
- */
-export default function SecurityPage() {
+/** How to report a security issue, and what makes a useful report. */
+function ReportingSection() {
   return (
-    <LegalLayout title="Security Policy" updated="22 October 2026">
-      <section>
-        <h2 class="mb-2 text-xs font-black uppercase tracking-[0.2em]">
-          Reporting a vulnerability
-        </h2>
-        <p>
-          Please report security issues privately through{" "}
-          <a
-            href="https://github.com/oscartbeaumont/spotistats/security/advisories/new"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="font-bold underline"
-          >
-            GitHub's private security advisories
-          </a>
-          . Do not open a public issue for a suspected vulnerability.
-        </p>
-        <p class="mt-3">
-          Include enough detail to reproduce the problem: the URL, the steps,
-          and what you expected to happen. We will acknowledge the report and
-          keep you updated as we investigate.
-        </p>
-      </section>
+    <section>
+      <h2 class="mb-2 text-xs font-black uppercase tracking-[0.2em]">
+        Reporting a vulnerability
+      </h2>
+      <p>
+        Please report security issues privately through{" "}
+        <a
+          href="https://github.com/oscartbeaumont/spotistats/security/advisories/new"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="font-bold underline"
+        >
+          GitHub's private security advisories
+        </a>
+        . Do not open a public issue for a suspected vulnerability.
+      </p>
+      <p class="mt-3">
+        Include enough detail to reproduce the problem: the URL, the steps,
+        and what you expected to happen. We will acknowledge the report and
+        keep you updated as we investigate.
+      </p>
+    </section>
+  );
+}
 
-      <section>
-        <h2 class="mb-2 text-xs font-black uppercase tracking-[0.2em]">
-          Scope
-        </h2>
-        <p>In scope:</p>
-        <ul class="mt-2 list-disc space-y-2 pl-5">
-          <li>
-            The Spotistats web app at{" "}
-            <code>spotistats.otbeaumont.me</code> and its API.
-          </li>
-          <li>The source in this repository, including the worker.</li>
-          <li>
-            Authentication and session handling, including the listening-stats
-            OAuth flow.
-          </li>
-          <li>
-            Access to another user's stored listening history or tokens.
-          </li>
-        </ul>
-        <p class="mt-3">Out of scope:</p>
-        <ul class="mt-2 list-disc space-y-2 pl-5">
-          <li>Spotify's own services and APIs.</li>
-          <li>
-            Denial of service, spam, or automated traffic against the hosted
-            site.
-          </li>
-          <li>
-            Reports from automated scanners without a concrete, exploitable
-            finding.
-          </li>
-        </ul>
-      </section>
+/** What the policy covers, and what does not need a report. */
+function ScopeSection() {
+  return (
+    <section>
+      <h2 class="mb-2 text-xs font-black uppercase tracking-[0.2em]">
+        Scope
+      </h2>
+      <p>In scope:</p>
+      <ul class="mt-2 list-disc space-y-2 pl-5">
+        <li>
+          The Spotistats web app at{" "}
+          <code>spotistats.otbeaumont.me</code> and its API.
+        </li>
+        <li>The source in this repository, including the worker.</li>
+        <li>
+          Authentication and session handling, including the listening-stats
+          OAuth flow.
+        </li>
+        <li>
+          Access to another user's stored listening history or tokens.
+        </li>
+      </ul>
+      <p class="mt-3">Out of scope:</p>
+      <ul class="mt-2 list-disc space-y-2 pl-5">
+        <li>Spotify's own services and APIs.</li>
+        <li>
+          Denial of service, spam, or automated traffic against the hosted
+          site.
+        </li>
+        <li>
+          Reports from automated scanners without a concrete, exploitable
+          finding.
+        </li>
+      </ul>
+    </section>
+  );
+}
 
+/** The behaviour the policy asks researchers to avoid, and where to read it. */
+function ResearchRulesSection() {
+  return (
+    <>
       <section>
         <h2 class="mb-2 text-xs font-black uppercase tracking-[0.2em]">
           Please don't
@@ -90,6 +95,22 @@ export default function SecurityPage() {
           .
         </p>
       </section>
+    </>
+  );
+}
+
+/**
+ * The security policy.
+ *
+ * The machine-readable summary is served from `/.well-known/security.txt`,
+ * which points back at this page.
+ */
+export default function SecurityPage() {
+  return (
+    <LegalLayout title="Security Policy" updated="22 October 2026">
+      <ReportingSection />
+      <ScopeSection />
+      <ResearchRulesSection />
     </LegalLayout>
   );
 }

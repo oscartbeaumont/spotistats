@@ -11,6 +11,7 @@ import {
   playlistTrack,
   runSpotify,
   SpotifyProfile,
+  SpotifyResponseError,
 } from "./spotify";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -162,8 +163,13 @@ describe("saved album decoding", () => {
 
   it("names the endpoint in a shape failure, not a fake status", async () => {
     respond({ items: "not a page" });
-    await expect(runSpotify(getSavedAlbumsPage())).rejects.toMatchObject({
-      _tag: "SpotifyResponseError",
+
+    const failure: unknown = await runSpotify(getSavedAlbumsPage()).catch(
+      (error: SpotifyResponseError) => error,
+    );
+
+    expect(failure).toBeInstanceOf(SpotifyResponseError);
+    expect(failure).toMatchObject({
       message: "Spotistats: unexpected response from /v1/me/albums",
     });
   });

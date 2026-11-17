@@ -53,7 +53,7 @@ async function mapLimit<T, R>(
   limit: number,
   work: (item: T, index: number) => Promise<R>,
 ): Promise<R[]> {
-  const results = new Array<R>(items.length);
+  const results: R[] = [];
   const entries = items.map((item, index) => ({ item, index }));
   let next = 0;
 

@@ -11,6 +11,15 @@ import { spotifyClientId, spotifyScopes } from "./spotify";
 
 /** Browser PKCE login and callback handling for the user session token. */
 
+/** The store in the middle of a sign-in, before Spotify returns a code. */
+type AuthenticatingAuthStore = {
+  status: "authenticating";
+  stateToken: string;
+  codeVerifier: string;
+  linkToUri: boolean;
+  returnTo?: "/discover";
+};
+
 /**
  * The most recent login failure, shown on the sign-in page. A failed token
  * exchange used to silently bounce the user back to an unexplained login
@@ -66,20 +75,28 @@ export async function createLoginUrl(origin: string, playlistWrite = false) {
   const verifier = randomString(96);
   const redirectOrigin = spotifyRedirectOrigin(origin);
   setLoginError(null);
-  setAuthStore({
+
+  const pendingAuth: AuthenticatingAuthStore = {
     status: "authenticating",
     stateToken: token,
     codeVerifier: verifier,
     linkToUri: false,
-    ...(playlistWrite ? { returnTo: "/discover" as const } : {}),
-  });
+  };
+
+  if (playlistWrite) pendingAuth.returnTo = "/discover";
+
+  setAuthStore(pendingAuth);
+
+  const scopes = [...spotifyScopes];
+
+  if (playlistWrite) scopes.push("playlist-modify-private");
 
   const params = new URLSearchParams({
     client_id: spotifyClientId,
     response_type: "code",
     redirect_uri: redirectOrigin,
     state: token,
-    scope: [...spotifyScopes, ...(playlistWrite ? ["playlist-modify-private"] : [])].join(" "),
+    scope: scopes.join(" "),
     code_challenge_method: "S256",
     code_challenge: await createPkceChallenge(verifier),
   });
@@ -100,6 +117,53 @@ export function hasSpotifyCallbackResult() {
   );
 }
 
+/** Clears the OAuth query string from the address bar. */
+function cleanCallbackUrl(): void {
+  history.replaceState(null, "", window.location.pathname || "/");
+}
+
+/** Records a failed sign-in and returns the "handled" result the caller expects. */
+function reportLoginFailure(
+  reason: LoginFailureReason,
+  message: string,
+  cause: unknown,
+): true {
+  console.error("Spotify login failed:", cause);
+  capture("login_failed", { reason });
+  setLoginError(message);
+  setAuthStore({ status: "empty" });
+  cleanCallbackUrl();
+
+  return true;
+}
+
+/** Explains a consent screen the user cancelled or Spotify could not show. */
+function reportSpotifyDenial(spotifyError: string): true {
+  // Cancelling or failing the consent screen used to land back on the login
+  // page with no explanation.
+  const denied = spotifyError === "access_denied";
+  capture("login_failed", { reason: denied ? "denied" : "unavailable" });
+  setLoginError(
+    denied
+      ? "Spotify did not grant access, so you are not signed in. Try again when you are ready."
+      : "Spotify could not complete the sign-in. Try again in a moment.",
+  );
+  setAuthStore({ status: "empty" });
+  cleanCallbackUrl();
+
+  return true;
+}
+
+/** Rejects a callback whose state does not belong to this sign-in attempt. */
+function reportStateMismatch(): false {
+  capture("login_failed", { reason: "state_mismatch" });
+  setLoginError("Your sign-in session expired. Please try again.");
+  setAuthStore({ status: "empty" });
+  cleanCallbackUrl();
+
+  return false;
+}
+
 export async function consumeSpotifyCallback(
   store: AuthStore = untrack(() => authStore()),
 ) {
@@ -108,47 +172,14 @@ export async function consumeSpotifyCallback(
   const returnedState = params.get("state");
   const spotifyError = params.get("error");
 
-  const cleanUrl = () =>
-    history.replaceState(null, "", window.location.pathname || "/");
-
   if (!code) {
     if (!spotifyError || store.status === "authenticated") return false;
-    // Cancelling or failing the consent screen used to land back on the login
-    // page with no explanation.
-    const denied = spotifyError === "access_denied";
-    capture("login_failed", { reason: denied ? "denied" : "unavailable" });
-    setLoginError(
-      denied
-        ? "Spotify did not grant access, so you are not signed in. Try again when you are ready."
-        : "Spotify could not complete the sign-in. Try again in a moment.",
-    );
-    setAuthStore({ status: "empty" });
-    cleanUrl();
 
-    return true;
+    return reportSpotifyDenial(spotifyError);
   }
 
-  const failedLogin = (
-    reason: LoginFailureReason,
-    message: string,
-    cause: unknown,
-  ) => {
-    console.error("Spotify login failed:", cause);
-    capture("login_failed", { reason });
-    setLoginError(message);
-    setAuthStore({ status: "empty" });
-    cleanUrl();
-
-    return true;
-  };
-
   if (store.status !== "authenticating" || returnedState !== store.stateToken) {
-    capture("login_failed", { reason: "state_mismatch" });
-    setLoginError("Your sign-in session expired. Please try again.");
-    setAuthStore({ status: "empty" });
-    cleanUrl();
-
-    return false;
+    return reportStateMismatch();
   }
 
   const body = new URLSearchParams({
@@ -168,7 +199,7 @@ export async function consumeSpotifyCallback(
       body,
     });
   } catch (error) {
-    return failedLogin(
+    return reportLoginFailure(
       "network_error",
       "Could not reach Spotify. Check your connection and try again.",
       error,
@@ -176,7 +207,7 @@ export async function consumeSpotifyCallback(
   }
 
   if (!response.ok) {
-    return failedLogin(
+    return reportLoginFailure(
       "rejected",
       "Spotify rejected the sign-in. Please try again.",
       await response.json().catch(() => ({ status: response.status })),
@@ -190,7 +221,7 @@ export async function consumeSpotifyCallback(
 
     token = Schema.decodeUnknownSync(SpotifyTokenResponse)(value);
   } catch (error) {
-    return failedLogin(
+    return reportLoginFailure(
       "invalid_response",
       "Spotify returned an unexpected sign-in response. Please try again.",
       error,
@@ -205,7 +236,7 @@ export async function consumeSpotifyCallback(
     linkToUri: false,
     scopes: token.scope?.split(" ").filter(Boolean) ?? [],
   });
-  cleanUrl();
+  cleanCallbackUrl();
 
   if (store.status === "authenticating" && store.returnTo) window.location.replace(store.returnTo);
 

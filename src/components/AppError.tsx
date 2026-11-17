@@ -3,6 +3,100 @@ import { createSignal, onCleanup, onSettled } from "solid-js";
 import { captureError, isSessionExpiredError, isUpstreamOutage } from "~/client/analytics";
 import { errorMessage } from "~/lib/errors";
 
+/** The boundary's explanation for a session that ended on the way out. */
+function SessionExpiredPage() {
+  return (
+    <main class="p-8 md:p-16 max-w-3xl">
+      <div class="text-xs uppercase tracking-[0.2em] mb-3 text-[#5c5c5c]">
+        Session Expired
+      </div>
+      <p class="text-sm mb-6 text-[#555]">
+        Your Spotify session ended. Log in again to pick up where you left
+        off.
+      </p>
+      <a
+        href="/login"
+        class="inline-block border-4 border-[#0a0a0a] bg-[#1DB954] px-4 py-2 text-xs font-black uppercase tracking-[0.16em] hover:bg-[#0a0a0a] hover:text-[#1DB954]"
+      >
+        Log in
+      </a>
+    </main>
+  );
+}
+
+/** The boundary's explanation for an outage the app cannot fix. */
+function UpstreamOutagePage(props: { onRetry: () => void }) {
+  return (
+    <main class="p-8 md:p-16 max-w-3xl">
+      <div class="text-xs uppercase tracking-[0.2em] mb-3 text-[#5c5c5c]">
+        Temporarily Unavailable
+      </div>
+      <p class="text-sm mb-6 text-[#555]">
+        Spotify is not answering right now. This is on Spotify's side, so try
+        again in a moment.
+      </p>
+      <button
+        type="button"
+        onClick={props.onRetry}
+        class="border-4 border-[#0a0a0a] px-4 py-2 text-xs font-black uppercase tracking-[0.16em] hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
+      >
+        Try again
+      </button>
+    </main>
+  );
+}
+
+/** The crash page, with the copyable error and the recovery actions. */
+function SystemErrorPage(props: {
+  errorText: string;
+  copied: boolean;
+  onRetry: () => void;
+  onCopy: () => void;
+}) {
+  return (
+    <main class="p-8 md:p-16 max-w-3xl">
+      <div class="text-xs uppercase tracking-[0.2em] mb-3 text-[#5c5c5c]">
+        System Error
+      </div>
+      <p class="text-sm mb-6 text-[#555]">
+        Try{" "}
+        <a class="font-bold hover:underline" href="/login">
+          logging in again
+        </a>{" "}
+        or{" "}
+        <a
+          class="font-bold hover:underline"
+          target="_blank"
+          rel="noopener"
+          href="https://github.com/oscartbeaumont/spotistats/issues/new"
+        >
+          report this issue
+        </a>
+        . Include the details below.
+      </p>
+      <pre class="overflow-auto p-4 text-xs border-4 border-[#0a0a0a] bg-[#0a0a0a] text-[#f0ede8]">
+        <samp>{props.errorText}</samp>
+      </pre>
+      <div class="mt-4 flex flex-wrap gap-3">
+        <button
+          type="button"
+          onClick={props.onRetry}
+          class="border-4 border-[#0a0a0a] px-4 py-2 text-xs font-black uppercase tracking-[0.16em] hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
+        >
+          Retry
+        </button>
+        <button
+          type="button"
+          onClick={props.onCopy}
+          class="border-4 border-[#0a0a0a] px-4 py-2 text-xs font-black uppercase tracking-[0.16em] hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
+        >
+          {props.copied ? "Copied" : "Copy Error"}
+        </button>
+      </div>
+    </main>
+  );
+}
+
 export function AppError(props: { error?: unknown; reset?: () => void }) {
   const [copied, setCopied] = createSignal(false);
   let copiedTimer: number | undefined;
@@ -29,95 +123,26 @@ export function AppError(props: { error?: unknown; reset?: () => void }) {
     return errorMessage(props.error);
   };
 
-  if (sessionExpired()) {
-    return (
-      <main class="p-8 md:p-16 max-w-3xl">
-        <div class="text-xs uppercase tracking-[0.2em] mb-3 text-[#5c5c5c]">
-          Session Expired
-        </div>
-        <p class="text-sm mb-6 text-[#555]">
-          Your Spotify session ended. Log in again to pick up where you left
-          off.
-        </p>
-        <a
-          href="/login"
-          class="inline-block border-4 border-[#0a0a0a] bg-[#1DB954] px-4 py-2 text-xs font-black uppercase tracking-[0.16em] hover:bg-[#0a0a0a] hover:text-[#1DB954]"
-        >
-          Log in
-        </a>
-      </main>
-    );
-  }
+  const copyError = async () => {
+    try {
+      await navigator.clipboard.writeText(errorText());
+      setCopied(true);
+      copiedTimer = window.setTimeout(() => setCopied(false), 1500);
+    } catch (error) {
+      console.error("Failed to copy error", error);
+    }
+  };
 
-  if (upstreamOutage()) {
-    return (
-      <main class="p-8 md:p-16 max-w-3xl">
-        <div class="text-xs uppercase tracking-[0.2em] mb-3 text-[#5c5c5c]">
-          Temporarily Unavailable
-        </div>
-        <p class="text-sm mb-6 text-[#555]">
-          Spotify is not answering right now. This is on Spotify's side, so try
-          again in a moment.
-        </p>
-        <button
-          type="button"
-          onClick={retry}
-          class="border-4 border-[#0a0a0a] px-4 py-2 text-xs font-black uppercase tracking-[0.16em] hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
-        >
-          Try again
-        </button>
-      </main>
-    );
-  }
+  if (sessionExpired()) return <SessionExpiredPage />;
+
+  if (upstreamOutage()) return <UpstreamOutagePage onRetry={retry} />;
 
   return (
-    <main class="p-8 md:p-16 max-w-3xl">
-      <div class="text-xs uppercase tracking-[0.2em] mb-3 text-[#5c5c5c]">
-        System Error
-      </div>
-      <p class="text-sm mb-6 text-[#555]">
-        Try{" "}
-        <a class="font-bold hover:underline" href="/login">
-          logging in again
-        </a>{" "}
-        or{" "}
-        <a
-          class="font-bold hover:underline"
-          target="_blank"
-          rel="noopener"
-          href="https://github.com/oscartbeaumont/spotistats/issues/new"
-        >
-          report this issue
-        </a>
-        . Include the details below.
-      </p>
-      <pre class="overflow-auto p-4 text-xs border-4 border-[#0a0a0a] bg-[#0a0a0a] text-[#f0ede8]">
-        <samp>{errorText()}</samp>
-      </pre>
-      <div class="mt-4 flex flex-wrap gap-3">
-        <button
-          type="button"
-          onClick={() => (props.reset ? props.reset() : window.location.reload())}
-          class="border-4 border-[#0a0a0a] px-4 py-2 text-xs font-black uppercase tracking-[0.16em] hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
-        >
-          Retry
-        </button>
-        <button
-          type="button"
-          onClick={async () => {
-            try {
-              await navigator.clipboard.writeText(errorText());
-              setCopied(true);
-              copiedTimer = window.setTimeout(() => setCopied(false), 1500);
-            } catch (error) {
-              console.error("Failed to copy error", error);
-            }
-          }}
-          class="border-4 border-[#0a0a0a] px-4 py-2 text-xs font-black uppercase tracking-[0.16em] hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
-        >
-          {copied() ? "Copied" : "Copy Error"}
-        </button>
-      </div>
-    </main>
+    <SystemErrorPage
+      errorText={errorText()}
+      copied={copied()}
+      onRetry={retry}
+      onCopy={() => void copyError()}
+    />
   );
 }

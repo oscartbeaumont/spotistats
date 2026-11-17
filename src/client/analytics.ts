@@ -12,13 +12,43 @@
 import { Option, Predicate, Schema } from "effect";
 import type { CaptureResult, Properties } from "posthog-js";
 
-import type { InsightsRange } from "~/api";
+import type { InsightsRange, UpstreamError } from "~/api";
 
 import { SpotifyUnauthenticatedError } from "./spotify";
 
 export type PostHogClient = typeof import("posthog-js")["default"];
 
-let client: Promise<PostHogClient> | undefined;
+/**
+ * Loads the PostHog client once and shares the promise. The mutable cache is
+ * private to this closure so no other code can reset it mid-session.
+ */
+const loadPostHogClient = (() => {
+  let client: Promise<PostHogClient> | undefined;
+
+  return (): Promise<PostHogClient> => {
+    client ??= import("posthog-js").then(({ default: posthog }) => {
+      posthog.init("phc_qSpwCaUTRLVqXQYGL8zE5RMfm98NUQFiFJdMYymxLSWh", {
+        api_host: "/ph_ed90f8",
+        ui_host: "https://us.posthog.com",
+        defaults: "2025-05-24",
+        person_profiles: "identified_only",
+        capture_exceptions: true,
+        // Injected and inline scripts report the page URL or `<anonymous>` as
+        // their frame filename, so their errors look like app crashes. Drop them
+        // rather than filing an issue the app cannot fix.
+        before_send: (event) => {
+          if (event === null) return event;
+
+          return shouldDropEvent(event) ? null : event;
+        },
+      });
+
+      return posthog;
+    });
+
+    return client;
+  };
+})();
 
 /** One frame of a PostHog `$exception` stack. Client events use `filename`. */
 const ExceptionFrame = Schema.Struct({
@@ -51,17 +81,7 @@ function exceptionList(event: CaptureResult): ReadonlyArray<ExceptionEntry> {
 
 /** Every stack frame across an `$exception` event's exception list. */
 function exceptionFrames(exceptions: ReadonlyArray<ExceptionEntry>): ExceptionFrame[] {
-  const frames: ExceptionFrame[] = [];
-
-  for (const exception of exceptions) {
-    const stack = exception.stacktrace;
-
-    if (stack?.frames) {
-      frames.push(...stack.frames);
-    }
-  }
-
-  return frames;
+  return exceptions.flatMap((exception) => exception.stacktrace?.frames ?? []);
 }
 
 /** The extension of a built JavaScript chunk. */
@@ -152,16 +172,6 @@ export function isUnparseableScriptError(
 }
 
 /**
- * A failure the worker declares when Spotify or the database does not answer.
- * The client receives it as the tagged `UpstreamError` from the shared API.
- */
-interface UpstreamFailure {
-  _tag: "UpstreamError";
-  service: string;
-  status: number | null;
-}
-
-/**
  * Whether Spotify itself is unavailable or throttling the request.
  *
  * The app cannot fix an external outage, and the worker has already retried
@@ -170,7 +180,7 @@ interface UpstreamFailure {
  * deliberately excluded: that is an unexpected response shape, which is the
  * app's problem to fix.
  */
-export function isUpstreamOutage(error: unknown): error is UpstreamFailure {
+export function isUpstreamOutage(error: unknown): error is UpstreamError {
   if (!Predicate.isTagged(error, "UpstreamError")) return false;
 
   if (!Predicate.hasProperty(error, "service")) return false;
@@ -232,7 +242,7 @@ export function isHandledError(
   error: unknown,
 ): error is
   | SpotifyUnauthenticatedError
-  | UpstreamFailure
+  | UpstreamError
   | { readonly message: string } {
   return (
     isSessionExpiredError(error) ||
@@ -275,27 +285,8 @@ export function shouldDropEvent(event: CaptureResult): boolean {
  */
 function analytics(): Promise<PostHogClient> | undefined {
   if (typeof window === "undefined" || import.meta.env.DEV) return undefined;
-  client ??= import("posthog-js").then(({ default: posthog }) => {
-    posthog.init("phc_qSpwCaUTRLVqXQYGL8zE5RMfm98NUQFiFJdMYymxLSWh", {
-      api_host: "/ph_ed90f8",
-      ui_host: "https://us.posthog.com",
-      defaults: "2025-05-24",
-      person_profiles: "identified_only",
-      capture_exceptions: true,
-      // Injected and inline scripts report the page URL or `<anonymous>` as
-      // their frame filename, so their errors look like app crashes. Drop them
-      // rather than filing an issue the app cannot fix.
-      before_send: (event) => {
-        if (event === null) return event;
 
-        return shouldDropEvent(event) ? null : event;
-      },
-    });
-
-    return posthog;
-  });
-
-  return client;
+  return loadPostHogClient();
 }
 
 export function initAnalytics(): void {

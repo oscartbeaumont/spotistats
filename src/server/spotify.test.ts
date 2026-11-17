@@ -1,7 +1,9 @@
 import { Effect, Schema } from "effect";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { Spotify, SpotifyLive, SpotifyProfile } from "./spotify";
+import { UpstreamError } from "~/api";
+
+import { Spotify, SpotifyAuthRejected, SpotifyLive, SpotifyProfile } from "./spotify";
 
 /** The token endpoint only needs credentials to build its Basic auth header. */
 const credentials = { clientId: "test-client-id", clientSecret: "test-client-secret" };
@@ -22,6 +24,16 @@ const fetchProfile = () =>
       return yield* spotify.profile("access-token");
     }).pipe(Effect.provide(SpotifyLive(credentials))),
   );
+
+/** Resolves with the failure, after asserting it is the shared upstream error. */
+const upstreamFailure = async (request: Promise<unknown>): Promise<UpstreamError> => {
+  const failure: unknown = await request.catch((error: UpstreamError) => error);
+  expect(failure).toBeInstanceOf(UpstreamError);
+
+  if (!(failure instanceof UpstreamError)) throw failure;
+
+  return failure;
+};
 
 const fetchRecentlyPlayed = () =>
   Effect.runPromise(
@@ -92,11 +104,8 @@ describe("token endpoint failures", () => {
       "fetch",
       vi.fn(async () => new Response("unavailable", { status: 503 })),
     );
-    await expect(refreshToken()).rejects.toMatchObject({
-      _tag: "UpstreamError",
-      service: "spotify",
-      status: 503,
-    });
+    const failure = await upstreamFailure(refreshToken());
+    expect(failure).toMatchObject({ service: "spotify", status: 503 });
   });
 
   it("treats a rate limit as transient", async () => {
@@ -110,10 +119,8 @@ describe("token endpoint failures", () => {
           }),
       ),
     );
-    await expect(refreshToken()).rejects.toMatchObject({
-      _tag: "UpstreamError",
-      status: 429,
-    });
+    const failure = await upstreamFailure(refreshToken());
+    expect(failure).toMatchObject({ status: 429 });
   });
 
   it("keeps an invalid grant as an authorization rejection", async () => {
@@ -123,10 +130,13 @@ describe("token endpoint failures", () => {
         Response.json({ error: "invalid_grant" }, { status: 400 }),
       ),
     );
-    await expect(refreshToken()).rejects.toMatchObject({
-      _tag: "SpotifyAuthRejected",
-      status: 400,
-    });
+
+    const failure: unknown = await refreshToken().catch(
+      (error: SpotifyAuthRejected) => error,
+    );
+
+    expect(failure).toBeInstanceOf(SpotifyAuthRejected);
+    expect(failure).toMatchObject({ status: 400 });
   });
 });
 
@@ -160,10 +170,8 @@ describe("Spotify API retries", () => {  it("waits out a transient 5xx instead o
       }),
     );
 
-    await expect(fetchProfile()).rejects.toMatchObject({
-      _tag: "UpstreamError",
-      status: 400,
-    });
+    const failure = await upstreamFailure(fetchProfile());
+    expect(failure).toMatchObject({ status: 400 });
     expect(calls).toBe(1);
   });
 
@@ -181,10 +189,8 @@ describe("Spotify API retries", () => {  it("waits out a transient 5xx instead o
       }),
     );
 
-    await expect(fetchProfile()).rejects.toMatchObject({
-      _tag: "UpstreamError",
-      status: 429,
-    });
+    const failure = await upstreamFailure(fetchProfile());
+    expect(failure).toMatchObject({ status: 429 });
     expect(calls).toBe(1);
   });
 });

@@ -62,9 +62,7 @@ const queue: string[] = [];
 
 const pending = new Map<string, Playlist>();
 
-let draining = false;
-
-const update = (id: string, patch: Partial<ExportJob>) =>
+const patchExportJob = (id: string, patch: Partial<ExportJob>) =>
   setExportJobs((jobs) =>
     jobs.map((job) => (job.id === id ? { ...job, ...patch } : job)),
   );
@@ -82,17 +80,21 @@ export function startPlaylistExports(
     ...queue,
   ]);
 
-  const fresh: Playlist[] = [];
-
-  for (const playlist of playlists) {
+  const fresh = playlists.filter((playlist) => {
     const id = exportJobId(playlist);
 
-    if (known.has(id)) continue;
+    if (known.has(id)) return false;
+
     known.add(id);
+
+    return true;
+  });
+
+  fresh.forEach((playlist) => {
+    const id = exportJobId(playlist);
     pending.set(id, playlist);
     queue.push(id);
-    fresh.push(playlist);
-  }
+  });
 
   if (fresh.length === 0) return;
   const freshIds = new Set(fresh.map(exportJobId));
@@ -108,7 +110,7 @@ export function startPlaylistExports(
       error: null,
     })),
   ]);
-  void drain(dependencies);
+  void drainQueue(dependencies);
 }
 
 /** Drops the finished jobs from the panel; running jobs are kept. */
@@ -116,46 +118,50 @@ export function clearFinishedExports() {
   setExportJobs((jobs) => jobs.filter(isExportActive));
 }
 
-async function drain(dependencies: ExportDependencies) {
-  if (draining) return;
-  draining = true;
+const drainQueue = (() => {
+  let draining = false;
 
-  try {
-    for (;;) {
-      const id = queue.shift();
+  return async (dependencies: ExportDependencies) => {
+    if (draining) return;
+    draining = true;
 
-      if (id === undefined) break;
-      const playlist = pending.get(id);
+    try {
+      for (;;) {
+        const id = queue.shift();
 
-      if (!playlist) {
-        update(id, {
-          status: "error",
-          error: "This playlist is no longer available.",
-        });
-        continue;
+        if (id === undefined) break;
+        const playlist = pending.get(id);
+
+        if (!playlist) {
+          patchExportJob(id, {
+            status: "error",
+            error: "This playlist is no longer available.",
+          });
+          continue;
+        }
+
+        patchExportJob(id, { status: "running", progress: 0 });
+
+        try {
+          const { csv, trackCount } = await dependencies.buildPlaylistCsv(playlist, (fraction) =>
+            patchExportJob(id, { progress: fraction }),
+          );
+
+          dependencies.downloadTextFile(`${dependencies.safeFileName(playlist.name)}.csv`, csv);
+          capture("playlist_exported", {
+            kind: isLikedSongs(playlist) ? "liked_songs" : "playlist",
+            trackCount,
+          });
+          patchExportJob(id, { status: "done", progress: 1 });
+        } catch (error) {
+          console.error("Spotify export failed", error);
+          patchExportJob(id, { status: "error", error: errorMessage(error) });
+        } finally {
+          pending.delete(id);
+        }
       }
-
-      update(id, { status: "running", progress: 0 });
-
-      try {
-        const { csv, trackCount } = await dependencies.buildPlaylistCsv(playlist, (fraction) =>
-          update(id, { progress: fraction }),
-        );
-
-        dependencies.downloadTextFile(`${dependencies.safeFileName(playlist.name)}.csv`, csv);
-        capture("playlist_exported", {
-          kind: isLikedSongs(playlist) ? "liked_songs" : "playlist",
-          trackCount,
-        });
-        update(id, { status: "done", progress: 1 });
-      } catch (error) {
-        console.error("Spotify export failed", error);
-        update(id, { status: "error", error: errorMessage(error) });
-      } finally {
-        pending.delete(id);
-      }
+    } finally {
+      draining = false;
     }
-  } finally {
-    draining = false;
-  }
-}
+  };
+})();

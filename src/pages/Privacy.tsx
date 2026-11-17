@@ -1,15 +1,9 @@
 import { LegalLayout } from "~/components/LegalLayout";
 
-/**
- * The privacy policy.
- *
- * It is a public, indexable route, so it lives outside the authenticated app
- * shell. Keep the copy in step with what `src/server/tracking.ts` actually
- * stores and what `src/client/analytics.ts` reports.
- */
-export default function PrivacyPage() {
+/** The promise, then the data the app reads and keeps. */
+function CollectionSection() {
   return (
-    <LegalLayout title="Privacy Policy" updated="22 October 2026">
+    <>
       <section>
         <h2 class="mb-2 text-xs font-black uppercase tracking-[0.2em]">
           The short version
@@ -52,7 +46,14 @@ export default function PrivacyPage() {
           </li>
         </ul>
       </section>
+    </>
+  );
+}
 
+/** Where the data lives, and how discovery treats it. */
+function StorageSection() {
+  return (
+    <>
       <section>
         <h2 class="mb-2 text-xs font-black uppercase tracking-[0.2em]">
           Where it is stored
@@ -91,7 +92,14 @@ export default function PrivacyPage() {
           on the redirect and checked when Spotify sends you back.
         </p>
       </section>
+    </>
+  );
+}
 
+/** How long data stays, and which third parties process it. */
+function RetentionSection() {
+  return (
+    <>
       <section>
         <h2 class="mb-2 text-xs font-black uppercase tracking-[0.2em]">
           How long we keep it
@@ -126,7 +134,14 @@ export default function PrivacyPage() {
           </li>
         </ul>
       </section>
+    </>
+  );
+}
 
+/** The controls the account page offers, and how to ask about them. */
+function ControlsSection() {
+  return (
+    <>
       <section>
         <h2 class="mb-2 text-xs font-black uppercase tracking-[0.2em]">
           Your controls
@@ -155,6 +170,24 @@ export default function PrivacyPage() {
           .
         </p>
       </section>
+    </>
+  );
+}
+
+/**
+ * The privacy policy.
+ *
+ * It is a public, indexable route, so it lives outside the authenticated app
+ * shell. Keep the copy in step with what `src/server/tracking.ts` actually
+ * stores and what `src/client/analytics.ts` reports.
+ */
+export default function PrivacyPage() {
+  return (
+    <LegalLayout title="Privacy Policy" updated="22 October 2026">
+      <CollectionSection />
+      <StorageSection />
+      <RetentionSection />
+      <ControlsSection />
     </LegalLayout>
   );
 }

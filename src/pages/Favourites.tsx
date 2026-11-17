@@ -24,6 +24,7 @@ import { capture, captureError } from "~/client/analytics";
 import { authStore } from "~/client/storage";
 import { PageHeader } from "~/components/PageHeader";
 import { errorMessage } from "~/lib/errors";
+import { firstImageUrl } from "~/lib/images";
 import { createShortcut } from "~/lib/shortcut";
 import { externalHref, spotifyUri } from "~/lib/url";
 
@@ -69,8 +70,8 @@ function FavouriteRow(props: {
 }) {
   const image = () =>
     props.item.type === "track"
-      ? props.item.album?.images?.[0]?.url
-      : props.item.images?.[0]?.url;
+      ? firstImageUrl(props.item.album?.images)
+      : firstImageUrl(props.item.images);
 
   const subtitle = () =>
     props.item.type === "track" || props.item.type === "album"
@@ -130,8 +131,324 @@ function LoadFailure(props: {
   );
 }
 
-export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
-  const navigate = useNavigate();
+/** The type tabs, range tabs and keyboard hints above the list. */
+function FavouritesHeader(props: {
+  kind: "tracks" | "albums";
+  range: Range;
+  onSelectRange: (value: Range) => void;
+}) {
+  return (
+    <PageHeader
+      title={props.kind === "tracks" ? "Top Tracks" : "Saved Albums"}
+      actions={
+        <>
+          <a
+            href="/favourites/tracks"
+            onClick={() => {
+              if (props.kind !== "tracks")
+                capture("favourites_kind_changed", { kind: "tracks" });
+            }}
+            class={`font-black text-xs uppercase px-4 py-2 tracking-wide transition border-[3px] border-[#0a0a0a] ${
+              props.kind === "tracks"
+                ? "bg-[#0a0a0a] text-[#f0ede8]"
+                : "text-[#0a0a0a]"
+            }`}
+          >
+            Tracks
+          </a>
+          <a
+            href="/favourites/albums"
+            onClick={() => {
+              if (props.kind !== "albums")
+                capture("favourites_kind_changed", { kind: "albums" });
+            }}
+            class={`font-black text-xs uppercase px-4 py-2 tracking-wide transition border-[3px] border-[#0a0a0a] ${
+              props.kind === "albums"
+                ? "bg-[#0a0a0a] text-[#f0ede8]"
+                : "text-[#0a0a0a]"
+            }`}
+          >
+            Albums
+          </a>
+          <Show when={props.kind === "tracks"}>
+            <span class="mx-2 font-black text-[#5c5c5c]">/</span>
+            <For
+              each={
+                [
+                  ["short", "Month"],
+                  ["medium", "6 Months"],
+                  ["long", "All Time"],
+                ] satisfies [Range, string][]
+              }
+            >
+              {([optionRange, label], index) => (
+                <button
+                  onClick={() => props.onSelectRange(optionRange)}
+                  class={`text-xs uppercase tracking-wide px-3 py-2 font-bold transition border-[3px] ${
+                    props.range === optionRange
+                      ? "border-[#1DB954] bg-[#1DB954] text-black"
+                      : "border-transparent text-[#5c5c5c]"
+                  }`}
+                >
+                  {label}{" "}
+                  <span class="ml-1 text-[0.6rem] opacity-50">
+                    {index() + 1}
+                  </span>
+                </button>
+              )}
+            </For>
+          </Show>
+        </>
+      }
+      hints={
+        <>
+          <span>J/↓ Next</span>
+          <span>K/↑ Previous</span>
+          <span>Enter Open</span>
+          <span>T Toggle Type</span>
+          <Show when={props.kind === "tracks"}>
+            <span>1/2/3 Range</span>
+          </Show>
+        </>
+      }
+    />
+  );
+}
+
+/** The loaded rows, their empty/failure states, and the paging footer. */
+function FavouritesList(props: {
+  items: readonly SpotifyItem[];
+  loadError: { message: string; rateLimited: boolean } | null;
+  loadingMore: boolean;
+  pagingError: string | null;
+  selectedIndex: number;
+  onRetryFirstPage: () => void;
+  onSelect: (index: number) => void;
+  onOpen: (item: SpotifyItem) => void;
+  onRetryMore: () => void;
+}) {
+  return (
+    <>
+      <Loading fallback={<p class="text-sm uppercase tracking-widest text-[#5c5c5c]">LOADING_</p>}>
+        <Show
+          when={props.items.length > 0}
+          fallback={
+            <Show
+              when={props.loadError}
+              fallback={
+                <p class="py-8 text-sm font-bold uppercase tracking-widest text-[#5c5c5c]">
+                  NO FAVOURITES FOUND_
+                </p>
+              }
+            >
+              {(failure) => (
+                <LoadFailure
+                  message={failure().message}
+                  rateLimited={failure().rateLimited}
+                  onRetry={props.onRetryFirstPage}
+                />
+              )}
+            </Show>
+          }
+        >
+          <For each={props.items}>
+            {(item, index) => (
+              <FavouriteRow
+                item={item}
+                index={index()}
+                selected={props.selectedIndex === index()}
+                onFocus={() => props.onSelect(index())}
+                onOpen={() => props.onOpen(item)}
+              />
+            )}
+          </For>
+          <Show when={props.loadingMore}>
+            <p class="py-6 text-xs uppercase tracking-[0.2em] text-[#5c5c5c]">
+              LOADING MORE_
+            </p>
+          </Show>
+        </Show>
+      </Loading>
+      <Show when={props.pagingError}>
+        {(message) => (
+          <div class="mt-6 border-4 border-red-800 p-4">
+            <p class="text-sm text-red-700">Loading more failed: {message()}</p>
+            <button
+              type="button"
+              onClick={props.onRetryMore}
+              class="mt-3 border-[3px] border-[#0a0a0a] px-3 py-1.5 text-[0.65rem] font-black uppercase tracking-widest transition hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+      </Show>
+    </>
+  );
+}
+
+/** Non-suspending reads of a page source, safe before it first resolves. */
+function createPageReads(
+  firstPage: () => Page,
+  items: () => readonly SpotifyItem[],
+  tail: () => Tail,
+) {
+  /** Non-suspending first-page read, for handlers and effects. */
+  const firstPageNow = (): Page | null => {
+    try {
+      return isPending(firstPage) ? null : (latest(firstPage) ?? null);
+    } catch {
+      return null;
+    }
+  };
+
+  const hasMore = () => {
+    const page = firstPageNow();
+
+    if (!page) return true;
+    const current = tail();
+
+    return current.source === page ? current.next !== null : page.next !== null;
+  };
+
+  /**
+   * Where the next page starts, in Spotify's numbering.
+   *
+   * Rows the API returns but the list cannot render, such as a saved album
+   * that no longer exists, are not counted, so this comes from the last page
+   * rather than from the number of loaded rows.
+   */
+  const nextPageOffset = () => {
+    const page = firstPageNow();
+
+    if (!page) return 0;
+    const current = tail();
+
+    return current.source === page ? current.nextOffset : page.nextOffset;
+  };
+
+  /**
+   * Non-suspending read for handlers, effects, and the scroll trigger.
+   * `latest` throws for a source that has never resolved, and `isPending`
+   * itself re-throws in a tracking context for such a source, so both are
+   * guarded: "not ready yet" reads as an empty list.
+   */
+  const loadedItems = (): readonly SpotifyItem[] => {
+    try {
+      return isPending(items) ? [] : (latest(items) ?? []);
+    } catch {
+      return [];
+    }
+  };
+
+  return { firstPageNow, hasMore, nextPageOffset, loadedItems };
+}
+
+/** The URL to open for a row, honouring the user's Spotify-URI preference. */
+function favouriteItemUrl(item: SpotifyItem) {
+  const store = authStore();
+
+  return store.status === "authenticated" && store.linkToUri
+    ? (spotifyUri(item.uri) ?? externalHref(item.external_urls.spotify))
+    : externalHref(item.external_urls.spotify);
+}
+
+/** Opens a row in the app's preferred target, when it has one. */
+function openFavourite(item: SpotifyItem | undefined) {
+  if (!item) return;
+  const url = favouriteItemUrl(item);
+
+  if (!url) return;
+  capture("spotify_item_opened", {
+    kind: item.type === "album" ? "album" : "track",
+    surface: "favourites",
+  });
+
+  if (url.startsWith("spotify:")) window.location.href = url;
+  else window.open(url, "_blank", "noopener");
+}
+
+/** Registers the list's keyboard shortcuts. */
+function registerFavouritesShortcuts(options: {
+  kind: "tracks" | "albums";
+  onMove: (delta: number) => void;
+  onOpen: () => void;
+  onToggleKind: () => void;
+  onSelectRange: (value: Range) => void;
+}) {
+  createShortcut(["j"], () => options.onMove(1));
+  createShortcut(["k"], () => options.onMove(-1));
+  createShortcut(["ArrowDown"], () => options.onMove(1));
+  createShortcut(["ArrowUp"], () => options.onMove(-1));
+  createShortcut(["Enter"], options.onOpen);
+  createShortcut(["t"], options.onToggleKind);
+
+  if (options.kind === "tracks") {
+    RANGES.forEach((value, index) => {
+      createShortcut([String(index + 1)], () => options.onSelectRange(value));
+    });
+  }
+}
+
+/** The scroll sentinel, save-data flag and next-page trigger. */
+function useFavouritesPaging(options: {
+  items: () => readonly SpotifyItem[];
+  atBottom: () => boolean;
+  nextPageOffset: () => number;
+  loadMore: (offset: number) => void;
+  setAtBottom: (value: boolean) => void;
+  setSaveData: (value: boolean) => void;
+}) {
+  let sentinel: HTMLDivElement | undefined;
+  let observer: IntersectionObserver | undefined;
+
+  onSettled(() => {
+    options.setSaveData(hasSaveData());
+    observer = new IntersectionObserver(
+      (entries) => options.setAtBottom(entries.some((entry) => entry.isIntersecting)),
+      { rootMargin: "500px" },
+    );
+
+    // The sentinel may mount after this runs (the first page suspends), so the
+    // ref callback observes it as a fallback.
+    if (sentinel) observer.observe(sentinel);
+
+    return () => observer?.disconnect();
+  });
+
+  // Load the next page when the sentinel is in view and the first page is
+  // resolved. The offset is computed in the tracking scope so no `latest`
+  // read happens in the effect callback.
+  createEffect(
+    () => {
+      const pending = isPending(options.items);
+
+      // Track only the trigger and the offset. `loadMore` writes `loadingMore`
+      // and the tail, so reading either here would make this effect re-run from
+      // its own write; its guards live inside `loadMore` instead. The offset
+      // does follow the tail: every page that lands must advance it.
+      return {
+        pending,
+        bottom: options.atBottom(),
+        offset: pending ? 0 : options.nextPageOffset(),
+      };
+    },
+    ({ pending, bottom, offset }) => {
+      // `loadMore` reads `range()` and the first page imperatively. Those are
+      // one-shot reads, so untrack them: reading them in the apply phase would
+      // (correctly) be reported as untracked.
+      if (!pending && bottom) untrack(() => options.loadMore(offset));
+    },
+  );
+
+  return (element: HTMLDivElement) => {
+    sentinel = element;
+    observer?.observe(element);
+  };
+}
+
+/** The signal state the favourites list pages through. */
+function createFavouritesState() {
   const [range, setRange] = createSignal<Range>("short");
   const [rawSelected, setRawSelected] = createSignal(0);
   const [atBottom, setAtBottom] = createSignal(false);
@@ -154,8 +471,32 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
 
   // Bumped by the retry button to re-run the first page.
   const [attempt, setAttempt] = createSignal(0);
-  let sentinel: HTMLDivElement | undefined;
-  let observer: IntersectionObserver | undefined;
+
+  return {
+    range,
+    setRange,
+    rawSelected,
+    setRawSelected,
+    atBottom,
+    setAtBottom,
+    saveData,
+    setSaveData,
+    tail,
+    setTail,
+    loadingMore,
+    setLoadingMore,
+    pagingError,
+    setPagingError,
+    loadError,
+    setLoadError,
+    attempt,
+    setAttempt,
+  };
+}
+
+export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
+  const navigate = useNavigate();
+  const { range, setRange, rawSelected, setRawSelected, atBottom, setAtBottom, saveData, setSaveData, tail, setTail, loadingMore, setLoadingMore, pagingError, setPagingError, loadError, setLoadError, attempt, setAttempt } = createFavouritesState();
 
   const fetchPage = (offset: number) =>
     props.kind === "tracks"
@@ -204,57 +545,16 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
   const items = createMemo(() => {
     const page = firstPage();
     const current = tail();
+    const tailItems = current.source === page ? current.items : [];
 
-    return [...page.items, ...(current.source === page ? current.items : [])];
+    return [...page.items, ...tailItems];
   });
 
-  /** Non-suspending first-page read, for handlers and effects. */
-  const firstPageNow = (): Page | null => {
-    try {
-      return isPending(firstPage) ? null : (latest(firstPage) ?? null);
-    } catch {
-      return null;
-    }
-  };
-
-  const hasMore = () => {
-    const page = firstPageNow();
-
-    if (!page) return true;
-    const current = tail();
-
-    return current.source === page ? current.next !== null : page.next !== null;
-  };
-
-  /**
-   * Where the next page starts, in Spotify's numbering.
-   *
-   * Rows the API returns but the list cannot render, such as a saved album
-   * that no longer exists, are not counted, so this comes from the last page
-   * rather than from the number of loaded rows.
-   */
-  const nextPageOffset = () => {
-    const page = firstPageNow();
-
-    if (!page) return 0;
-    const current = tail();
-
-    return current.source === page ? current.nextOffset : page.nextOffset;
-  };
-
-  /**
-   * Non-suspending read for handlers, effects, and the scroll trigger.
-   * `latest` throws for a source that has never resolved, and `isPending`
-   * itself re-throws in a tracking context for such a source, so both are
-   * guarded: "not ready yet" reads as an empty list.
-   */
-  const loadedItems = (): SpotifyItem[] => {
-    try {
-      return isPending(items) ? [] : (latest(items) ?? []);
-    } catch {
-      return [];
-    }
-  };
+  const { firstPageNow, hasMore, nextPageOffset, loadedItems } = createPageReads(
+    firstPage,
+    items,
+    tail,
+  );
 
   // Derived selection: the raw index is clamped to the loaded rows, so no
   // effect has to write the signal back.
@@ -316,66 +616,14 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
     }
   };
 
-  onSettled(() => {
-    setSaveData(hasSaveData());
-    observer = new IntersectionObserver(
-      (entries) => setAtBottom(entries.some((entry) => entry.isIntersecting)),
-      { rootMargin: "500px" },
-    );
-
-    // The sentinel may mount after this runs (the first page suspends), so the
-    // ref callback observes it as a fallback.
-    if (sentinel) observer.observe(sentinel);
-
-    return () => observer?.disconnect();
+  const registerSentinel = useFavouritesPaging({
+    items,
+    atBottom,
+    nextPageOffset,
+    loadMore,
+    setAtBottom,
+    setSaveData,
   });
-
-  // Load the next page when the sentinel is in view and the first page is
-  // resolved. The offset is computed in the tracking scope so no `latest`
-  // read happens in the effect callback.
-  createEffect(
-    () => {
-      const pending = isPending(items);
-
-      // Track only the trigger and the offset. `loadMore` writes `loadingMore`
-      // and the tail, so reading either here would make this effect re-run from
-      // its own write; its guards live inside `loadMore` instead. The offset
-      // does follow the tail: every page that lands must advance it.
-      return {
-        pending,
-        bottom: atBottom(),
-        offset: pending ? 0 : nextPageOffset(),
-      };
-    },
-    ({ pending, bottom, offset }) => {
-      // `loadMore` reads `range()` and the first page imperatively. Those are
-      // one-shot reads, so untrack them: reading them in the apply phase would
-      // (correctly) be reported as untracked.
-      if (!pending && bottom) untrack(() => loadMore(offset));
-    },
-  );
-
-  const itemUrl = (item: SpotifyItem) => {
-    const store = authStore();
-
-    return store.status === "authenticated" && store.linkToUri
-      ? (spotifyUri(item.uri) ?? externalHref(item.external_urls.spotify))
-      : externalHref(item.external_urls.spotify);
-  };
-
-  const openItem = (item: SpotifyItem | undefined) => {
-    if (!item) return;
-    const url = itemUrl(item);
-
-    if (!url) return;
-    capture("spotify_item_opened", {
-      kind: item.type === "album" ? "album" : "track",
-      surface: "favourites",
-    });
-
-    if (url.startsWith("spotify:")) window.location.href = url;
-    else window.open(url, "_blank", "noopener");
-  };
 
   const moveSelection = (delta: number) => {
     const next = Math.max(
@@ -389,164 +637,39 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
       ?.scrollIntoView({ block: "nearest" });
   };
 
-  createShortcut(["j"], () => moveSelection(1));
-  createShortcut(["k"], () => moveSelection(-1));
-  createShortcut(["ArrowDown"], () => moveSelection(1));
-  createShortcut(["ArrowUp"], () => moveSelection(-1));
-  createShortcut(["Enter"], () => openItem(loadedItems()[selectedIndex()]));
-  createShortcut(["t"], () => {
-    capture("favourites_kind_changed", {
-      kind: props.kind === "tracks" ? "albums" : "tracks",
-    });
-    navigate(props.kind === "tracks" ? "/favourites/albums" : "/favourites/tracks");
-    resetPaging();
+  registerFavouritesShortcuts({
+    kind: props.kind,
+    onMove: moveSelection,
+    onOpen: () => openFavourite(loadedItems()[selectedIndex()]),
+    onToggleKind: () => {
+      capture("favourites_kind_changed", {
+        kind: props.kind === "tracks" ? "albums" : "tracks",
+      });
+      navigate(props.kind === "tracks" ? "/favourites/albums" : "/favourites/tracks");
+      resetPaging();
+    },
+    onSelectRange: selectRange,
   });
-
-  if (props.kind === "tracks") {
-    RANGES.forEach((value, index) => {
-      createShortcut([String(index + 1)], () => selectRange(value));
-    });
-  }
-
-  const title = () => (props.kind === "tracks" ? "Top Tracks" : "Saved Albums");
 
   return (
     <main class="app-main p-8 md:p-12">
-      <PageHeader
-        title={title()}
-        actions={
-          <>
-            <a
-              href="/favourites/tracks"
-              onClick={() => {
-                if (props.kind !== "tracks")
-                  capture("favourites_kind_changed", { kind: "tracks" });
-              }}
-              class={`font-black text-xs uppercase px-4 py-2 tracking-wide transition border-[3px] border-[#0a0a0a] ${
-                props.kind === "tracks"
-                  ? "bg-[#0a0a0a] text-[#f0ede8]"
-                  : "text-[#0a0a0a]"
-              }`}
-            >
-              Tracks
-            </a>
-            <a
-              href="/favourites/albums"
-              onClick={() => {
-                if (props.kind !== "albums")
-                  capture("favourites_kind_changed", { kind: "albums" });
-              }}
-              class={`font-black text-xs uppercase px-4 py-2 tracking-wide transition border-[3px] border-[#0a0a0a] ${
-                props.kind === "albums"
-                  ? "bg-[#0a0a0a] text-[#f0ede8]"
-                  : "text-[#0a0a0a]"
-              }`}
-            >
-              Albums
-            </a>
-            <Show when={props.kind === "tracks"}>
-              <span class="mx-2 font-black text-[#5c5c5c]">/</span>
-              <For
-                each={
-                  [
-                    ["short", "Month"],
-                    ["medium", "6 Months"],
-                    ["long", "All Time"],
-                  ] satisfies [Range, string][]
-                }
-              >
-                {([optionRange, label], index) => (
-                  <button
-                    onClick={() => selectRange(optionRange)}
-                    class={`text-xs uppercase tracking-wide px-3 py-2 font-bold transition border-[3px] ${
-                      range() === optionRange
-                        ? "border-[#1DB954] bg-[#1DB954] text-black"
-                        : "border-transparent text-[#5c5c5c]"
-                    }`}
-                  >
-                    {label}{" "}
-                    <span class="ml-1 text-[0.6rem] opacity-50">
-                      {index() + 1}
-                    </span>
-                  </button>
-                )}
-              </For>
-            </Show>
-          </>
-        }
-        hints={
-          <>
-            <span>J/↓ Next</span>
-            <span>K/↑ Previous</span>
-            <span>Enter Open</span>
-            <span>T Toggle Type</span>
-            <Show when={props.kind === "tracks"}>
-              <span>1/2/3 Range</span>
-            </Show>
-          </>
-        }
+      <FavouritesHeader
+        kind={props.kind}
+        range={range()}
+        onSelectRange={selectRange}
       />
-      <Loading fallback={<p class="text-sm uppercase tracking-widest text-[#5c5c5c]">LOADING_</p>}>
-        <Show
-          when={items().length > 0}
-          fallback={
-            <Show
-              when={loadError()}
-              fallback={
-                <p class="py-8 text-sm font-bold uppercase tracking-widest text-[#5c5c5c]">
-                  NO FAVOURITES FOUND_
-                </p>
-              }
-            >
-              {(failure) => (
-                <LoadFailure
-                  message={failure().message}
-                  rateLimited={failure().rateLimited}
-                  onRetry={retryFirstPage}
-                />
-              )}
-            </Show>
-          }
-        >
-          <For each={items()}>
-            {(item, index) => (
-              <FavouriteRow
-                item={item}
-                index={index()}
-                selected={selectedIndex() === index()}
-                onFocus={() => setRawSelected(index())}
-                onOpen={() => openItem(item)}
-              />
-            )}
-          </For>
-          <Show when={loadingMore()}>
-            <p class="py-6 text-xs uppercase tracking-[0.2em] text-[#5c5c5c]">
-              LOADING MORE_
-            </p>
-          </Show>
-        </Show>
-      </Loading>
-      <Show when={pagingError()}>
-        {(message) => (
-          <div class="mt-6 border-4 border-red-800 p-4">
-            <p class="text-sm text-red-700">Loading more failed: {message()}</p>
-            <button
-              type="button"
-              onClick={() => void loadMore(nextPageOffset())}
-              class="mt-3 border-[3px] border-[#0a0a0a] px-3 py-1.5 text-[0.65rem] font-black uppercase tracking-widest transition hover:bg-[#0a0a0a] hover:text-[#f0ede8]"
-            >
-              Retry
-            </button>
-          </div>
-        )}
-      </Show>
-      <div
-        ref={(el) => {
-          sentinel = el;
-          observer?.observe(el);
-        }}
-        class="h-8"
+      <FavouritesList
+        items={items()}
+        loadError={loadError()}
+        loadingMore={loadingMore()}
+        pagingError={pagingError()}
+        selectedIndex={selectedIndex()}
+        onRetryFirstPage={retryFirstPage}
+        onSelect={setRawSelected}
+        onOpen={openFavourite}
+        onRetryMore={() => void loadMore(nextPageOffset())}
       />
+      <div ref={registerSentinel} class="h-8" />
     </main>
   );
 }

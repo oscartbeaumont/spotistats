@@ -126,17 +126,17 @@ describe("formatting", () => {
     const now = Date.UTC(2026, 9, 20, 12, 0);
     const day = startOfLocalDay(now, -600);
     expect(localDay(day, -600)).toBe("2026-10-20");
-    expect(resolveStatsWindow("week", -600, null, null, now)).toEqual({
+    expect(resolveStatsWindow({ range: "week", tzOffset: -600, now })).toEqual({
       fromMs: day - 6 * 86_400_000,
       toMs: now,
     });
-    expect(resolveStatsWindow("month", -600, null, null, now).fromMs).toBe(
+    expect(resolveStatsWindow({ range: "month", tzOffset: -600, now }).fromMs).toBe(
       day - 29 * 86_400_000,
     );
-    expect(resolveStatsWindow("sixMonths", -600, null, null, now).fromMs).toBe(
+    expect(resolveStatsWindow({ range: "sixMonths", tzOffset: -600, now }).fromMs).toBe(
       day - 182 * 86_400_000,
     );
-    expect(resolveStatsWindow("all", -600, null, null, now)).toEqual({
+    expect(resolveStatsWindow({ range: "all", tzOffset: -600, now })).toEqual({
       fromMs: 0,
       toMs: now,
     });
@@ -145,9 +145,15 @@ describe("formatting", () => {
   it("swaps and clamps custom windows", () => {
     const now = Date.UTC(2026, 9, 20, 12, 0);
     expect(
-      resolveStatsWindow("custom", 0, now + 86_400_000, now - 86_400_000, now),
+      resolveStatsWindow({
+        range: "custom",
+        tzOffset: 0,
+        fromMs: now + 86_400_000,
+        toMs: now - 86_400_000,
+        now,
+      }),
     ).toEqual({ fromMs: now - 86_400_000, toMs: now });
-    expect(resolveStatsWindow("custom", 0, null, null, now)).toEqual({
+    expect(resolveStatsWindow({ range: "custom", tzOffset: 0, now })).toEqual({
       fromMs: startOfLocalDay(now, 0) - 29 * 86_400_000,
       toMs: now,
     });

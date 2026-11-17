@@ -58,7 +58,7 @@ export const antiSlopLint = {
     "anti-slop/no-array-filter-map": "error",
     "anti-slop/no-reduce-accumulator-copy": "error",
     "anti-slop/no-chained-type-assertions": "error",
-    "anti-slop/no-conditional-spread": "warn",
+    "anti-slop/no-conditional-spread": "error",
     "anti-slop/no-disabled-type-assertion-rules": "error",
     "anti-slop/no-known-value-widening": "error",
     "anti-slop/no-layout-animating-transition": "error",
@@ -79,29 +79,30 @@ export const antiSlopLint = {
     "anti-slop/require-safety-comment-for-type-assertion": "error",
     "anti-slop-effect/no-manual-effect-error-tag": "error",
     "anti-slop-effect/no-manual-tag-comparison": "error",
-    "anti-slop-effect/no-manual-tagged-construction": "warn",
-    "anti-slop-effect/no-manual-tagged-type": "warn",
+    "anti-slop-effect/no-manual-tagged-construction": "error",
+    "anti-slop-effect/no-manual-tagged-type": "error",
     "anti-slop-effect/no-ordie-in-service-construction": "error",
     "anti-slop-effect/no-service-constructor-imports": "error",
     "anti-slop-effect/no-service-parameters": "error",
-    // Tests are colocated under `src/` in this repository.
+    // Tests are colocated under `src/` in this repository, so the rule only
+    // asks for a different layout; it is the one Effect rule this repo cannot
+    // follow without moving every test file.
     "anti-slop-effect/no-test-code-in-src": "off",
     "anti-slop-effect/prefer-effect-match": "error",
     "anti-slop-effect/prefer-tagged-error-handling": "error",
     "anti-slop-effect/prefer-yield-service": "error",
-    "anti-slop-effect/require-cause-when-narrowing": "warn",
+    "anti-slop-effect/require-cause-when-narrowing": "error",
     "anti-slop-effect/require-operation-span": "error",
-    "anti-slop-effect/require-service-make-layer": "warn",
-    // Fowler code smells are review prompts, so they warn. `message-chains`
-    // is deliberately off: fluent Effect pipelines are not a smell.
-    "anti-slop-martinfowler/global-data": "warn",
-    "anti-slop-martinfowler/long-function": "warn",
-    "anti-slop-martinfowler/long-parameter-list": "warn",
-    "anti-slop-martinfowler/loops": "warn",
-    "anti-slop-martinfowler/message-chains": "off",
-    "anti-slop-martinfowler/mutable-data": "warn",
-    "anti-slop-martinfowler/mysterious-name": "warn",
-    "anti-slop-martinfowler/repeated-switches": "warn",
+    "anti-slop-effect/require-service-make-layer": "error",
+    // Fowler code smells.
+    "anti-slop-martinfowler/global-data": "error",
+    "anti-slop-martinfowler/long-function": "error",
+    "anti-slop-martinfowler/long-parameter-list": "error",
+    "anti-slop-martinfowler/loops": "error",
+    "anti-slop-martinfowler/message-chains": "error",
+    "anti-slop-martinfowler/mutable-data": "error",
+    "anti-slop-martinfowler/mysterious-name": "error",
+    "anti-slop-martinfowler/repeated-switches": "error",
     // eslint-plugin-jsx-a11y's recommended set. SolidJS renders the same JSX
     // attributes these rules inspect, so they apply unchanged. Rules that are
     // off in the upstream recommendation, cannot see through Kobalte's

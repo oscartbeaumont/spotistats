@@ -1,6 +1,8 @@
 import type { CaptureResult, Properties } from "posthog-js";
 import { describe, expect, it, vi } from "vitest";
 
+import { UpstreamError } from "~/api";
+
 import {
   isChunkLoadError,
   isHandledError,
@@ -145,12 +147,12 @@ describe("isUnparseableScriptError", () => {
 });
 
 describe("isUpstreamOutage", () => {
-  const upstream = (service: string, status: number | null) => ({
-    _tag: "UpstreamError" as const,
-    service,
-    message: "failed",
-    status,
-  });
+  const upstream = (service: string, status: number | null) =>
+    new UpstreamError({
+      service,
+      message: "failed",
+      status,
+    });
 
   it("treats Spotify's 5xx as an outage", () => {
     // https://github.com/oscartbeaumont/spotistats/issues/70
@@ -220,12 +222,13 @@ describe("isHandledError", () => {
 
   it("treats a Spotify outage as handled", () => {
     expect(
-      isHandledError({
-        _tag: "UpstreamError",
-        service: "spotify",
-        message: "Spotify API failed: 503",
-        status: 503,
-      }),
+      isHandledError(
+        new UpstreamError({
+          service: "spotify",
+          message: "Spotify API failed: 503",
+          status: 503,
+        }),
+      ),
     ).toBe(true);
   });
 

@@ -18,6 +18,50 @@ const monthKey = (date: Date) =>
 
 const monthCounts = [180, 355, 240, 210, 330, 280, 415, 390, 460, 520, 480, 402];
 
+/** The sample top tracks, with their generated covers. */
+const previewTopTracks = [
+  {
+    trackId: "preview-1",
+    name: "Neon Skyline",
+    artistNames: "Aurora Vale",
+    imageUrl: cover("#1DB954", "#0a0a0a", "NEON"),
+    externalUrl: "https://open.spotify.com",
+    listens: 148,
+  },
+  {
+    trackId: "preview-2",
+    name: "Glass Rivers",
+    artistNames: "Aurora Vale, Kite Theory",
+    imageUrl: cover("#8B5CF6", "#f0ede8", "GLASS"),
+    externalUrl: "https://open.spotify.com",
+    listens: 121,
+  },
+  {
+    trackId: "preview-3",
+    name: "Static Bloom",
+    artistNames: "Paper Cranes",
+    imageUrl: cover("#F59E0B", "#0a0a0a", "BLOOM"),
+    externalUrl: "https://open.spotify.com",
+    listens: 106,
+  },
+  {
+    trackId: "preview-4",
+    name: "Slow Motion",
+    artistNames: "Kite Theory",
+    imageUrl: cover("#3B82F6", "#f0ede8", "SLOW"),
+    externalUrl: "https://open.spotify.com",
+    listens: 94,
+  },
+  {
+    trackId: "preview-5",
+    name: "Midnight Run",
+    artistNames: "Aurora Vale",
+    imageUrl: cover("#EC4899", "#f0ede8", "RUN"),
+    externalUrl: "https://open.spotify.com",
+    listens: 81,
+  },
+];
+
 export function createPreviewInsights(now = Date.now()): ListeningInsights {
   const today = new Date(now);
 
@@ -38,49 +82,6 @@ export function createPreviewInsights(now = Date.now()): ListeningInsights {
       listeningMs: listens * averageTrackMs,
     };
   });
-
-  const topTracks = [
-    {
-      trackId: "preview-1",
-      name: "Neon Skyline",
-      artistNames: "Aurora Vale",
-      imageUrl: cover("#1DB954", "#0a0a0a", "NEON"),
-      externalUrl: "https://open.spotify.com",
-      listens: 148,
-    },
-    {
-      trackId: "preview-2",
-      name: "Glass Rivers",
-      artistNames: "Aurora Vale, Kite Theory",
-      imageUrl: cover("#8B5CF6", "#f0ede8", "GLASS"),
-      externalUrl: "https://open.spotify.com",
-      listens: 121,
-    },
-    {
-      trackId: "preview-3",
-      name: "Static Bloom",
-      artistNames: "Paper Cranes",
-      imageUrl: cover("#F59E0B", "#0a0a0a", "BLOOM"),
-      externalUrl: "https://open.spotify.com",
-      listens: 106,
-    },
-    {
-      trackId: "preview-4",
-      name: "Slow Motion",
-      artistNames: "Kite Theory",
-      imageUrl: cover("#3B82F6", "#f0ede8", "SLOW"),
-      externalUrl: "https://open.spotify.com",
-      listens: 94,
-    },
-    {
-      trackId: "preview-5",
-      name: "Midnight Run",
-      artistNames: "Aurora Vale",
-      imageUrl: cover("#EC4899", "#f0ede8", "RUN"),
-      externalUrl: "https://open.spotify.com",
-      listens: 81,
-    },
-  ];
 
   return {
     generatedAt: now,
@@ -105,7 +106,7 @@ export function createPreviewInsights(now = Date.now()): ListeningInsights {
     weekdays: [520, 560, 610, 640, 790, 860, 832],
     trend,
     trendUnit: "month",
-    topTracks,
+    topTracks: previewTopTracks,
     topArtists: [
       { name: "Aurora Vale", listens: 412, tracks: 38 },
       { name: "Kite Theory", listens: 356, tracks: 31 },

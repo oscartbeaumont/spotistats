@@ -40,7 +40,8 @@ export function csvCell(value: string | number | boolean | null | undefined) {
 /** Makes an untrusted name safe to use as a single file name. */
 export function safeFileName(name: string) {
   const cleaned = name
-    .replace(/[\\/:*?"<>|\u0000-\u001f]+/g, "_")
+    .replace(/[\\/:*?"<>|]+/g, "_")
+    .replace(/[\p{Cc}]+/gu, "_")
     .replace(/^\.+/, "")
     .trim();
 

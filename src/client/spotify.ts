@@ -343,13 +343,20 @@ const request = <S extends Schema.ConstraintDecoder<unknown>>(
     }
 
     const response = yield* Effect.tryPromise({
-      try: () =>
-        fetch(url, {
+      try: () => {
+        const headers = new Headers({
+          Authorization: store.accessToken,
+        });
+
+        if (options) headers.set("Content-Type", "application/json");
+
+        return fetch(url, {
           method: options?.method,
           body: options ? JSON.stringify(options.body) : undefined,
           cache: "no-store",
-          headers: { Authorization: store.accessToken, ...(options ? { "Content-Type": "application/json" } : {}) },
-        }),
+          headers,
+        });
+      },
       catch: (cause) => new SpotifyRequestError(cause),
     });
 
