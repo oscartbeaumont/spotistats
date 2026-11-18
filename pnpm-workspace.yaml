@@ -1,16 +1,39 @@
 packages:
   - '.'
 
-onlyBuiltDependencies:
-  - esbuild
-  - sharp
-  - workerd
+allowBuilds:
+  core-js: true
+  esbuild: true
+  sharp: true
+  workerd: true
 
 minimumReleaseAgeExclude:
   - '@effect/sql-d1@4.0.0'
   - effect@4.0.0
+  - '@cloudflare/build-output-utils@1.0.0-rc.1'
+  - '@cloudflare/config@1.0.0-rc.1'
+  - '@cloudflare/runtime-types@0.1.30'
+  - '@solidjs/compiler-darwin-arm64@2.0.0'
+  - '@solidjs/compiler-darwin-x64@2.0.0'
+  - '@solidjs/compiler-linux-arm64-gnu@2.0.0'
+  - '@solidjs/compiler-linux-x64-gnu@2.0.0'
+  - '@solidjs/compiler-wasm32-wasi@2.0.0'
+  - '@solidjs/compiler-win32-x64-msvc@2.0.0'
+  - '@solidjs/compiler@2.0.0'
+  - '@solidjs/meta@2.0.0'
+  - '@solidjs/router@2.0.0'
+  - '@solidjs/signals@2.0.0'
+  - '@solidjs/vite-plugin@3.0.1'
+  - '@solidjs/web@2.0.0'
+  - cf@1.0.0-rc.1
+  - miniflare@5.20261117.0-beta
+  - posthog-js@1.450.1
+  - solid-js@2.0.0
 
 # vite auto-installs tsx as an optional peer; older tsx pins esbuild <0.28.1,
 # which is affected by GHSA-g7r4-m6w7-qqqr.
 overrides:
   tsx: ^4.23.15
+  # The Solid 2 server serializer; keep both packages on a patched release.
+  seroval: ^1.7.6
+  seroval-plugins: ^1.7.6

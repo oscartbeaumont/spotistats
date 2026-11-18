@@ -2,15 +2,9 @@
   "name": "spotistats",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@10.33.1",
+  "packageManager": "pnpm@12.21.0",
   "engines": {
     "node": ">=24"
-  },
-  "pnpm": {
-    "overrides": {
-      "seroval": "^1.7.6",
-      "seroval-plugins": "^1.7.6"
-    }
   },
   "scripts": {
     "dev": "pnpm db:migrate:local && cf dev",
@@ -27,21 +21,21 @@
   },
   "dependencies": {
     "@effect/sql-d1": "^4.1.4",
-    "@solidjs/meta": "next",
-    "@solidjs/router": "next",
-    "@solidjs/web": "next",
+    "@solidjs/meta": "2.0.0",
+    "@solidjs/router": "2.0.0",
+    "@solidjs/web": "2.0.0",
     "effect": "^4.1.4",
     "jszip": "^3.10.2",
-    "posthog-js": "^1.449.1",
-    "solid-js": "next"
+    "posthog-js": "^1.450.1",
+    "solid-js": "2.0.0"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "2.0.0-rc.0",
-    "@oxlint/plugins": "1.93.0",
-    "@solidjs/vite-plugin": "3.0.0-next.57",
+    "@oxlint/plugins": "1.94.0",
+    "@solidjs/vite-plugin": "3.0.1",
     "@tailwindcss/vite": "^4.3.5",
-    "cf": "1.0.0-rc.0",
-    "oxlint": "1.93.0",
+    "cf": "1.0.0-rc.1",
+    "oxlint": "1.94.0",
     "tailwindcss": "^4.3.5",
     "typescript": "^7.0.2",
     "vite": "^8.3.8",
