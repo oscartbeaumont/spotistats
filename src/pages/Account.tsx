@@ -20,7 +20,7 @@ import { errorMessage } from "~/lib/errors";
 import { formatDate } from "~/lib/format";
 import { createShortcut } from "~/lib/shortcut";
 import { type StatsOutcome, statsOutcome } from "~/lib/statsOutcome";
-import type { TrackingStatus } from "~/api";
+import { UpstreamError, type TrackingStatus } from "~/api";
 
 /** Fixed reason codes the worker puts on a failed stats handshake. */
 const statsFailureMessages = new Map<string, string>([
@@ -408,11 +408,18 @@ function failOnStatsHandshake(result: StatsOutcome | null): void {
     ? statsFailureMessages.get(result.reason)
     : undefined;
 
-  throw new Error(
-    `Connecting Spotify listening stats did not complete.${
-      explanation ? ` ${explanation}` : ""
-    } Try connecting again; if it keeps failing, report this error.`,
-  );
+  const text = `Connecting Spotify listening stats did not complete.${
+    explanation ? ` ${explanation}` : ""
+  } Try connecting again; if it keeps failing, report this error.`;
+
+  // A Spotify outage is an external condition, not a bug to fix. Throwing the
+  // typed upstream error lets the boundary offer a retry and keeps error
+  // tracking from filing an issue nobody can act on.
+  if (result.reason === "spotify_unavailable") {
+    throw new UpstreamError({ service: "spotify", message: text, status: 503 });
+  }
+
+  throw new Error(text);
 }
 
 export default function AccountPage() {

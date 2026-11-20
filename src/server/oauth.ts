@@ -1,6 +1,8 @@
-import { Effect } from "effect";
+import { Cause, Effect, Option, Predicate } from "effect";
 
-import { Spotify } from "./spotify";
+import { type UpstreamError } from "~/api";
+
+import { Spotify, type SpotifyAuthRejected, type SpotifyUnauthorized } from "./spotify";
 import { Tracking } from "./tracking";
 
 /**
@@ -155,6 +157,34 @@ const describeCause = (cause: unknown): string => {
   }
 };
 
+type CallbackError = UpstreamError | SpotifyAuthRejected | SpotifyUnauthorized;
+
+/**
+ * Keeps an upstream outage out of the issue tracker. Spotify's rate limits and
+ * 5xx responses were retried in the worker; if one still fails, the account
+ * page explains it with the same reason it uses when Spotify's redirect fails.
+ */
+const callbackFailureReason = (
+  cause: Cause.Cause<CallbackError>,
+  detail: string,
+): string => {
+  const failure = Option.getOrNull(Cause.findErrorOption(cause));
+
+  if (
+    failure !== null &&
+    Predicate.isTagged(failure, "UpstreamError") &&
+    (failure.status === 429 || (failure.status !== null && failure.status >= 500))
+  ) {
+    return "spotify_unavailable";
+  }
+
+  // Spotify reports bad client credentials as `invalid_client`; surface it as
+  // a distinct reason so the account page can point at the secret.
+  return detail.includes("invalid_client")
+    ? "spotify_credentials"
+    : "internal_error";
+};
+
 /**
  * Marks the hop through the canonical origin, so it is taken exactly once.
  */
@@ -249,12 +279,7 @@ export function statsCallback(
   }).pipe(
     Effect.catchCause((cause) => {
       const detail = describeCause(cause);
-
-      // Spotify reports bad client credentials as `invalid_client`; surface it
-      // as a distinct reason so the account page can point at the secret.
-      const reason = detail.includes("invalid_client")
-        ? "spotify_credentials"
-        : "internal_error";
+      const reason = callbackFailureReason(cause, detail);
 
       return Effect.sync(() =>
         console.error("Spotify stats callback failed", detail),

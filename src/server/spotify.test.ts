@@ -53,7 +53,10 @@ const refreshToken = () =>
     }).pipe(Effect.provide(SpotifyLive(credentials))),
   );
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
 describe("Spotify profile decoding", () => {
   // Spotify returns `null` for an account with no email (for example a phone
@@ -108,7 +111,7 @@ describe("token endpoint failures", () => {
     expect(failure).toMatchObject({ service: "spotify", status: 503 });
   });
 
-  it("treats a rate limit as transient", async () => {
+  it("treats a long rate limit as transient but does not wait it out", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(
@@ -120,7 +123,30 @@ describe("token endpoint failures", () => {
       ),
     );
     const failure = await upstreamFailure(refreshToken());
-    expect(failure).toMatchObject({ status: 429 });
+    expect(failure).toMatchObject({ status: 429, retryAfterMs: 60000 });
+  });
+
+  it("retries a short rate limit instead of failing the token request", async () => {
+    let calls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        calls += 1;
+
+        return calls === 1
+          ? new Response("slow down", { status: 429, headers: { "Retry-After": "0" } })
+          : Response.json({
+              access_token: "token",
+              token_type: "Bearer",
+              expires_in: 3600,
+              scope: "user-read-email",
+            });
+      }),
+    );
+
+    const token = await refreshToken();
+    expect(token.access_token).toBe("token");
+    expect(calls).toBe(2);
   });
 
   it("keeps an invalid grant as an authorization rejection", async () => {
@@ -175,7 +201,55 @@ describe("Spotify API retries", () => {  it("waits out a transient 5xx instead o
     expect(calls).toBe(1);
   });
 
-  it("does not retry a rate limit", async () => {
+  it("waits out a short rate limit instead of failing the request", async () => {
+    let calls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        calls += 1;
+
+        return calls === 1
+          ? new Response("slow down", { status: 429, headers: { "Retry-After": "0" } })
+          : Response.json(profile);
+      }),
+    );
+
+    const decoded = await fetchProfile();
+
+    expect(decoded.id).toBe("user");
+    expect(calls).toBe(2);
+  });
+
+  it("waits the exact delay Spotify asks for", async () => {
+    // https://github.com/oscartbeaumont/spotistats/issues/81
+    vi.useFakeTimers();
+    let calls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        calls += 1;
+
+        return calls === 1
+          ? new Response("slow down", { status: 429, headers: { "Retry-After": "1" } })
+          : Response.json(profile);
+      }),
+    );
+
+    const request = fetchProfile();
+    let settled = false;
+    void request.then(() => {
+      settled = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(500);
+    expect(settled).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(600);
+    expect((await request).id).toBe("user");
+    expect(calls).toBe(2);
+  });
+
+  it("does not wait out a rate limit longer than the callback can afford", async () => {
     let calls = 0;
     vi.stubGlobal(
       "fetch",
@@ -190,7 +264,7 @@ describe("Spotify API retries", () => {  it("waits out a transient 5xx instead o
     );
 
     const failure = await upstreamFailure(fetchProfile());
-    expect(failure).toMatchObject({ status: 429 });
+    expect(failure).toMatchObject({ status: 429, retryAfterMs: 60000 });
     expect(calls).toBe(1);
   });
 });

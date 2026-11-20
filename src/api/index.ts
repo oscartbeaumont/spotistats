@@ -188,6 +188,8 @@ export class UpstreamError extends Schema.TaggedError<UpstreamError>()(
     message: Schema.String,
     /** The HTTP status the upstream returned, when there was one. */
     status: Schema.NullOr(Schema.Number),
+    /** Spotify's `Retry-After`, in milliseconds, when it asked us to wait. */
+    retryAfterMs: Schema.optional(Schema.Number),
   },
 ) {}
 

@@ -1,4 +1,4 @@
-import { Context, Effect, Layer, Predicate, Schedule, Schema } from "effect";
+import { Context, Duration, Effect, Layer, Predicate, Schedule, Schema } from "effect";
 
 import { UpstreamError } from "~/api";
 
@@ -150,7 +150,7 @@ const readJson = (
       }),
   });
 
-const tokenRequest = (
+const tokenRequestOnce = (
   credentials: SpotifyCredentialsValue,
   body: URLSearchParams,
 ) =>
@@ -177,10 +177,16 @@ const tokenRequest = (
       const detail = yield* readText(response, "Failed to read Spotify token error");
       const message = `Spotify token request failed: ${detail}`;
 
-      // A rate limit or an outage is not the user's authorization being
-      // rejected. Reporting it as `SpotifyAuthRejected` would disable the
-      // account and demand a reconnect that cannot fix it.
-      if (response.status === 429 || response.status >= 500) {
+      if (response.status === 429) {
+        return yield* Effect.fail(
+          rateLimitError(message, response.headers.get("Retry-After")),
+        );
+      }
+
+      // An outage is not the user's authorization being rejected. Reporting it
+      // as `SpotifyAuthRejected` would disable the account and demand a
+      // reconnect that cannot fix it.
+      if (response.status >= 500) {
         return yield* Effect.fail(
           new UpstreamError({
             service: "spotify",
@@ -204,18 +210,75 @@ const tokenRequest = (
   });
 
 /**
- * A 5xx from the Spotify API is a transient outage, not a rejected request.
- * The browser retries the same statuses for its own Spotify calls; the worker
- * needs the same patience so one bad gateway response does not fail the page or
- * file an issue for an outage the app cannot fix.
+ * A short `Retry-After` is Spotify telling us exactly how long to wait. A long
+ * one belongs in a queue, not in an OAuth callback the browser is waiting on,
+ * so those still fail fast.
  */
-const retryableUpstream = (error: UpstreamError | SpotifyUnauthorized): boolean =>
-  Predicate.isTagged(error, "UpstreamError") &&
-  error.status !== null &&
-  error.status >= 500 &&
-  error.status <= 599;
+const maxRetryAfterMs = 2000;
 
-const apiRetrySchedule = Schedule.exponential("250 millis");
+/** Reads Spotify's `Retry-After` header as milliseconds, when it gives one. */
+const retryAfterMs = (header: string | null): number | undefined => {
+  if (header === null) return undefined;
+
+  const seconds = Number(header);
+
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : undefined;
+};
+
+/** The typed failure for a rate limit, carrying the delay Spotify asked for. */
+const rateLimitError = (message: string, header: string | null): UpstreamError => {
+  const wait = retryAfterMs(header);
+
+  return wait === undefined
+    ? new UpstreamError({ service: "spotify", message, status: 429 })
+    : new UpstreamError({ service: "spotify", message, status: 429, retryAfterMs: wait });
+};
+
+type RetryableSpotifyError = UpstreamError | SpotifyUnauthorized | SpotifyAuthRejected;
+
+/**
+ * An outage or a short rate limit is transient; a rejected request and a long
+ * rate limit are final for this attempt. The browser retries the same statuses
+ * for its own Spotify calls, so the worker needs the same patience so a blip
+ * does not fail the page or file an issue for an outage the app cannot fix.
+ */
+const retryableSpotifyError = (error: RetryableSpotifyError): boolean => {
+  if (!Predicate.isTagged(error, "UpstreamError")) return false;
+
+  if (error.status === 429) {
+    return error.retryAfterMs !== undefined && error.retryAfterMs <= maxRetryAfterMs;
+  }
+
+  return error.status !== null && error.status >= 500 && error.status <= 599;
+};
+
+/** Waits the header's delay when Spotify gives one, otherwise backs off. */
+const spotifyRetrySchedule = Schedule.exponential("250 millis").pipe(
+  Schedule.setInputType<RetryableSpotifyError>(),
+  Schedule.modifyDelay(({ duration, input }) => {
+    const wait =
+      Predicate.isTagged(input, "UpstreamError") && input.status === 429
+        ? input.retryAfterMs
+        : undefined;
+
+    return Effect.succeed(wait === undefined ? duration : Duration.millis(wait));
+  }),
+);
+
+const retrySpotify = <A, E extends RetryableSpotifyError, R>(
+  effect: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  Effect.retry(effect, {
+    schedule: spotifyRetrySchedule,
+    times: 2,
+    while: retryableSpotifyError,
+  });
+
+/** Token requests share the retry policy so a rate limit cannot fail a login. */
+const tokenRequest = (
+  credentials: SpotifyCredentialsValue,
+  body: URLSearchParams,
+) => retrySpotify(tokenRequestOnce(credentials, body));
 
 const apiRequest = <S extends Schema.ConstraintDecoder<unknown>>(
   schema: S,
@@ -243,14 +306,14 @@ const apiRequest = <S extends Schema.ConstraintDecoder<unknown>>(
     }
 
     if (response.status === 429) {
-      const retryAfter = Number(response.headers.get("Retry-After") ?? "60");
+      const header = response.headers.get("Retry-After");
+      const wait = retryAfterMs(header);
 
       return yield* Effect.fail(
-        new UpstreamError({
-          service: "spotify",
-          message: `Spotify rate limited the request (retry after ${retryAfter}s)`,
-          status: 429,
-        }),
+        rateLimitError(
+          `Spotify rate limited the request (retry after ${wait === undefined ? "unknown" : wait / 1000}s)`,
+          header,
+        ),
       );
     }
 
@@ -269,13 +332,7 @@ const apiRequest = <S extends Schema.ConstraintDecoder<unknown>>(
     const json = yield* readJson(response, "Failed to read Spotify API response");
 
     return yield* decode(schema, json);
-  }).pipe(
-    Effect.retry({
-      schedule: apiRetrySchedule,
-      times: 2,
-      while: retryableUpstream,
-    }),
-  );
+  }).pipe(retrySpotify);
 
 const make = Effect.gen(function* () {
   const credentials = yield* SpotifyCredentials;
