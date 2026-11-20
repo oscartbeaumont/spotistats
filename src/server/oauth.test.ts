@@ -1,6 +1,8 @@
 import { Effect, Layer } from "effect";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { UpstreamError } from "~/api";
+
 import {
   createState,
   spotifyErrorReason,
@@ -136,6 +138,46 @@ describe("stats callback errors", () => {
     const response = await callback("error=invalid_scope");
     expect(locationOf(response)).toBe(
       "/account?stats=failed&reason=spotify_rejected",
+    );
+  });
+
+  it("reports a rate limit during the callback as an outage, not a bug", async () => {
+    const state = await createState(config);
+
+    const response = await Effect.runPromise(
+      statsCallback(
+        new Request(
+          `https://spotistats.otbeaumont.me/account/stats/callback?code=code&state=${state}`,
+        ),
+        config,
+      ).pipe(
+        Effect.provide(
+          Layer.merge(
+            Layer.mock(Spotify, {
+              exchangeCode: () =>
+                Effect.succeed({
+                  access_token: "token",
+                  token_type: "Bearer",
+                  expires_in: 3600,
+                  scope: "user-read-email",
+                }),
+              profile: () =>
+                Effect.fail(
+                  new UpstreamError({
+                    service: "spotify",
+                    message: "rate limited",
+                    status: 429,
+                  }),
+                ),
+            }),
+            Layer.mock(Tracking, {}),
+          ),
+        ),
+      ),
+    );
+
+    expect(locationOf(response)).toBe(
+      "/account?stats=failed&reason=spotify_unavailable",
     );
   });
 });
