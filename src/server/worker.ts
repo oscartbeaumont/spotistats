@@ -1,4 +1,4 @@
-import { Effect, Layer, Option, Schema } from "effect";
+import { Effect, type Layer, Option, Schema } from "effect";
 import type { ConfigError } from "effect/Config";
 
 import { isClientCredentialFailure, reauthMessage } from "~/lib/authorization";

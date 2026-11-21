@@ -46,7 +46,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # Fail on anti-slop diagnostics before spending time on tests and builds.
+      # Fail on lint diagnostics before spending time on tests and builds.
       - run: pnpm lint
 
       - run: pnpm test

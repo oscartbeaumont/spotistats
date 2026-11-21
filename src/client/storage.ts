@@ -11,7 +11,7 @@ const ProfileCache = Schema.Struct({
   // Mirrors `SpotifyProfile`: an account with no email caches `null`, and a
   // stricter schema here would drop the whole session on the next read.
   email: Schema.optional(Schema.NullOr(Schema.String)),
-  followers: Schema.optional(Schema.Number),
+  followers: Schema.optional(Schema.Finite),
 });
 
 export const AuthStore = Schema.Union([

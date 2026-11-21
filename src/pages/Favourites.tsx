@@ -620,7 +620,7 @@ export function FavouritesPage(props: { kind: "tracks" | "albums" }) {
     items,
     atBottom,
     nextPageOffset,
-    loadMore,
+    loadMore: (offset) => void loadMore(offset),
     setAtBottom,
     setSaveData,
   });

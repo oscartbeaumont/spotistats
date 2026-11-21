@@ -6,13 +6,17 @@ import { type DiscoveryHistory, type DiscoveryTrack, UpstreamError } from "~/api
 const databaseError = (cause: { readonly message: string }) =>
   new UpstreamError({ service: "database", message: `Could not read discovery history: ${cause.message}`, status: null });
 
-export const readDiscoveryHistory = Effect.fn("readDiscoveryHistory")(function* (sql: SqlClient, userId: string, now = Date.now()) {
+export const readDiscoveryHistory = Effect.fn("readDiscoveryHistory")(function* (
+  sql: SqlClient,
+  userId: string,
+  now = Date.now(),
+) {
   const seeds = yield* sql<{ id: string }>`
     SELECT spotify_track_id AS id FROM spotify_listens
     WHERE spotify_user_id = ${userId}
     GROUP BY spotify_track_id ORDER BY COUNT(*) DESC, MAX(played_at_ms) DESC, spotify_track_id ASC
     LIMIT 5
-  `.pipe(Effect.mapError(databaseError));
+  `;
 
   const rediscovery = yield* sql<DiscoveryTrack>`
     SELECT t.spotify_track_id AS id, t.name AS name,
@@ -24,10 +28,10 @@ export const readDiscoveryHistory = Effect.fn("readDiscoveryHistory")(function* 
     HAVING COUNT(*) >= 2 AND MAX(l.played_at_ms) < ${now - 90 * 86_400_000}
     ORDER BY COUNT(*) DESC, MAX(l.played_at_ms) ASC, l.spotify_track_id ASC
     LIMIT 100
-  `.pipe(Effect.mapError(databaseError));
+  `;
 
   return { seeds: seeds.map((row) => row.id), rediscovery } satisfies DiscoveryHistory;
-});
+}, Effect.mapError(databaseError));
 
 export const readKnownTracks = Effect.fn("readKnownTracks")(function* (sql: SqlClient, userId: string, ids: readonly string[]) {
   // D1 permits 100 bindings per statement; leave room for the account filter.

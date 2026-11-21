@@ -11,12 +11,13 @@
 
 import { Option, Predicate, Schema } from "effect";
 import type { CaptureResult, Properties } from "posthog-js";
+import type posthog from "posthog-js";
 
 import type { InsightsRange, UpstreamError } from "~/api";
 
 import { SpotifyUnauthenticatedError } from "./spotify";
 
-export type PostHogClient = typeof import("posthog-js")["default"];
+export type PostHogClient = typeof posthog;
 
 /**
  * Loads the PostHog client once and shares the promise. The mutable cache is
@@ -189,7 +190,7 @@ export function isUpstreamOutage(error: unknown): error is UpstreamError {
 
   if (!Schema.is(Schema.String)(error.service)) return false;
 
-  if (error.status !== null && !Schema.is(Schema.Number)(error.status)) {
+  if (error.status !== null && !Schema.is(Schema.Finite)(error.status)) {
     return false;
   }
 
@@ -268,7 +269,7 @@ export function shouldDropEvent(event: CaptureResult): boolean {
     return true;
   }
 
-  const currentUrl = event.properties["$current_url"];
+  const currentUrl: unknown = event.properties["$current_url"];
 
   const pageUrl = Schema.is(Schema.String)(currentUrl)
     ? currentUrl

@@ -21,6 +21,20 @@ const config = {
 
 const login = (url: string) => statsLogin(new Request(url), config);
 
+const callback = (query: string) =>
+  Effect.runPromise(
+    statsCallback(
+      new Request(
+        `https://spotistats.otbeaumont.me/account/stats/callback?${query}`,
+      ),
+      config,
+    ).pipe(
+      Effect.provide(
+        Layer.merge(Layer.mock(Spotify, {}), Layer.mock(Tracking, {})),
+      ),
+    ),
+  );
+
 const locationOf = (response: Response) => response.headers.get("Location") ?? "";
 
 const stateOf = (response: Response) =>
@@ -102,23 +116,6 @@ it("maps Spotify's error codes to fixed reasons", () => {
 });
 
 describe("stats callback errors", () => {
-  const callback = (query: string) =>
-    Effect.runPromise(
-      statsCallback(
-        new Request(
-          `https://spotistats.otbeaumont.me/account/stats/callback?${query}`,
-        ),
-        config,
-      ).pipe(
-        Effect.provide(
-          Layer.merge(
-            Layer.mock(Spotify, {}),
-            Layer.mock(Tracking, {}),
-          ),
-        ),
-      ),
-    );
-
   it("treats a cancelled consent screen as a cancellation", async () => {
     const response = await callback("error=access_denied&state=stale");
     expect(response.status).toBe(302);

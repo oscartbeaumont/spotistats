@@ -26,7 +26,7 @@ export function bootstrapClient(): void {
     });
   }
 
-  void consumeSpotifyCallback(session).catch((error) => {
+  void consumeSpotifyCallback(session).catch((error: unknown) => {
     // A broken callback must not become an unhandled boot rejection.
     console.error("Spotify login callback failed", error);
   });

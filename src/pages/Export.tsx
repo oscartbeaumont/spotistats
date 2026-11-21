@@ -240,6 +240,10 @@ function ExportNotices(props: {
   );
 }
 
+/** The export job for a playlist, when one exists. */
+const jobFor = (playlist: Playlist): ExportJob | undefined =>
+  exportJobs().find((job) => job.id === exportJobId(playlist));
+
 export default function ExportPage() {
   const [backupProgress, setBackupProgress] = createSignal(0);
   const [backingUp, setBackingUp] = createSignal(false);
@@ -258,9 +262,6 @@ export default function ExportPage() {
       return [];
     }
   };
-
-  const jobFor = (playlist: Playlist): ExportJob | undefined =>
-    exportJobs().find((job) => job.id === exportJobId(playlist));
 
   const isSelected = (playlist: Playlist) => selected().has(exportJobId(playlist));
 
@@ -371,8 +372,8 @@ export default function ExportPage() {
           activeExportCount() > 0 ||
           loadedPlaylists().length === 0
         }
-        onExportSelected={exportSelected}
-        onBackupAll={backupAll}
+        onExportSelected={() => void exportSelected()}
+        onBackupAll={() => void backupAll()}
       />
       <ExportNotices
         backingUp={backingUp()}

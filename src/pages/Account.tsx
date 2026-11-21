@@ -485,7 +485,7 @@ export default function AccountPage() {
             <ListeningStatsCard
               status={stats()}
               disabling={actions.disabling()}
-              onDisable={actions.disableStats}
+              onDisable={() => void actions.disableStats()}
             />
             <ExportDataCard
               exporting={actions.exporting()}
@@ -493,7 +493,7 @@ export default function AccountPage() {
             />
             <DangerZoneCard
               deleting={actions.deleting()}
-              onDelete={actions.deleteAccountData}
+              onDelete={() => void actions.deleteAccountData()}
             />
           </div>
         </section>

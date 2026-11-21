@@ -14,8 +14,8 @@ import { firstImageUrl } from "~/lib/images";
 import { exportCsv, readExport, readInsights } from "./insights";
 import {
   Spotify,
-  SpotifyAuthRejected,
-  SpotifyUnauthorized,
+  type SpotifyAuthRejected,
+  type SpotifyUnauthorized,
   type SpotifyProfile,
   type SpotifyToken,
 } from "./spotify";
@@ -135,13 +135,11 @@ const make = Effect.gen(function* () {
   const enable = (profile: SpotifyProfile, token: SpotifyToken) =>
     Effect.gen(function* () {
       if (!token.refresh_token) {
-        return yield* Effect.fail(
-          new UpstreamError({
-            service: "spotify",
-            message: "Spotify did not return a refresh token",
-            status: null,
-          }),
-        );
+        return yield* new UpstreamError({
+          service: "spotify",
+          message: "Spotify did not return a refresh token",
+          status: null,
+        });
       }
 
       const now = Date.now();
@@ -320,13 +318,11 @@ const make = Effect.gen(function* () {
       const row = rows[0];
 
       if (!row) {
-        return yield* Effect.fail(
-          new UpstreamError({
-            service: "database",
-            message: `No refresh token for ${spotifyUserId}`,
-            status: null,
-          }),
-        );
+        return yield* new UpstreamError({
+          service: "database",
+          message: `No refresh token for ${spotifyUserId}`,
+          status: null,
+        });
       }
 
       const token = yield* spotify.refreshToken(row.refreshToken);

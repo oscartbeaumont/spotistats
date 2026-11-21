@@ -46,7 +46,7 @@ it("retries a dropped connection instead of failing the page", async () => {
     Effect.gen(function* () {
       attempts += 1;
 
-      if (attempts < 2) return yield* Effect.fail(droppedConnection());
+      if (attempts < 2) return yield* droppedConnection();
 
       return "ok";
     }),
@@ -64,6 +64,8 @@ it("does not retry a failure the server answered", async () => {
       Effect.gen(function* () {
         attempts += 1;
 
+        // The client's retry filter has to cope with untagged failures too.
+        // oxlint-disable-next-line effecttsgo/global-error-in-effect-failure -- the test asserts untagged errors still reach the caller
         return yield* Effect.fail(new Error("UpstreamError"));
       }),
     ),
@@ -87,7 +89,7 @@ it("retries a transient upstream failure instead of failing the page", async () 
     Effect.gen(function* () {
       attempts += 1;
 
-      if (attempts < 2) return yield* Effect.fail(upstreamFailure(503));
+      if (attempts < 2) return yield* upstreamFailure(503);
 
       return "ok";
     }),
@@ -105,7 +107,7 @@ it("does not retry an upstream rejection", async () => {
     Effect.gen(function* () {
       attempts += 1;
 
-      return yield* Effect.fail(upstreamFailure(400));
+      return yield* upstreamFailure(400);
     }),
   );
 

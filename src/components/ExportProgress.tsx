@@ -6,6 +6,17 @@ import {
   exportJobs,
 } from "~/client/exportStore";
 
+/** The progress line under each job. */
+const label = (status: string, progress: number) => {
+  if (status === "queued") return "Queued";
+
+  if (status === "running") return `${Math.round(progress * 100)}%`;
+
+  if (status === "done") return "Done";
+
+  return "Failed";
+};
+
 /**
  * A persistent panel for background playlist exports.
  *
@@ -13,16 +24,6 @@ import {
  * the user navigates and the export keeps running.
  */
 export function ExportProgress() {
-  const label = (status: string, progress: number) => {
-    if (status === "queued") return "Queued";
-
-    if (status === "running") return `${Math.round(progress * 100)}%`;
-
-    if (status === "done") return "Done";
-
-    return "Failed";
-  };
-
   return (
     <Show when={exportJobs().length > 0}>
       <aside

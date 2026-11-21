@@ -358,9 +358,15 @@ export async function saveDiscoveryPlaylist(
     );
   }
 
+  const playlist = draft.playlist;
+
+  if (playlist === null) {
+    throw new Error("Discovery has no playlist. Reopen discovery before retrying.");
+  }
+
   await runSpotify(
     setDiscoveryPlaylistTracks(
-      draft.playlist!.id,
+      playlist.id,
       draft.tracks.map((track) => track.id),
     ),
   );

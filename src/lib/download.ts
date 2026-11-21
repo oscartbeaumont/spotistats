@@ -13,6 +13,9 @@ export function downloadBlob(name: string, blob: Blob) {
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = name;
+  // `document.body` is typed against the Workers `Body` interface here, whose
+  // `append` takes a stream, not a DOM node.
+  // oxlint-disable-next-line unicorn/prefer-dom-node-append -- Workers `Body.append` is not the DOM method
   document.body.appendChild(anchor);
   anchor.click();
   document.body.removeChild(anchor);
@@ -34,14 +37,14 @@ export function csvCell(value: string | number | boolean | null | undefined) {
   const text = String(value);
   const safe = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
 
-  return /[",\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+  return /[",\r\n]/.test(safe) ? `"${safe.replaceAll('"', '""')}"` : safe;
 }
 
 /** Makes an untrusted name safe to use as a single file name. */
 export function safeFileName(name: string) {
   const cleaned = name
-    .replace(/[\\/:*?"<>|]+/g, "_")
-    .replace(/[\p{Cc}]+/gu, "_")
+    .replaceAll(/[\\/:*?"<>|]+/g, "_")
+    .replaceAll(/[\p{Cc}]+/gu, "_")
     .replace(/^\.+/, "")
     .trim();
 
