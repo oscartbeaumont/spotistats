@@ -15,19 +15,18 @@ import { readDiscoveryHistory, readKnownTracks } from "./discovery";
  */
 const resolveUser = (authorization: string | undefined) =>
   Effect.gen(function* () {
-    if (!authorization) return yield* Effect.fail(new HttpApiError.Unauthorized({}));
+    if (!authorization) return yield* new HttpApiError.Unauthorized({});
     const spotify = yield* Spotify;
 
     return yield* spotify.profile(authorization.replace(/^Bearer\s+/i, ""));
   }).pipe(
-    Effect.catchTag("SpotifyUnauthorized", () =>
-      Effect.fail(new HttpApiError.Unauthorized({})),
-    ),
-    Effect.catchTag("UpstreamError", (error) =>
-      Effect.fail(
-        error.status === 401 ? new HttpApiError.Unauthorized({}) : error,
-      ),
-    ),
+    Effect.catchTags({
+      SpotifyUnauthorized: () => Effect.fail(new HttpApiError.Unauthorized({})),
+      UpstreamError: (error) =>
+        Effect.fail(
+          error.status === 401 ? new HttpApiError.Unauthorized({}) : error,
+        ),
+    }),
   );
 
 /** Runs a handler with the authenticated Spotify user in scope. */

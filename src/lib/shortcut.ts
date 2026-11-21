@@ -63,21 +63,21 @@ export function createShortcut(
   handler: (event: KeyboardEvent) => void,
   options?: { preventDefault?: boolean; allowEditable?: boolean },
 ) {
+  const listener = (event: KeyboardEvent) => {
+    // Ignore OS auto-repeat; the shortcut fires once per press.
+    if (event.repeat) return;
+
+    // Check the target before calling preventDefault, or a keystroke in an
+    // input would be swallowed before the handler can bail out.
+    if (!options?.allowEditable && isEditableShortcutTarget(event)) return;
+
+    if (!matches(keys, event)) return;
+
+    if (options?.preventDefault !== false) event.preventDefault();
+    handler(event);
+  };
+
   onSettled(() => {
-    const listener = (event: KeyboardEvent) => {
-      // Ignore OS auto-repeat; the shortcut fires once per press.
-      if (event.repeat) return;
-
-      // Check the target before calling preventDefault, or a keystroke in an
-      // input would be swallowed before the handler can bail out.
-      if (!options?.allowEditable && isEditableShortcutTarget(event)) return;
-
-      if (!matches(keys, event)) return;
-
-      if (options?.preventDefault !== false) event.preventDefault();
-      handler(event);
-    };
-
     window.addEventListener("keydown", listener);
 
     return () => window.removeEventListener("keydown", listener);

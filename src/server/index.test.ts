@@ -2,7 +2,7 @@ import { Effect, Layer } from "effect";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { UpstreamError } from "../api";
-import { SpotifyAuthRejected, SpotifyUnauthorized } from "./spotify";
+import { SpotifyAuthRejected, type SpotifyUnauthorized } from "./spotify";
 import { Tracking } from "./tracking";
 import { createWorker } from "./worker";
 

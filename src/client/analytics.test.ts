@@ -17,6 +17,28 @@ const origin = "https://spotistats.otbeaumont.me";
 
 const loginPage = `${origin}/login`;
 
+/** An `UpstreamError` as the worker's 502 decodes into it. */
+const upstream = (service: string, status: number | null) =>
+  new UpstreamError({
+    service,
+    message: "failed",
+    status,
+  });
+
+/** A PostHog `$exception` event carrying the given stack frames. */
+const exception = (
+  frames: ReadonlyArray<{ filename?: string }>,
+  properties: Properties = {},
+): CaptureResult => ({
+  uuid: "event",
+  event: "$exception",
+  properties: {
+    $current_url: loginPage,
+    ...properties,
+    $exception_list: [{ stacktrace: { frames } }],
+  },
+});
+
 describe("isInjectedScriptError", () => {
   it("drops frames that name the document, as Chrome iOS reports them", () => {
     expect(
@@ -147,13 +169,6 @@ describe("isUnparseableScriptError", () => {
 });
 
 describe("isUpstreamOutage", () => {
-  const upstream = (service: string, status: number | null) =>
-    new UpstreamError({
-      service,
-      message: "failed",
-      status,
-    });
-
   it("treats Spotify's 5xx as an outage", () => {
     // https://github.com/oscartbeaumont/spotistats/issues/70
     expect(isUpstreamOutage(upstream("spotify", 503))).toBe(true);
@@ -246,19 +261,6 @@ describe("isHandledError", () => {
 });
 
 describe("analytics exception filter", () => {
-  const exception = (
-    frames: ReadonlyArray<{ filename?: string }>,
-    properties: Properties = {},
-  ): CaptureResult => ({
-    uuid: "event",
-    event: "$exception",
-    properties: {
-      $current_url: loginPage,
-      ...properties,
-      $exception_list: [{ stacktrace: { frames } }],
-    },
-  });
-
   it("drops injected-script exceptions before they reach PostHog", () => {
     const injected = exception([{ filename: loginPage }]);
     expect(shouldDropEvent(injected)).toBe(true);

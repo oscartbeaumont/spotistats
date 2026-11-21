@@ -16,6 +16,33 @@ import {
 
 afterEach(() => vi.unstubAllGlobals());
 
+/** Signs the store in and answers the next fetch with `body`. */
+const respond = (body: Schema.Json) => {
+  setAuthStore({
+    status: "authenticated",
+    accessToken: "Bearer token",
+    linkToUri: false,
+  });
+  vi.stubGlobal("fetch", vi.fn(async () => Response.json(body)));
+};
+
+const page = (items: Schema.Json[], offset = 0, next: string | null = null) => ({
+  items,
+  next,
+  total: items.length,
+  limit: 50,
+  offset,
+});
+
+/** Signs the store in without stubbing a response. */
+const background = () => {
+  setAuthStore({
+    status: "authenticated",
+    accessToken: "Bearer token",
+    linkToUri: false,
+  });
+};
+
 describe("playlist entry decoding", () => {
   const track = {
     id: "track", is_local: false, name: "Track",
@@ -119,23 +146,6 @@ describe("saved album decoding", () => {
     artists: [{ name: "Artist" }],
   };
 
-  const respond = (body: Schema.Json) => {
-    setAuthStore({
-      status: "authenticated",
-      accessToken: "Bearer token",
-      linkToUri: false,
-    });
-    vi.stubGlobal("fetch", vi.fn(async () => Response.json(body)));
-  };
-
-  const page = (items: Schema.Json[], offset = 0, next: string | null = null) => ({
-    items,
-    next,
-    total: items.length,
-    limit: 50,
-    offset,
-  });
-
   it("keeps a page whose album Spotify no longer returns", async () => {
     respond(page([{ added_at: null, album: null }, { added_at: null, album }]));
     const result = await runSpotify(getSavedAlbumsPage());
@@ -186,14 +196,6 @@ describe("saved album decoding", () => {
 });
 
 describe("rate limit retries", () => {
-  const background = () => {
-    setAuthStore({
-      status: "authenticated",
-      accessToken: "Bearer token",
-      linkToUri: false,
-    });
-  };
-
   it("retries a 429 once Spotify's Retry-After has passed", async () => {
     background();
 

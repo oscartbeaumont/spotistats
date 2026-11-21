@@ -40,18 +40,19 @@ export default function DiscoverPage() {
   );
 }
 
+/** Whether the session granted the scope that saves a discovery playlist. */
+const hasPermission = () => {
+  const session = authStore();
+
+  return session.status === "authenticated" && session.scopes?.includes("playlist-modify-private");
+};
+
 function Discover() {
   const [mode, setMode] = createSignal<DiscoveryMode>("blend");
   const [mood, setMood] = createSignal<Mood>("any");
   const [draft, setDraft] = createSignal<DiscoveryDraft | null>(null);
   const [busy, setBusy] = createSignal(true);
   const [error, setError] = createSignal<string | null>(null);
-
-  const hasPermission = () => {
-    const session = authStore();
-
-    return session.status === "authenticated" && session.scopes?.includes("playlist-modify-private");
-  };
 
   const editable = () => draft()?.stage === "review" && !busy();
   const persist = (next: DiscoveryDraft) => { writeDiscoveryDraft(next); setDraft(next); };

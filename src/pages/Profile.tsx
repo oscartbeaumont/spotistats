@@ -18,7 +18,7 @@ import {
   getProfile,
   runSpotify,
   type SpotifyItem,
-  SpotifyProfile,
+  type SpotifyProfile,
 } from "~/client/spotify";
 import { setAuthStore } from "~/client/storage";
 import { ListeningInsights } from "~/components/ListeningInsights";

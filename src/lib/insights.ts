@@ -60,7 +60,7 @@ export function computeStreaks(
     previous = value;
   }
 
-  const last = unique[unique.length - 1];
+  const last = unique.at(-1);
   const gapFromToday = last === undefined ? Number.NaN : dayNumber(today) - dayNumber(last);
   let current = 0;
 

@@ -14,7 +14,10 @@ import {
   startPlaylistExports,
 } from "./exportStore";
 
-const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+const flush = () =>
+  new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
 
 describe("export store", () => {
   beforeEach(async () => {

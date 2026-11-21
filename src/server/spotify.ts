@@ -12,7 +12,7 @@ import { UpstreamError } from "~/api";
 export const SpotifyToken = Schema.Struct({
   access_token: Schema.String,
   token_type: Schema.String,
-  expires_in: Schema.Number,
+  expires_in: Schema.Finite,
   refresh_token: Schema.optional(Schema.String),
   scope: Schema.String,
 });
@@ -27,7 +27,7 @@ export const SpotifyProfile = Schema.Struct({
   email: Schema.optional(Schema.NullOr(Schema.String)),
   uri: Schema.String,
   external_urls: Schema.Struct({ spotify: Schema.String }),
-  followers: Schema.Struct({ total: Schema.Number }),
+  followers: Schema.Struct({ total: Schema.Finite }),
   images: Schema.optional(Schema.NullOr(Schema.Array(Schema.Struct({ url: Schema.String })))),
 });
 
@@ -36,7 +36,7 @@ export type SpotifyProfile = typeof SpotifyProfile.Type;
 const SpotifyTrack = Schema.Struct({
   id: Schema.NullOr(Schema.String),
   name: Schema.String,
-  duration_ms: Schema.Number,
+  duration_ms: Schema.Finite,
   uri: Schema.String,
   external_urls: Schema.optional(Schema.Struct({ spotify: Schema.String })),
   album: Schema.optional(
@@ -67,7 +67,7 @@ export type PlayHistory = typeof PlayHistory.Type;
 
 const RecentlyPlayed = Schema.Struct({ items: Schema.Array(PlayHistory) });
 
-export class SpotifyUnauthorized extends Schema.TaggedError<SpotifyUnauthorized>()(
+export class SpotifyUnauthorized extends Schema.TaggedError<SpotifyUnauthorized, { readonly brand: unique symbol }>()(
   "SpotifyUnauthorized",
   { message: Schema.String },
 ) {}
@@ -79,9 +79,9 @@ export class SpotifyUnauthorized extends Schema.TaggedError<SpotifyUnauthorized>
  * and because the body names the reason (`invalid_grant` when a refresh token
  * has expired, `invalid_client` when the app's credentials are wrong).
  */
-export class SpotifyAuthRejected extends Schema.TaggedError<SpotifyAuthRejected>()(
+export class SpotifyAuthRejected extends Schema.TaggedError<SpotifyAuthRejected, { readonly brand: unique symbol }>()(
   "SpotifyAuthRejected",
-  { message: Schema.String, status: Schema.Number },
+  { message: Schema.String, status: Schema.Finite },
 ) {}
 
 /** The app credentials the Spotify token endpoint authenticates with. */
@@ -102,6 +102,9 @@ const decode = <S extends Schema.ConstraintDecoder<unknown>>(
   schema: S,
   body: Schema.Json,
 ): Effect.Effect<S["Type"], UpstreamError> =>
+  // The value is network JSON, so the static type carries nothing about the
+  // generic schema's Encoded type; the unknown decoder is the honest one here.
+  // oxlint-disable-next-line effecttsgo/prefer-typed-schema-decoder -- input is dynamic JSON, not the schema's Encoded type
   Schema.decodeUnknownEffect(schema)(body).pipe(
     Effect.mapError(
       (error) =>
@@ -134,7 +137,7 @@ const readText = (
  * by construction; a malformed body rejects instead of resolving.
  */
 const jsonBody = (response: Response): Promise<Schema.Json> =>
-  response.json() as Promise<Schema.Json>;
+  response.json<Schema.Json>();
 
 const readJson = (
   response: Response,
@@ -178,30 +181,24 @@ const tokenRequestOnce = (
       const message = `Spotify token request failed: ${detail}`;
 
       if (response.status === 429) {
-        return yield* Effect.fail(
-          rateLimitError(message, response.headers.get("Retry-After")),
-        );
+        return yield* rateLimitError(message, response.headers.get("Retry-After"));
       }
 
       // An outage is not the user's authorization being rejected. Reporting it
       // as `SpotifyAuthRejected` would disable the account and demand a
       // reconnect that cannot fix it.
       if (response.status >= 500) {
-        return yield* Effect.fail(
-          new UpstreamError({
-            service: "spotify",
-            message,
-            status: response.status,
-          }),
-        );
-      }
-
-      return yield* Effect.fail(
-        new SpotifyAuthRejected({
+        return yield* new UpstreamError({
+          service: "spotify",
           message,
           status: response.status,
-        }),
-      );
+        });
+      }
+
+      return yield* new SpotifyAuthRejected({
+        message,
+        status: response.status,
+      });
     }
 
     const json = yield* readJson(response, "Failed to read Spotify token response");
@@ -300,33 +297,27 @@ const apiRequest = <S extends Schema.ConstraintDecoder<unknown>>(
     });
 
     if (response.status === 401) {
-      return yield* Effect.fail(
-        new SpotifyUnauthorized({ message: "Spotify rejected the access token" }),
-      );
+      return yield* new SpotifyUnauthorized({ message: "Spotify rejected the access token" });
     }
 
     if (response.status === 429) {
       const header = response.headers.get("Retry-After");
       const wait = retryAfterMs(header);
 
-      return yield* Effect.fail(
-        rateLimitError(
-          `Spotify rate limited the request (retry after ${wait === undefined ? "unknown" : wait / 1000}s)`,
-          header,
-        ),
+      return yield* rateLimitError(
+        `Spotify rate limited the request (retry after ${wait === undefined ? "unknown" : wait / 1000}s)`,
+        header,
       );
     }
 
     if (!response.ok) {
       const detail = yield* readText(response, "Failed to read Spotify API error");
 
-      return yield* Effect.fail(
-        new UpstreamError({
-          service: "spotify",
-          message: `Spotify API failed: ${response.status} ${detail}`,
-          status: response.status,
-        }),
-      );
+      return yield* new UpstreamError({
+        service: "spotify",
+        message: `Spotify API failed: ${response.status} ${detail}`,
+        status: response.status,
+      });
     }
 
     const json = yield* readJson(response, "Failed to read Spotify API response");

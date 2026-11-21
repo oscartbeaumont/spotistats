@@ -55,6 +55,8 @@ it("does not enable discovery on a production build without analytics", () => {
 it("keeps discovery hidden when the analytics chunk fails to load", async () => {
   client = Promise.reject(new Error("chunk load failed"));
   initFeatureFlags(loadClient);
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
   expect(discoveryEnabled()).toBe(false);
 });

@@ -96,7 +96,7 @@ function replaceBakedManifest(
  * re-exports it, but Workers module exports must be functions or handlers.
  */
 function dropModuleUrlExport(code: string): string {
-  return code.replace(
+  return code.replaceAll(
     /export\s*\{([^}]*)\}\s*;/g,
     (_match, exports: string) => {
       const kept = exports

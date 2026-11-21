@@ -1,6 +1,6 @@
 import { Cause, Effect, Option, Predicate } from "effect";
 
-import { type UpstreamError } from "~/api";
+import type { UpstreamError } from "~/api";
 
 import { Spotify, type SpotifyAuthRejected, type SpotifyUnauthorized } from "./spotify";
 import { Tracking } from "./tracking";
@@ -149,7 +149,7 @@ export const spotifyErrorReason = (error: string): string =>
 /** Keeps the server log readable: the raw Cause nests the error too deep. */
 const describeCause = (cause: unknown): string => {
   try {
-    return JSON.stringify(cause, (_key, value) =>
+    return JSON.stringify(cause, (_key, value: unknown) =>
       value instanceof Error ? { name: value.name, message: value.message } : value,
     );
   } catch {

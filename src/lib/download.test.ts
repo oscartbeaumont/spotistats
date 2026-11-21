@@ -32,7 +32,7 @@ describe("safeFileName", () => {
 
   it("removes path traversal and separators", () => {
     expect(safeFileName("../../etc/passwd")).toBe("_.._etc_passwd");
-    expect(safeFileName("a/b\\c")).toBe("a_b_c");
+    expect(safeFileName(String.raw`a/b\c`)).toBe("a_b_c");
   });
 
   it("falls back when the name is empty", () => {

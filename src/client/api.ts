@@ -15,7 +15,7 @@ import { authStore, setAuthStore } from "./storage";
  */
 
 const baseUrl =
-  typeof globalThis.location !== "undefined"
+  globalThis.location !== undefined
     ? globalThis.location.origin
     : "http://localhost";
 
@@ -42,7 +42,7 @@ const transient = <E>(error: E): boolean => {
   return (
     Predicate.isTagged(error, "UpstreamError") &&
     Predicate.hasProperty(error, "status") &&
-    Schema.is(Schema.Number)(error.status) &&
+    Schema.is(Schema.Finite)(error.status) &&
     error.status >= 500
   );
 };
@@ -58,7 +58,7 @@ export const runApi = <A, E>(effect: Effect.Effect<A, E, never>): Promise<A> => 
         while: transient,
       }),
     ),
-  ).catch((error) => {
+  ).catch((error: unknown) => {
     if (Predicate.isTagged(error, "Unauthorized")) {
       setAuthStore((current) =>
         session.status === "authenticated" &&
