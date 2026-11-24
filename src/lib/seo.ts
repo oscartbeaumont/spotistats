@@ -65,6 +65,9 @@ export const titleForPath = (path: string) => {
   if (path.startsWith("/export"))
     return "Export your Spotify data — Spotistats";
 
+  if (path.startsWith("/stats/weeks"))
+    return "Weekly Spotify listening stats — Spotistats";
+
   if (path.startsWith("/account"))
     return "Spotify stats account — Spotistats";
 

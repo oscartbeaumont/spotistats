@@ -6,12 +6,24 @@ import {
   type ListeningExport,
   type ListeningInsights,
   type TrackingStatus,
+  type WeeklyAccess,
+  type WeeklyHistory,
+  type WeeklyHistoryQuery,
+  type WeeklyInsights,
   UpstreamError,
 } from "~/api";
 import { authorizationExpiry } from "~/lib/authorization";
 import { firstImageUrl } from "~/lib/images";
+import type { WeekBounds } from "~/lib/weeks";
 
-import { exportCsv, readExport, readInsights } from "./insights";
+import {
+  exportCsv,
+  readExport,
+  readInsights,
+  readWeeklyAccess,
+  readWeeklyHistory,
+  readWeeklyInsights,
+} from "./insights";
 import {
   Spotify,
   type SpotifyAuthRejected,
@@ -200,6 +212,18 @@ const make = Effect.gen(function* () {
 
   const insights = (spotifyUserId: string, query: InsightsQuery) =>
     readInsights(sql, spotifyUserId, query);
+
+  const weeklyAccess = (spotifyUserId: string) =>
+    readWeeklyAccess(sql, spotifyUserId);
+
+  const weeklyHistory = (spotifyUserId: string, query: WeeklyHistoryQuery) =>
+    readWeeklyHistory(sql, spotifyUserId, query);
+
+  const weeklyInsights = (
+    spotifyUserId: string,
+    bounds: WeekBounds,
+    tzOffset: number,
+  ) => readWeeklyInsights(sql, spotifyUserId, bounds, tzOffset);
 
   const exportJson = (spotifyUserId: string) => readExport(sql, spotifyUserId);
 
@@ -434,6 +458,9 @@ const make = Effect.gen(function* () {
   return {
     status,
     insights,
+    weeklyAccess,
+    weeklyHistory,
+    weeklyInsights,
     exportJson,
     exportCsv: exportCsvData,
     enable,
@@ -455,6 +482,18 @@ export interface TrackingService {
     spotifyUserId: string,
     query: InsightsQuery,
   ) => Effect.Effect<ListeningInsights, UpstreamError>;
+  readonly weeklyAccess: (
+    spotifyUserId: string,
+  ) => Effect.Effect<WeeklyAccess, UpstreamError>;
+  readonly weeklyHistory: (
+    spotifyUserId: string,
+    query: WeeklyHistoryQuery,
+  ) => Effect.Effect<WeeklyHistory, UpstreamError>;
+  readonly weeklyInsights: (
+    spotifyUserId: string,
+    bounds: WeekBounds,
+    tzOffset: number,
+  ) => Effect.Effect<WeeklyInsights, UpstreamError>;
   readonly exportJson: (
     spotifyUserId: string,
   ) => Effect.Effect<ListeningExport, UpstreamError>;

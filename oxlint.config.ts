@@ -19,6 +19,8 @@ export default defineConfig({
     "**/dist/**",
     "**/.cloudflare/**",
     "**/.wrangler/**",
+    "**/.cdp-report/**",
+    ".cdp/**",
     "**/test-results/**",
     ".agent/**",
     ".agents/**",
