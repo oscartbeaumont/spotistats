@@ -389,7 +389,7 @@ export interface AnalyticsEvents {
   listening_data_exported: { format: "json" | "csv" };
   playlist_exported: { kind: "liked_songs" | "playlist"; trackCount: number };
   library_backed_up: { playlistCount: number };
-  insights_range_changed: { range: InsightsRange };
+  insights_range_changed: { range: InsightsRange | "weekly" };
   insights_preview_opened: NoProperties;
   insights_preview_exited: NoProperties;
   favourites_range_changed: { range: FavouritesRange };

@@ -13,7 +13,6 @@ import {
 
 import { accountApi } from "~/client/api";
 import { capture } from "~/client/analytics";
-import { reloadWeeklyStatsAccess } from "~/client/weeklyStats";
 import { PageHeader } from "~/components/PageHeader";
 import { authorizationNeedsReconnect } from "~/lib/authorization";
 import { downloadTextFile } from "~/lib/download";
@@ -302,13 +301,11 @@ function createAccountActions(refreshStats: () => Promise<TrackingStatus>) {
   const runDisable = action(function* () {
     yield accountApi.disable();
     yield refreshStats();
-    reloadWeeklyStatsAccess();
   });
 
   const runDelete = action(function* () {
     yield accountApi.deleteData();
     yield refreshStats();
-    reloadWeeklyStatsAccess();
   });
 
   const disableStats = async () => {

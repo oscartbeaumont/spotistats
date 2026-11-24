@@ -41,7 +41,7 @@ export const TrackingStatus = Schema.Struct({
 
 export type TrackingStatus = typeof TrackingStatus.Type;
 
-/** Cheap, non-mutating access check used by the nav and weekly route gate. */
+/** Cheap, non-mutating access check used by the overview's weekly mode. */
 export const WeeklyAccess = Schema.Struct({
   enabled: Schema.Boolean,
   firstPlayedAtMs: Schema.NullOr(Schema.Finite),
@@ -68,7 +68,7 @@ export type WeeklyHistory = typeof WeeklyHistory.Type;
 
 export interface WeeklyHistoryQuery {
   readonly tzOffset: number;
-  readonly before: string | null;
+  readonly page: number;
   readonly limit: number;
 }
 
@@ -278,7 +278,7 @@ export const AccountGroup = HttpApiGroup.make("account").add(
     headers: bearer,
     query: {
       tzOffset: Schema.optional(Schema.FiniteFromString),
-      before: Schema.optional(WeekStart),
+      page: Schema.optional(Schema.FiniteFromString),
       limit: Schema.optional(Schema.FiniteFromString),
     },
     success: WeeklyHistory,

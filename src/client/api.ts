@@ -96,7 +96,7 @@ export const accountApi = {
         headers: { authorization: authorization() },
         query: {
           tzOffset: query.tzOffset,
-          before: query.before ?? undefined,
+          page: query.page,
           limit: query.limit,
         },
       }),

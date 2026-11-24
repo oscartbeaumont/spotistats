@@ -213,7 +213,7 @@ describe("weekly listening reads", () => {
     const history = await run((sql) =>
       readWeeklyHistory(sql, "owner", {
         tzOffset: 0,
-        before: null,
+        page: 1,
         limit: 12,
       }),
     );
@@ -248,11 +248,25 @@ describe("weekly listening reads", () => {
     const older = await run((sql) =>
       readWeeklyHistory(sql, "owner", {
         tzOffset: 0,
-        before: "2026-09-28",
-        limit: 1,
+        page: 2,
+        limit: 2,
       }),
     );
     expect(older.weeks.map((week) => week.weekStart)).toEqual(["2026-09-21"]);
+    expect(older.hasMore).toBe(false);
+
+    const firstPage = await run((sql) =>
+      readWeeklyHistory(sql, "owner", {
+        tzOffset: 0,
+        page: 1,
+        limit: 2,
+      }),
+    );
+    expect(firstPage.weeks.map((week) => week.weekStart)).toEqual([
+      "2026-10-05",
+      "2026-09-28",
+    ]);
+    expect(firstPage.hasMore).toBe(true);
   });
 
   it("uses the local offset at week boundaries", async () => {
@@ -262,7 +276,7 @@ describe("weekly listening reads", () => {
     const history = await run((sql) =>
       readWeeklyHistory(sql, "owner", {
         tzOffset: 300,
-        before: null,
+        page: 1,
         limit: 12,
       }),
     );
@@ -270,14 +284,14 @@ describe("weekly listening reads", () => {
     expect(history.weeks[0]?.weekStart).toBe("2026-09-28");
   });
 
-  it("keeps the prior Sunday when paging weeks west of UTC", async () => {
+  it("keeps a Sunday-only week when reading history west of UTC", async () => {
     addTrack("t1", "One", "Artist A", 180_000);
     addListen("sunday-only", "t1", Date.UTC(2026, 9, 12, 4, 30));
 
     const history = await run((sql) =>
       readWeeklyHistory(sql, "owner", {
         tzOffset: 300,
-        before: "2026-10-12",
+        page: 1,
         limit: 12,
       }),
     );

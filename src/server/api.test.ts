@@ -90,7 +90,7 @@ describe("weekly stats API gate", () => {
     expect(tracking.weeklyAccess).toHaveBeenCalledWith("owner");
     expect(tracking.weeklyHistory).toHaveBeenCalledWith("owner", {
       tzOffset: 0,
-      before: null,
+      page: 1,
       limit: 12,
     });
   });
@@ -103,6 +103,22 @@ describe("weekly stats API gate", () => {
     expect(tracking.weeklyAccess).toHaveBeenCalledWith("owner");
     expect(tracking.weeklyInsights).not.toHaveBeenCalled();
   });
+
+  it.each(["0", "1.5", "1e308"])(
+    "clamps invalid history page %s to the first page",
+    async (page) => {
+      const response = await request(
+        `/api/account/stats/weeks?tzOffset=0&page=${page}`,
+      );
+
+      expect(response.status).toBe(200);
+      expect(tracking.weeklyHistory).toHaveBeenCalledWith("owner", {
+        tzOffset: 0,
+        page: 1,
+        limit: 12,
+      });
+    },
+  );
 
   it("rejects invalid and future week bounds", async () => {
     const invalid = await request(

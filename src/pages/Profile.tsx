@@ -10,6 +10,8 @@ import {
   Show,
   untrack,
 } from "solid-js";
+import { useSearchParams } from "@solidjs/router";
+import type { JSX } from "@solidjs/web";
 
 import { accountApi } from "~/client/api";
 import { capture, captureError, identifyUser } from "~/client/analytics";
@@ -22,6 +24,10 @@ import {
 } from "~/client/spotify";
 import { setAuthStore } from "~/client/storage";
 import { ListeningInsights } from "~/components/ListeningInsights";
+import {
+  WeekHistory,
+  WeekNavigator,
+} from "~/components/WeeklyInsightsControls";
 import {
   ProfileHeaderSkeleton,
   StatsRailSkeleton,
@@ -47,9 +53,15 @@ import type {
   InsightsRange,
   ListeningInsights as ListeningInsightsData,
   TrackingStatus,
+  WeeklyInsights,
 } from "~/api";
+import {
+  createWeeklyDashboard,
+  type WeeklyParamsSetter,
+} from "~/client/weeklyDashboard";
 
 type ProfileUser = typeof SpotifyProfile.Type;
+type OverviewRange = InsightsRange | "weekly";
 
 const fetchStatus = async (): Promise<TrackingStatus> => {
   try {
@@ -73,6 +85,7 @@ const fetchStatus = async (): Promise<TrackingStatus> => {
 interface InsightsState {
   data: ListeningInsightsData | null;
   error: string | null;
+  weekly: WeeklyInsights | null;
 }
 
 const localDateStart = (value: string) => {
@@ -92,9 +105,10 @@ const fetchInsights = async (query: InsightsQuery): Promise<InsightsState> => {
     return {
       data: await accountApi.insights(query),
       error: null,
+      weekly: null,
     };
   } catch (error) {
-    return { data: null, error: errorMessage(error) };
+    return { data: null, error: errorMessage(error), weekly: null };
   }
 };
 
@@ -351,11 +365,12 @@ const rangeOptions: ReadonlyArray<{ value: InsightsRange; label: string }> = [
 ];
 
 function InsightsRangeControl(props: {
-  value: InsightsRange;
+  value: OverviewRange;
   fromDate: string;
   toDate: string;
   updating: boolean;
-  onChange: (value: InsightsRange) => void;
+  weeklyEnabled: boolean;
+  onChange: (value: OverviewRange) => void;
   onFromChange: (value: string) => void;
   onToChange: (value: string) => void;
 }) {
@@ -364,6 +379,20 @@ function InsightsRangeControl(props: {
       <span class="mr-1 text-[0.6rem] font-black uppercase tracking-[0.2em] text-[#5c5c5c]">
         Range
       </span>
+      <Show when={props.weeklyEnabled}>
+        <button
+          type="button"
+          aria-pressed={props.value === "weekly" ? "true" : "false"}
+          onClick={() => props.onChange("weekly")}
+          class={`border-[3px] border-[#0a0a0a] px-2.5 py-1 text-[0.6rem] font-black uppercase tracking-widest transition ${
+            props.value === "weekly"
+              ? "bg-[#0a0a0a] text-[#f0ede8]"
+              : "hover:bg-[#1DB954] hover:text-black"
+          }`}
+        >
+          WEEK
+        </button>
+      </Show>
       <For each={rangeOptions}>
         {(option) => (
           <button
@@ -415,10 +444,30 @@ function InsightsRangeControl(props: {
 function createInsightsDashboard(props: {
   timezone: number;
   statsNow: () => TrackingStatus | null;
+  week: () => string | undefined;
+  page: () => string | undefined;
+  setParams: WeeklyParamsSetter;
 }) {
   const [insightsTick, setInsightsTick] = createSignal(0);
   const [preview, setPreview] = createSignal<ListeningInsightsData | null>(null);
   const [range, setRange] = createSignal<InsightsRange>("all");
+  const weeklyRequested = createMemo(
+    () => props.week() !== undefined || props.page() !== undefined,
+  );
+  const effectiveRange = createMemo<OverviewRange>(() => {
+    if (!weeklyRequested()) return range();
+
+    return props.statsNow()?.enabled === false ? range() : "weekly";
+  });
+  const weekly = createWeeklyDashboard({
+    timezone: props.timezone,
+    enabled: () => props.statsNow()?.enabled === true,
+    active: () =>
+      effectiveRange() === "weekly" && props.statsNow()?.enabled === true,
+    week: props.week,
+    page: props.page,
+    setParams: props.setParams,
+  });
 
   const [fromDate, setFromDate] = createSignal(
     localDay(Date.now() - 29 * DAY_MS, props.timezone),
@@ -428,7 +477,9 @@ function createInsightsDashboard(props: {
 
   const insights = createMemo(() => {
     insightsTick();
-    const selected = range();
+    const selected = effectiveRange();
+
+    if (selected === "weekly") return Promise.resolve(null);
 
     return fetchInsights({
       tzOffset: props.timezone,
@@ -447,6 +498,10 @@ function createInsightsDashboard(props: {
   };
 
   const insightsPending = () => {
+    if (effectiveRange() === "weekly") {
+      return props.statsNow()?.enabled !== true || weekly.detailPending();
+    }
+
     try {
       return isPending(insights);
     } catch {
@@ -455,13 +510,24 @@ function createInsightsDashboard(props: {
   };
 
   const readyInsights = () => {
-    const state = insightsNow();
     const status = props.statsNow();
+    if (!status) return null;
 
-    return state && status ? { state, status } : null;
+    const state =
+      effectiveRange() === "weekly" ? weekly.detail() : insightsNow();
+
+    return state ? { state, status } : null;
   };
 
-  const reloadInsights = () => setInsightsTick((value) => value + 1);
+  const reloadInsights = () => {
+    if (effectiveRange() === "weekly") {
+      weekly.reload();
+
+      return;
+    }
+
+    setInsightsTick((value) => value + 1);
+  };
 
   const showPreview = () => {
     setPreview(createPreviewInsights());
@@ -473,8 +539,20 @@ function createInsightsDashboard(props: {
     capture("insights_preview_exited", {});
   };
 
-  const changeRange = (next: InsightsRange) => {
-    setRange(next);
+  const changeRange = (next: OverviewRange) => {
+    if (next === "weekly" && props.statsNow()?.enabled !== true) return;
+
+    if (next !== "weekly") setRange(next);
+
+    if (next === "weekly") {
+      props.setParams(
+        { week: weekly.selectedWeek(), page: weekly.historyPage() },
+        { scroll: false },
+      );
+    } else if (weeklyRequested()) {
+      props.setParams({ week: null, page: null }, { scroll: false });
+    }
+
     capture("insights_range_changed", { range: next });
   };
 
@@ -491,6 +569,8 @@ function createInsightsDashboard(props: {
   };
 
   const rangeLabel = () => {
+    if (effectiveRange() === "weekly") return weekly.rangeLabel();
+
     switch (range()) {
       case "week":
         return "Last 7 days";
@@ -509,7 +589,8 @@ function createInsightsDashboard(props: {
 
   return {
     preview,
-    range,
+    range: effectiveRange,
+    weekly,
     fromDate,
     toDate,
     insightsPending,
@@ -567,7 +648,8 @@ function InsightsPanel(props: {
   ready: { state: InsightsState; status: TrackingStatus } | null;
   rangeLabel: string;
   refreshing: boolean;
-  range: InsightsRange;
+  range: OverviewRange;
+  weekly: ReturnType<typeof createWeeklyDashboard>;
   fromDate: string;
   toDate: string;
   updating: boolean;
@@ -575,10 +657,48 @@ function InsightsPanel(props: {
   onPreview: () => void;
   onExitPreview: () => void;
   onRefresh: () => void;
-  onRangeChange: (value: InsightsRange) => void;
+  onRangeChange: (value: OverviewRange) => void;
   onFromChange: (value: string) => void;
   onToChange: (value: string) => void;
 }) {
+  const controls = () => (
+    <div class="space-y-4">
+      <InsightsRangeControl
+        value={props.range}
+        fromDate={props.fromDate}
+        toDate={props.toDate}
+        updating={props.updating}
+        weeklyEnabled={props.ready?.status.enabled === true}
+        onChange={props.onRangeChange}
+        onFromChange={props.onFromChange}
+        onToChange={props.onToChange}
+      />
+      <Show when={props.range === "weekly"}>
+        <WeekNavigator
+          selectedWeek={props.weekly.selectedWeek}
+          currentWeek={props.weekly.currentWeek()}
+          earliestWeek={props.weekly.earliestWeek()}
+          navigating={props.weekly.navigating()}
+          partial={props.weekly.detail()?.weekly?.isPartial}
+          onSelect={(week) => void props.weekly.selectWeek(week)}
+        />
+        <WeekHistory
+          weeks={props.weekly.history()?.weeks ?? []}
+          selectedWeek={props.weekly.selectedWeek}
+          page={props.weekly.historyPage()}
+          busy={
+            props.weekly.historyBusy() || props.weekly.navigating()
+          }
+          hasMore={props.weekly.history()?.hasMore ?? false}
+          error={props.weekly.historyError()}
+          onSelect={(week) => void props.weekly.selectWeek(week)}
+          onPageChange={(page) => void props.weekly.changePage(page)}
+          onRetry={props.weekly.reload}
+        />
+      </Show>
+    </div>
+  );
+
   return (
     <div class="order-3 min-w-0 xl:col-start-1 xl:row-start-2">
       <Show when={props.preview}>
@@ -594,9 +714,17 @@ function InsightsPanel(props: {
           </div>
         )}
       </Show>
+      <Show when={!props.preview && !props.ready && props.updating}>
+        <progress
+          aria-label="Loading listening insights"
+          class="h-3 w-full"
+        ></progress>
+      </Show>
       <Show when={!props.preview && props.ready}>
         {(ready) => (
-          <div class="content-fade-in">
+          <div
+            class={`content-fade-in${props.range === "weekly" ? " weekly-week" : ""}`}
+          >
             <Show
               when={ready().state.data}
               fallback={
@@ -607,6 +735,7 @@ function InsightsPanel(props: {
                   }
                   onRetry={props.onReload}
                   onPreview={props.onPreview}
+                  controls={controls()}
                 />
               }
             >
@@ -629,17 +758,7 @@ function InsightsPanel(props: {
                     data={data()}
                     onReload={props.onReload}
                     rangeLabel={props.rangeLabel}
-                    controls={
-                      <InsightsRangeControl
-                        value={props.range}
-                        fromDate={props.fromDate}
-                        toDate={props.toDate}
-                        updating={props.updating}
-                        onChange={props.onRangeChange}
-                        onFromChange={props.onFromChange}
-                        onToChange={props.onToChange}
-                      />
-                    }
+                    controls={controls()}
                   />
                 </Show>
               )}
@@ -707,6 +826,7 @@ function ProfileDashboard(props: {
             rangeLabel={props.insights.rangeLabel()}
             refreshing={props.refreshing}
             range={props.insights.range()}
+            weekly={props.insights.weekly}
             fromDate={props.insights.fromDate()}
             toDate={props.insights.toDate()}
             updating={props.insights.insightsPending()}
@@ -852,6 +972,7 @@ function statsCallbackConnected(): boolean {
 const firstSyncLimit = 40;
 
 export default function ProfilePage() {
+  const [params, setParams] = useSearchParams<{ week?: string; page?: string }>();
   const [tick, setTick] = createSignal(0);
   const [refreshing, setRefreshing] = createSignal(false);
 
@@ -935,7 +1056,13 @@ export default function ProfilePage() {
     }
   };
 
-  const insights = createInsightsDashboard({ timezone, statsNow });
+  const insights = createInsightsDashboard({
+    timezone,
+    statsNow,
+    week: () => params.week,
+    page: () => params.page,
+    setParams,
+  });
 
   const queueRefresh = action(function* () {
     yield accountApi.refresh();
@@ -1092,6 +1219,7 @@ function InsightsUnavailable(props: {
   message: string;
   onRetry: () => void;
   onPreview: () => void;
+  controls?: JSX.Element;
 }) {
   return (
     <section
@@ -1105,6 +1233,7 @@ function InsightsUnavailable(props: {
         Could not load your insights
       </h2>
       <p class="mt-3 max-w-2xl text-sm leading-7 text-[#555]">{props.message}</p>
+      <Show when={props.controls}>{(controls) => <div class="mt-6">{controls()}</div>}</Show>
       <div class="mt-5 flex flex-wrap gap-3">
         <button
           type="button"

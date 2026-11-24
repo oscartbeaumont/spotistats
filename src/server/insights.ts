@@ -23,10 +23,7 @@ import {
   shiftMonth,
   timezoneModifier,
 } from "~/lib/insights";
-import {
-  type WeekBounds,
-  startOfLocalDayKey,
-} from "~/lib/weeks";
+import type { WeekBounds } from "~/lib/weeks";
 
 /**
  * Read-side queries for the listening history Spotistats owns.
@@ -453,10 +450,6 @@ export const readWeeklyHistory = (
   query: WeeklyHistoryQuery,
 ) =>
   Effect.gen(function* () {
-    const beforeMs =
-      query.before === null
-        ? null
-        : startOfLocalDayKey(query.before, query.tzOffset);
     const modifier = timezoneModifier(query.tzOffset);
     const rows = yield* sql<WeeklySummaryRow>`
       SELECT
@@ -474,11 +467,10 @@ export const readWeeklyHistory = (
         FROM spotify_listens l
         INNER JOIN spotify_tracks t ON t.spotify_track_id = l.spotify_track_id
         WHERE l.spotify_user_id = ${spotifyUserId}
-          AND (${beforeMs} IS NULL OR l.played_at_ms < ${beforeMs})
       )
       GROUP BY weekStart
       ORDER BY weekStart DESC
-      LIMIT ${query.limit + 1}
+      LIMIT ${query.limit + 1} OFFSET ${(query.page - 1) * query.limit}
     `.pipe(Effect.mapError(databaseError("Failed to read weekly listening history")));
 
     return {

@@ -8,7 +8,7 @@ import type { RefreshResult } from "~/api";
 import { Spotify, type SpotifyProfile } from "./spotify";
 import { Tracking, type TrackingService } from "./tracking";
 import { readDiscoveryHistory, readKnownTracks } from "./discovery";
-import { startOfWeek, weekBounds } from "~/lib/weeks";
+import { weekBounds } from "~/lib/weeks";
 
 /**
  * Resolves the Spotify user behind a bearer token. A token Spotify rejects
@@ -98,16 +98,16 @@ export const AccountGroupLive = HttpApiBuilder.group(Api, "account", (handlers) 
     .handle("weeklyHistory", ({ headers, query }) =>
       withEnabledWeekly(headers, (tracking, user) =>
         Effect.gen(function* () {
-          const before = query.before ?? null;
           const tzOffset = query.tzOffset ?? 0;
 
-          if (before !== null && startOfWeek(before) !== before) {
-            return yield* new HttpApiError.BadRequest({});
-          }
+          const requestedPage = query.page ?? 1;
+          const page = Number.isSafeInteger(requestedPage)
+            ? Math.max(1, requestedPage)
+            : 1;
 
           return yield* tracking.weeklyHistory(user.id, {
             tzOffset,
-            before,
+            page,
             limit: Math.max(1, Math.min(52, Math.floor(query.limit ?? 12))),
           });
         }),

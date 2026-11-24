@@ -10,11 +10,6 @@ import { Seo } from "~/components/Seo";
 import { hasSpotifyCallbackResult, logout } from "~/client/auth";
 import { discoveryEnabled } from "~/client/features";
 import { authReady, authStore } from "~/client/storage";
-import {
-  initWeeklyStats,
-  reloadWeeklyStatsAccess,
-  weeklyStatsEnabled,
-} from "~/client/weeklyStats";
 import { isContentPath, isPublicPath, titleForPath } from "~/lib/seo";
 import LoginPage from "~/pages/Login";
 import { createShortcut } from "~/lib/shortcut";
@@ -47,11 +42,6 @@ function AppHeader(props: {
         <a href="/export" class={props.linkClass("/export")}>
           Export Data <span class="ml-2 hidden text-[0.6rem] opacity-50 md:inline">Alt+3</span>
         </a>
-        <Show when={weeklyStatsEnabled()}>
-          <a href="/stats/weeks" class={props.linkClass("/stats/weeks")}>
-            Weekly <span class="ml-2 hidden text-[0.6rem] opacity-50 md:inline">Alt+6</span>
-          </a>
-        </Show>
         <a href="/account" class={props.linkClass("/account")}>
           Account <span class="ml-2 hidden text-[0.6rem] opacity-50 md:inline">Alt+4</span>
         </a>
@@ -76,30 +66,8 @@ export function RootLayout(props: {
 }) {
   const location = useLocation();
   const navigate = useNavigate();
-  initWeeklyStats();
   const publicPage = () => isPublicPath(location.pathname);
   const contentPage = () => isContentPath(location.pathname);
-
-  let previousPath: string | undefined;
-
-  createEffect(
-    () => ({ path: location.pathname, status: authStore().status }),
-    ({ path, status }) => {
-
-    // Re-check the gate when moving between authenticated pages. The token
-    // memo handles sign-in and sign-out; this catches sync changes made in
-    // another tab without making every page visit count as dashboard activity.
-    if (
-      status === "authenticated" &&
-      previousPath !== undefined &&
-      previousPath !== path
-    ) {
-      reloadWeeklyStatsAccess();
-    }
-
-      previousPath = path;
-    },
-  );
 
   const canonicalPath = () =>
     location.pathname === "/login" ? "/" : location.pathname;
@@ -138,9 +106,6 @@ export function RootLayout(props: {
       Match.when("/favourites/tracks", () =>
         location.pathname.startsWith("/favourites/"),
       ),
-      Match.when("/stats/weeks", () =>
-        location.pathname.startsWith("/stats/weeks"),
-      ),
       Match.orElse(() => location.pathname === href),
     );
 
@@ -166,7 +131,6 @@ export function RootLayout(props: {
     { path: "/export", key: "3" },
     { path: "/account", key: "4" },
     { path: "/discover", key: "5", enabled: discoveryEnabled },
-    { path: "/stats/weeks", key: "6", enabled: weeklyStatsEnabled },
   ];
 
   for (const shortcut of shortcuts) {
