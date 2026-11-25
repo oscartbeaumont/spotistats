@@ -33,7 +33,7 @@
   "devDependencies": {
     "@cloudflare/oxlint-config": "0.1.0",
     "@cloudflare/vite-plugin": "2.0.0-rc.3",
-    "@effect/tsgo": "0.73.2",
+    "@effect/tsgo": "0.73.4",
     "@solidjs/vite-plugin": "3.0.1",
     "@tailwindcss/vite": "^4.3.5",
     "cf": "1.0.0-rc.2",
