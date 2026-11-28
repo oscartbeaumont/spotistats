@@ -8,6 +8,7 @@ import type { RefreshResult } from "~/api";
 import { Spotify, type SpotifyProfile } from "./spotify";
 import { Tracking, type TrackingService } from "./tracking";
 import { readDiscoveryHistory, readKnownTracks } from "./discovery";
+import { weekBounds } from "~/lib/weeks";
 
 /**
  * Resolves the Spotify user behind a bearer token. A token Spotify rejects
@@ -52,6 +53,24 @@ const withTracking = <A, E, R>(
     Effect.flatMap(Tracking, (tracking) => handler(tracking, user)),
   );
 
+/** Weekly reads are available only while the listening sync is enabled. */
+const withEnabledWeekly = <A, E, R>(
+  headers: { readonly authorization?: string | undefined },
+  handler: (
+    tracking: TrackingService,
+    user: SpotifyProfile,
+  ) => Effect.Effect<A, E, R>,
+) =>
+  withTracking(headers, (tracking, user) =>
+    Effect.gen(function* () {
+      const access = yield* tracking.weeklyAccess(user.id);
+
+      if (!access.enabled) return yield* new HttpApiError.Forbidden({});
+
+      return yield* handler(tracking, user);
+    }),
+  );
+
 export const AccountGroupLive = HttpApiBuilder.group(Api, "account", (handlers) =>
   handlers
     .handle("discoveryHistory", ({ headers }) =>
@@ -69,6 +88,47 @@ export const AccountGroupLive = HttpApiBuilder.group(Api, "account", (handlers) 
     .handle("status", ({ headers }) =>
       withTracking(headers, (tracking, user) =>
         Effect.andThen(tracking.markRead(user.id), tracking.status(user.id)),
+      ),
+    )
+    .handle("weeklyAccess", ({ headers }) =>
+      withTracking(headers, (tracking, user) =>
+        tracking.weeklyAccess(user.id),
+      ),
+    )
+    .handle("weeklyHistory", ({ headers, query }) =>
+      withEnabledWeekly(headers, (tracking, user) =>
+        Effect.gen(function* () {
+          const tzOffset = query.tzOffset ?? 0;
+
+          const requestedPage = query.page ?? 1;
+          const page = Number.isSafeInteger(requestedPage)
+            ? Math.max(1, requestedPage)
+            : 1;
+
+          return yield* tracking.weeklyHistory(user.id, {
+            tzOffset,
+            page,
+            limit: Math.max(1, Math.min(52, Math.floor(query.limit ?? 12))),
+          });
+        }),
+      ),
+    )
+    .handle("weeklyInsights", ({ headers, params, query }) =>
+      withEnabledWeekly(headers, (tracking, user) =>
+        Effect.gen(function* () {
+          const tzOffset = query.tzOffset ?? 0;
+          const bounds = weekBounds(params.weekStart, tzOffset);
+
+          if (
+            bounds === null ||
+            bounds.fromMs < 0 ||
+            bounds.fromMs > Date.now()
+          ) {
+            return yield* new HttpApiError.BadRequest({});
+          }
+
+          return yield* tracking.weeklyInsights(user.id, bounds, tzOffset);
+        }),
       ),
     )
     .handle("insights", ({ headers, query }) =>

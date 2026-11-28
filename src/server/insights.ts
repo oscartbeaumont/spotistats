@@ -6,6 +6,10 @@ import {
   type InsightsQuery,
   type ListeningExport,
   type ListeningInsights,
+  type WeeklyAccess,
+  type WeeklyHistory,
+  type WeeklyHistoryQuery,
+  type WeeklyInsights,
   UpstreamError,
 } from "~/api";
 import { csvCell } from "~/lib/download";
@@ -19,6 +23,7 @@ import {
   shiftMonth,
   timezoneModifier,
 } from "~/lib/insights";
+import type { WeekBounds } from "~/lib/weeks";
 
 /**
  * Read-side queries for the listening history Spotistats owns.
@@ -401,6 +406,101 @@ export const readInsights = (
       trendUnit,
     });
   });
+
+/** A read-only gate check: unlike status(), this never marks dashboard activity. */
+export const readWeeklyAccess = (
+  sql: SqlClient,
+  spotifyUserId: string,
+) =>
+  Effect.gen(function* () {
+    const [row] = yield* sql<{
+      enabled: number;
+      firstPlayedAtMs: number | null;
+    }>`
+      SELECT
+        u.enabled AS enabled,
+        (
+          SELECT MIN(l.played_at_ms)
+          FROM spotify_listens l
+          WHERE l.spotify_user_id = u.spotify_user_id
+        ) AS firstPlayedAtMs
+      FROM spotify_tracking_users u
+      WHERE u.spotify_user_id = ${spotifyUserId}
+      LIMIT 1
+    `.pipe(Effect.mapError(databaseError("Failed to read weekly stats access")));
+
+    return {
+      enabled: row?.enabled === 1,
+      firstPlayedAtMs: row?.firstPlayedAtMs ?? null,
+    } satisfies WeeklyAccess;
+  });
+
+interface WeeklySummaryRow {
+  weekStart: string;
+  listens: number;
+  tracks: number;
+  listeningMs: number;
+  activeDays: number;
+}
+
+/** Observed Monday-start weeks, newest first, paged without N+1 queries. */
+export const readWeeklyHistory = (
+  sql: SqlClient,
+  spotifyUserId: string,
+  query: WeeklyHistoryQuery,
+) =>
+  Effect.gen(function* () {
+    const modifier = timezoneModifier(query.tzOffset);
+    const rows = yield* sql<WeeklySummaryRow>`
+      SELECT
+        weekStart,
+        COUNT(*) AS listens,
+        COUNT(DISTINCT spotifyTrackId) AS tracks,
+        COALESCE(SUM(durationMs), 0) AS listeningMs,
+        COUNT(DISTINCT day) AS activeDays
+      FROM (
+        SELECT
+          date(l.played_at_ms / 1000, 'unixepoch', ${modifier}, 'weekday 0', '-6 days') AS weekStart,
+          date(l.played_at_ms / 1000, 'unixepoch', ${modifier}) AS day,
+          l.spotify_track_id AS spotifyTrackId,
+          t.duration_ms AS durationMs
+        FROM spotify_listens l
+        INNER JOIN spotify_tracks t ON t.spotify_track_id = l.spotify_track_id
+        WHERE l.spotify_user_id = ${spotifyUserId}
+      )
+      GROUP BY weekStart
+      ORDER BY weekStart DESC
+      LIMIT ${query.limit + 1} OFFSET ${(query.page - 1) * query.limit}
+    `.pipe(Effect.mapError(databaseError("Failed to read weekly listening history")));
+
+    return {
+      weeks: rows.slice(0, query.limit),
+      hasMore: rows.length > query.limit,
+    } satisfies WeeklyHistory;
+  });
+
+export const readWeeklyInsights = (
+  sql: SqlClient,
+  spotifyUserId: string,
+  bounds: WeekBounds,
+  tzOffset: number,
+  now = Date.now(),
+) =>
+  readInsights(sql, spotifyUserId, {
+    tzOffset,
+    range: "custom",
+    fromMs: bounds.fromMs,
+    toMs: bounds.toMs,
+  }).pipe(
+    Effect.map(
+      (insights): WeeklyInsights => ({
+        weekStart: bounds.weekStart,
+        weekEnd: bounds.weekEnd,
+        isPartial: bounds.toMs < bounds.fromMs + 7 * DAY_MS - 1,
+        insights: { ...insights, generatedAt: now },
+      }),
+    ),
+  );
 
 
 interface ExportRow {

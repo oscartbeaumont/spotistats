@@ -41,6 +41,37 @@ export const TrackingStatus = Schema.Struct({
 
 export type TrackingStatus = typeof TrackingStatus.Type;
 
+/** Cheap, non-mutating access check used by the overview's weekly mode. */
+export const WeeklyAccess = Schema.Struct({
+  enabled: Schema.Boolean,
+  firstPlayedAtMs: Schema.NullOr(Schema.Finite),
+});
+
+export type WeeklyAccess = typeof WeeklyAccess.Type;
+
+export const WeeklySummary = Schema.Struct({
+  weekStart: Schema.String,
+  listens: Schema.Finite,
+  tracks: Schema.Finite,
+  listeningMs: Schema.Finite,
+  activeDays: Schema.Finite,
+});
+
+export type WeeklySummary = typeof WeeklySummary.Type;
+
+export const WeeklyHistory = Schema.Struct({
+  weeks: Schema.Array(WeeklySummary),
+  hasMore: Schema.Boolean,
+});
+
+export type WeeklyHistory = typeof WeeklyHistory.Type;
+
+export interface WeeklyHistoryQuery {
+  readonly tzOffset: number;
+  readonly page: number;
+  readonly limit: number;
+}
+
 export const RefreshResult = Schema.Struct({
   queued: Schema.Boolean,
 });
@@ -146,6 +177,15 @@ export const ListeningInsights = Schema.Struct({
 
 export type ListeningInsights = typeof ListeningInsights.Type;
 
+export const WeeklyInsights = Schema.Struct({
+  weekStart: Schema.String,
+  weekEnd: Schema.String,
+  isPartial: Schema.Boolean,
+  insights: ListeningInsights,
+});
+
+export type WeeklyInsights = typeof WeeklyInsights.Type;
+
 const ExportedListen = Schema.Struct({
   id: Schema.String,
   playedAt: Schema.String,
@@ -198,6 +238,16 @@ const trackingErrors = [
   HttpApiSchema.status(502)(UpstreamError),
 ] as const;
 
+const weeklyErrors = [
+  ...trackingErrors,
+  HttpApiError.Forbidden,
+  HttpApiError.BadRequest,
+] as const;
+
+const WeekStart = Schema.String.check(
+  Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/),
+);
+
 const bearer = { authorization: Schema.optional(Schema.String) } as const;
 
 const del = HttpApiEndpoint.make("DELETE");
@@ -218,6 +268,30 @@ export const AccountGroup = HttpApiGroup.make("account").add(
     headers: bearer,
     success: TrackingStatus,
     error: trackingErrors,
+  }),
+  HttpApiEndpoint.get("weeklyAccess", "/api/account/stats/weeks/access", {
+    headers: bearer,
+    success: WeeklyAccess,
+    error: trackingErrors,
+  }),
+  HttpApiEndpoint.get("weeklyHistory", "/api/account/stats/weeks", {
+    headers: bearer,
+    query: {
+      tzOffset: Schema.optional(Schema.FiniteFromString),
+      page: Schema.optional(Schema.FiniteFromString),
+      limit: Schema.optional(Schema.FiniteFromString),
+    },
+    success: WeeklyHistory,
+    error: weeklyErrors,
+  }),
+  HttpApiEndpoint.get("weeklyInsights", "/api/account/stats/weeks/:weekStart", {
+    headers: bearer,
+    params: { weekStart: WeekStart },
+    query: {
+      tzOffset: Schema.optional(Schema.FiniteFromString),
+    },
+    success: WeeklyInsights,
+    error: weeklyErrors,
   }),
   HttpApiEndpoint.get("insights", "/api/account/stats/insights", {
     headers: bearer,

@@ -6,8 +6,14 @@ import { Reactivity } from "effect/reactivity";
 import type { SqlClient } from "effect/sql/SqlClient";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { readInsights } from "./insights";
+import {
+  readInsights,
+  readWeeklyAccess,
+  readWeeklyHistory,
+  readWeeklyInsights,
+} from "./insights";
 import { SqliteD1 } from "./sqliteD1";
+import { weekBounds } from "~/lib/weeks";
 
 let database: DatabaseSync;
 
@@ -22,6 +28,12 @@ beforeEach(() => {
   database.exec(
     readFileSync(
       new URL("../../migrations/0001_spotify_tracking.sql", import.meta.url),
+      "utf8",
+    ),
+  );
+  database.exec(
+    readFileSync(
+      new URL("../../migrations/0002_colossal_selene.sql", import.meta.url),
       "utf8",
     ),
   );
@@ -141,5 +153,196 @@ describe("readInsights", () => {
     const data = await insights();
     expect(data.totals.listens).toBe(1);
     expect(data.totals.firstPlayedAtMs).toBe(start + 10 * hour);
+  });
+});
+
+describe("weekly listening reads", () => {
+  it("checks access without marking the dashboard as read", async () => {
+    database
+      .prepare(
+        "UPDATE spotify_tracking_users SET enabled = 1, last_read_at = 123 WHERE spotify_user_id = 'owner'",
+      )
+      .run();
+    addTrack("t1", "One", "Artist A", 180_000);
+    addListen("l1", "t1", start + 10 * hour);
+
+    const access = await run((sql) => readWeeklyAccess(sql, "owner"));
+    const row = database
+      .prepare(
+        "SELECT enabled, last_read_at FROM spotify_tracking_users WHERE spotify_user_id = 'owner'",
+      )
+      .get() as { enabled: number; last_read_at: number };
+
+    expect(access).toEqual({ enabled: true, firstPlayedAtMs: start + 10 * hour });
+    expect(row).toEqual({ enabled: 1, last_read_at: 123 });
+  });
+
+  it("fails closed for a disabled or unknown account", async () => {
+    database
+      .prepare(
+        "UPDATE spotify_tracking_users SET enabled = 0 WHERE spotify_user_id = 'owner'",
+      )
+      .run();
+    expect(await run((sql) => readWeeklyAccess(sql, "owner"))).toEqual({
+      enabled: false,
+      firstPlayedAtMs: null,
+    });
+    expect(await run((sql) => readWeeklyAccess(sql, "missing"))).toEqual({
+      enabled: false,
+      firstPlayedAtMs: null,
+    });
+  });
+
+  it("groups observed listens into Monday weeks and pages older history", async () => {
+    database
+      .prepare(
+        "INSERT INTO spotify_tracking_users (spotify_user_id, consented_at, created_at, updated_at) VALUES ('other', 0, 0, 0)",
+      )
+      .run();
+    addTrack("t1", "One", "Artist A", 180_000);
+    addTrack("t2", "Two", "Artist B", 240_000);
+    addListen("older", "t1", Date.UTC(2026, 8, 27, 23, 30));
+    addListen("sunday", "t1", Date.UTC(2026, 9, 4, 23, 30));
+    addListen("monday", "t2", Date.UTC(2026, 9, 5, 0, 30));
+    database
+      .prepare(
+        "INSERT INTO spotify_listens (id, spotify_user_id, spotify_track_id, played_at, played_at_ms, created_at) VALUES ('foreign', 'other', 't1', '', ?, 0)",
+      )
+      .run(Date.UTC(2026, 9, 5, 0, 30));
+
+    const history = await run((sql) =>
+      readWeeklyHistory(sql, "owner", {
+        tzOffset: 0,
+        page: 1,
+        limit: 12,
+      }),
+    );
+
+    expect(history).toEqual({
+      weeks: [
+        {
+          weekStart: "2026-10-05",
+          listens: 1,
+          tracks: 1,
+          listeningMs: 240_000,
+          activeDays: 1,
+        },
+        {
+          weekStart: "2026-09-28",
+          listens: 1,
+          tracks: 1,
+          listeningMs: 180_000,
+          activeDays: 1,
+        },
+        {
+          weekStart: "2026-09-21",
+          listens: 1,
+          tracks: 1,
+          listeningMs: 180_000,
+          activeDays: 1,
+        },
+      ],
+      hasMore: false,
+    });
+
+    const older = await run((sql) =>
+      readWeeklyHistory(sql, "owner", {
+        tzOffset: 0,
+        page: 2,
+        limit: 2,
+      }),
+    );
+    expect(older.weeks.map((week) => week.weekStart)).toEqual(["2026-09-21"]);
+    expect(older.hasMore).toBe(false);
+
+    const firstPage = await run((sql) =>
+      readWeeklyHistory(sql, "owner", {
+        tzOffset: 0,
+        page: 1,
+        limit: 2,
+      }),
+    );
+    expect(firstPage.weeks.map((week) => week.weekStart)).toEqual([
+      "2026-10-05",
+      "2026-09-28",
+    ]);
+    expect(firstPage.hasMore).toBe(true);
+  });
+
+  it("uses the local offset at week boundaries", async () => {
+    addTrack("t1", "One", "Artist A", 180_000);
+    addListen("late-sunday", "t1", Date.UTC(2026, 9, 5, 4, 30));
+
+    const history = await run((sql) =>
+      readWeeklyHistory(sql, "owner", {
+        tzOffset: 300,
+        page: 1,
+        limit: 12,
+      }),
+    );
+
+    expect(history.weeks[0]?.weekStart).toBe("2026-09-28");
+  });
+
+  it("keeps a Sunday-only week when reading history west of UTC", async () => {
+    addTrack("t1", "One", "Artist A", 180_000);
+    addListen("sunday-only", "t1", Date.UTC(2026, 9, 12, 4, 30));
+
+    const history = await run((sql) =>
+      readWeeklyHistory(sql, "owner", {
+        tzOffset: 300,
+        page: 1,
+        limit: 12,
+      }),
+    );
+
+    expect(history.weeks).toEqual([
+      {
+        weekStart: "2026-10-05",
+        listens: 1,
+        tracks: 1,
+        listeningMs: 180_000,
+        activeDays: 1,
+      },
+    ]);
+  });
+
+  it("returns the complete insights payload for a historical week", async () => {
+    addTrack("t1", "One", "Artist A", 180_000);
+    addListen("inside", "t1", Date.UTC(2026, 9, 5, 10));
+    addListen("outside", "t1", Date.UTC(2026, 9, 12, 10));
+    const now = Date.UTC(2026, 9, 20);
+    const bounds = weekBounds("2026-10-05", 0, now);
+
+    expect(bounds).not.toBeNull();
+    if (bounds === null) return;
+
+    const week = await run((sql) =>
+      readWeeklyInsights(sql, "owner", bounds, 0, now),
+    );
+
+    expect(week.weekStart).toBe("2026-10-05");
+    expect(week.weekEnd).toBe("2026-10-11");
+    expect(week.isPartial).toBe(false);
+    expect(week.insights.totals.listens).toBe(1);
+    expect(week.insights.totals.firstPlayedAtMs).toBe(Date.UTC(2026, 9, 5, 10));
+    expect(week.insights.trend).toHaveLength(7);
+  });
+
+  it("marks the current week partial and clamps it to now", async () => {
+    addTrack("t1", "One", "Artist A", 180_000);
+    addListen("inside", "t1", Date.UTC(2026, 9, 5, 10));
+    const now = Date.UTC(2026, 9, 7, 12);
+    const bounds = weekBounds("2026-10-05", 0, now);
+
+    expect(bounds).not.toBeNull();
+    if (bounds === null) return;
+
+    const week = await run((sql) =>
+      readWeeklyInsights(sql, "owner", bounds, 0, now),
+    );
+
+    expect(week.isPartial).toBe(true);
+    expect(week.insights.trend.at(-1)?.bucket).toBe("2026-10-07");
   });
 });

@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+:root {
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --week-transition-duration: 240ms;
+}
+
 html,
 body {
   min-height: 100%;
@@ -119,6 +124,77 @@ a {
   animation: content-fade-in 0.3s ease-out both;
 }
 
+/* Only the week's content moves; the app header stays spatially stable. */
+.weekly-week {
+  view-transition-name: weekly-week;
+}
+
+::view-transition-group(root) {
+  animation: none;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
+
+::view-transition-group(weekly-week) {
+  animation-duration: var(--week-transition-duration);
+  animation-timing-function: var(--ease-in-out);
+}
+
+::view-transition-old(weekly-week),
+::view-transition-new(weekly-week) {
+  animation-duration: var(--week-transition-duration);
+  animation-timing-function: var(--ease-in-out);
+  animation-fill-mode: both;
+  mix-blend-mode: normal;
+}
+
+@keyframes week-forward-out {
+  to {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+}
+
+@keyframes week-forward-in {
+  from {
+    opacity: 0;
+    transform: translateX(32px);
+  }
+}
+
+@keyframes week-backward-out {
+  to {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+}
+
+@keyframes week-backward-in {
+  from {
+    opacity: 0;
+    transform: translateX(-32px);
+  }
+}
+
+html:active-view-transition-type(week-forward)::view-transition-old(weekly-week) {
+  animation-name: week-forward-out;
+}
+
+html:active-view-transition-type(week-forward)::view-transition-new(weekly-week) {
+  animation-name: week-forward-in;
+}
+
+html:active-view-transition-type(week-backward)::view-transition-old(weekly-week) {
+  animation-name: week-backward-out;
+}
+
+html:active-view-transition-type(week-backward)::view-transition-new(weekly-week) {
+  animation-name: week-backward-in;
+}
+
 .insight-rise {
   animation: insight-rise 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
@@ -149,5 +225,11 @@ a {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
   }
 }

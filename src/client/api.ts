@@ -4,7 +4,7 @@ import { HttpApiClient } from "effect/http-api";
 import { untrack } from "solid-js";
 
 import { Api } from "~/api";
-import type { InsightsQuery } from "~/api";
+import type { InsightsQuery, WeeklyHistoryQuery } from "~/api";
 
 import { SpotifyUnauthenticatedError } from "./spotify";
 import { authStore, setAuthStore } from "./storage";
@@ -86,6 +86,29 @@ export const accountApi = {
   discoveryHistory: () => runApi(client.account.discoveryHistory({ headers: { authorization: authorization() } })),
   discoveryKnown: (ids: readonly string[]) => runApi(client.account.discoveryKnown({ headers: { authorization: authorization() }, payload: { ids } })),
   status: () => runApi(client.account.status({ headers: { authorization: authorization() } })),
+  weeklyAccess: () =>
+    runApi(
+      client.account.weeklyAccess({ headers: { authorization: authorization() } }),
+    ),
+  weeklyHistory: (query: WeeklyHistoryQuery) =>
+    runApi(
+      client.account.weeklyHistory({
+        headers: { authorization: authorization() },
+        query: {
+          tzOffset: query.tzOffset,
+          page: query.page,
+          limit: query.limit,
+        },
+      }),
+    ),
+  weeklyInsights: (weekStart: string, tzOffset: number) =>
+    runApi(
+      client.account.weeklyInsights({
+        headers: { authorization: authorization() },
+        params: { weekStart },
+        query: { tzOffset },
+      }),
+    ),
   insights: (query: InsightsQuery) =>
     runApi(
       client.account.insights({

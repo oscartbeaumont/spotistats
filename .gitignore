@@ -3,6 +3,7 @@ dist
 .output
 .cloudflare
 *.tsbuildinfo
+.cdp-report
 
 # Environment
 .env
